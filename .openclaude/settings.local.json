@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:lensclick.renato-aparecido-business.workers.dev)",
+      "Bash(gh repo:*)",
+      "Bash(gh api:*)",
+      "Bash(ls gradlew*)",
+      "Bash(node --check \"C:\\\\Users\\\\PontoJ\\\\Desktop\\\\LensClick-site\\\\src\\\\worker.mjs\")",
+      "Bash(node --check \"C:/Users/PontoJ/Desktop/LensClick-site/src/worker.mjs\")",
+      "Bash(ls README*)"
+    ]
+  }
+}
