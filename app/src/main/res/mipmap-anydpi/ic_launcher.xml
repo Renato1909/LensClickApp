@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Ícone para API 24–25 (antes dos adaptive icons): o glifo da abertura já vem
+     posicionado com a folga de segurança, então não são necessárias margens extras. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape android:shape="rectangle">
@@ -6,10 +8,5 @@
             <corners android:radius="22dp" />
         </shape>
     </item>
-    <item
-        android:drawable="@drawable/lens_click_mark"
-        android:top="8dp"
-        android:bottom="8dp"
-        android:left="8dp"
-        android:right="8dp" />
+    <item android:drawable="@drawable/ic_launcher_foreground" />
 </layer-list>

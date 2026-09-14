@@ -5,10 +5,5 @@
             <solid android:color="@color/icon_background" />
         </shape>
     </item>
-    <item
-        android:drawable="@drawable/lens_click_mark"
-        android:top="8dp"
-        android:bottom="8dp"
-        android:left="8dp"
-        android:right="8dp" />
+    <item android:drawable="@drawable/ic_launcher_foreground" />
 </layer-list>

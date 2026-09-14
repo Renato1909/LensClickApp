@@ -1,49 +1,80 @@
 <p align="center">
-  <img src="assets/hero.jpg" alt="Lens Click — banner com câmera e luz dourada sobre fundo escuro" width="100%" />
+  <img src="assets/banner.jpg" alt="Lens Click — banner com câmera analógica, luz dourada e o logotipo da marca" width="100%" />
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Kotlin-2.2.10-7F52FF" alt="Kotlin 2.2.10" />
-  <img src="https://img.shields.io/badge/Jetpack%20Compose-BOM%202024.09-3DDC84" alt="Jetpack Compose" />
-  <img src="https://img.shields.io/badge/Material%203-UI-37474F" alt="Material 3" />
-  <img src="https://img.shields.io/badge/minSdk-24-orange" alt="minSdk 24" />
-  <img src="https://img.shields.io/badge/AGP-9.1.1-4B8BBE" alt="Android Gradle Plugin 9.1.1" />
+  <img src="assets/icon.png" alt="Ícone do Lens Click: abertura de lente dourada sobre papel" width="104" />
 </p>
 
-# 📸 Lens Click
+<h1 align="center">Lens Click</h1>
 
-> Conectando momentos a fotógrafos incríveis.
+<p align="center"><em>Conectando momentos a fotógrafos incríveis.</em></p>
 
-O **Lens Click** é o aplicativo Android da plataforma LensClick — um ponto de encontro entre quem quer eternizar momentos e fotógrafos profissionais. Este repositório contém o app em **Kotlin + Jetpack Compose (Material 3)**, com interface 100% em português do Brasil e visual inspirado em fotografia editorial: papel, tinta e toques de dourado.
+<p align="center">
+  <img src="https://img.shields.io/badge/Kotlin-2.2.10-7F52FF?style=flat-square&logo=kotlin&logoColor=white" alt="Kotlin 2.2.10" />
+  <img src="https://img.shields.io/badge/Jetpack%20Compose-BOM%202024.09.00-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white" alt="Jetpack Compose BOM 2024.09.00" />
+  <img src="https://img.shields.io/badge/Material%203-UI-37474F?style=flat-square" alt="Material 3" />
+  <img src="https://img.shields.io/badge/Room-2.8.5-1A1A1A?style=flat-square&logo=sqlite&logoColor=white" alt="Room 2.8.5" />
+  <img src="https://img.shields.io/badge/AGP-9.1.1-4B8BBE?style=flat-square&logo=gradle&logoColor=white" alt="Android Gradle Plugin 9.1.1" />
+  <img src="https://img.shields.io/badge/minSdk-24%20(Android%207.0%2B)-orange?style=flat-square" alt="minSdk 24" />
+  <img src="https://img.shields.io/badge/idioma-pt--BR-9A6A24?style=flat-square" alt="Interface em português do Brasil" />
+</p>
 
 ---
 
+## 📸 Sobre o projeto
+
+O **Lens Click** é o aplicativo Android da plataforma LensClick — um ponto de encontro entre **quem quer eternizar um momento** e **fotógrafos profissionais**.
+
+De um lado, o cliente descreve o que precisa (casamento, ensaio, evento, aniversário, corporativo), compara profissionais, pede orçamentos e conversa direto com quem vai clicar. Do outro, o fotógrafo mantém um perfil com especialidade, cidade, bio e preço inicial, acompanha os pedidos que chegam, organiza a agenda e responde em um chat em tempo real.
+
+Esta versão entrega **17 telas navegáveis**, interface 100% em português do Brasil e visual inspirado em fotografia editorial — papel, tinta e toques de dourado. Toda a experiência funciona ponta a ponta no aparelho, com os dados persistidos localmente em **Room**; o backend da plataforma ainda não está conectado.
+
 ## ✨ Funcionalidades
 
-| Área | O que o app faz |
+### Para quem contrata
+
+| Tela | O que faz |
 |---|---|
-| 🪪 **Onboarding** | Tela de boas-vindas em tela cheia com fotografia, gradiente escuro e a marca desenhada à mão (Canvas) |
-| 🔐 **Login & Cadastro** | Fluxo de autenticação simulado com validações (senha × confirmação, aceite dos Termos) e recuperação de senha |
+| 🪪 **Onboarding** | Boas-vindas em tela cheia com fotografia, gradiente escuro e a marca aplicada em dourado e off-white |
+| 🧑🤝🧑 **Tipo de conta** | Escolha entre conta de cliente ou de fotógrafo antes do cadastro |
+| 🔐 **Login & Cadastro** | Autenticação com validação (senha × confirmação, aceite dos Termos), aviso de e-mail já cadastrado e recuperação de senha |
 | 🏠 **Início** | Localização, busca rápida, categorias (Casamento, Ensaio, Eventos, Infantil, Corporativo), fotógrafos em destaque e portfólios em alta |
-| 🔎 **Descobrir** | Busca por nome/estilo, filtros por categoria, favoritos e contador de resultados |
+| 🔎 **Descobrir** | Busca por nome ou estilo, filtros por categoria, favoritos e contador de resultados |
 | 👤 **Perfil do fotógrafo** | Bio, especialidades, estatísticas (experiência, ensaios, satisfação), avaliações, portfólio e preço "a partir de" |
-| 💰 **Solicitar orçamento** | Formulário completo: tipo, data, local, duração, descrição e informações adicionais |
+| 💰 **Solicitar orçamento** | Formulário com tipo, data, local, duração, descrição e informações adicionais — a solicitação é salva no banco local |
 | 📋 **Meus orçamentos** | Abas *Solicitações · Propostas · Favoritos* e cartões expansíveis com status (Aguardando, Proposta recebida, Aceito, Recusado) |
-| 💬 **Conversas** | Lista de conversas com busca, indicador de online, chat com balões e envio de mensagens |
-| 👤 **Conta** | Perfil do usuário, menu de ações (dados, segurança, notificações, ajuda, sobre) e sair da conta |
-| 🧭 **Navegação** | Barra inferior flutuante com 5 abas e fluxo por estado entre as **11 telas** do app |
+| 💬 **Conversas & Chat** | Lista com busca e indicador de online, chat com balões, envio de mensagens e compartilhamento de portfólio |
+| 👤 **Conta** | Perfil do usuário, menu de ações (dados, configurações, segurança, notificações, ajuda, sobre) e sair da conta |
+
+### Para quem fotografa
+
+| Tela | O que faz |
+|---|---|
+| 📊 **Painel profissional** | Métricas de pedidos (novos, confirmados, total), ações rápidas e pedidos recentes |
+| 📨 **Pedidos** | Solicitações de clientes disponíveis para atender |
+| 🗓️ **Agenda** | Trabalhos já confirmados pelo fotógrafo |
+| ♙ **Perfil profissional** | Bio, cidade, especialidade e preço inicial do cadastro, com alternância entre modo fotógrafo e modo cliente |
+| 🧭 **Navegação** | Barra inferior flutuante (5 abas no modo cliente, 4 no modo profissional) e navegação por estado entre as 17 telas |
 
 ## 🗺️ Fluxo de telas
 
 ```
-Onboarding ⇄ Login ⇄ Cadastro
-      └──────▶ Início ──▶ Descobrir ──▶ Perfil do fotógrafo ──▶ Solicitar orçamento
-                 │                                            └─▶ Meus orçamentos
-                 ├──▶ Conversas ──▶ Chat
-                 └──▶ Conta
+Cliente
+  Onboarding ─▶ Tipo de conta ─▶ Login ou Cadastro ─▶ Início
+      ├─▶ Descobrir ─▶ Perfil do fotógrafo ─▶ Solicitar orçamento
+      ├─▶ Meus orçamentos
+      ├─▶ Conversas ─▶ Chat
+      └─▶ Conta
+
+Fotógrafo
+  Onboarding ─▶ Tipo de conta ─▶ Cadastro de fotógrafo ─▶ Painel profissional
+      ├─▶ Pedidos
+      ├─▶ Agenda
+      └─▶ Perfil
 ```
 
-A navegação é uma máquina de estados simples e declarativa (`enum Screen` + `rememberSaveable`), sem dependências externas de rotas.
+A navegação é uma máquina de estados declarativa (`enum class Screen` + `rememberSaveable`), sem biblioteca de rotas — o app inteiro vive em uma única `Activity`.
 
 ## 🧱 Stack e arquitetura
 
@@ -53,42 +84,99 @@ A navegação é uma máquina de estados simples e declarativa (`enum Screen` + 
 | UI | [Jetpack Compose](https://developer.android.com/compose) + [Material 3](https://m3.material.io) (BOM `2024.09.00`) |
 | Build | Gradle 9.3.1 (wrapper) + Android Gradle Plugin 9.1.1 |
 | SDKs | `compileSdk` 36 · `minSdk` 24 (Android 7.0+) · `targetSdk` 36 |
-| JDK | Toolchain 21 (provisionado automaticamente via Foojay) |
-| Dados | Modelos e dados de exemplo locais (`LensClickData.kt`) — sem backend nesta versão |
-| Empacotamento | Aplicativo single-module (`:app`) · `applicationId com.example.lensclickapp` · versão 1.0.0 |
+| JVM | Toolchain 21 (provisionado via Foojay) |
+| Dados | [Room](https://developer.android.com/training/data-storage/room) 2.8.5 (`photographers`, `budgets`, `users`) + `Flow` |
+| Arquitetura | `:app` único, camadas `ui/` → `ViewModel` → `Repository` → `DAO` |
+| Empacotamento | `com.example.lensclickapp` · versão 1.0 |
+
+```
+UI (Compose)  ──▶  LensClickViewModel  ──▶  LensClickRepository  ──▶  LensClickDao  ──▶  Room
+       ▲                    │                        │
+       └──── StateFlow ─────┘                  SHA-256 na senha
+```
+
+- **`ui/`** — as 17 telas, componentes reutilizáveis (`PrimaryButton`, `LensField`, `BottomNav`, `LogoAsset`) e o tema Material 3.
+- **`ui/LensClickViewModel`** — estado observável (`photographers`, `budgets`, `currentUser`) e as ações de login, cadastro, orçamento e logout.
+- **`data/`** — entidades `Photographer`, `Budget` e `User`; o `Repository` semeia dados de exemplo na primeira execução e guarda a senha como hash SHA-256.
+
+## 🔑 Conta de demonstração
+
+O app cria uma conta de cliente e um catálogo de fotógrafos na primeira execução. A tela de login já vem preenchida:
+
+| Campo | Valor |
+|---|---|
+| E-mail | `seu@email.com` |
+| Senha | `lensclick` |
+
+Para conhecer o **modo fotógrafo**, use *Cadastrar como fotógrafo* no fluxo de criação de conta — o painel profissional abre automaticamente para contas com esse papel.
+
+## 🎨 Identidade visual
+
+O design segue uma direção **editorial e atemporal**, inspirada na fotografia analógica:
+
+| Cor | Hex | Uso |
+|---|---|---|
+| 🖤 Tinta (*Ink*) | `#11110F` | Fundos fortes, botões primários e texto principal |
+| 🤍 Papel | `#F6F3EB` | Fundo geral do app e da splash |
+| ⚪ Branco | `#FFFEFA` | Superfícies elevadas (cartões, campos) |
+| 🩶 Linha | `#E2DDD2` | Bordas e divisórias |
+| 🩶 Cinza | `#716D64` | Texto secundário e placeholders |
+| 🟡 Dourado | `#9A6A24` | Destaques, avaliações e preços |
+
+**Formatos da marca**
+
+| Formato | Arquivo | Onde aparece |
+|---|---|---|
+| Conjunto completo — monograma *LC* + abertura + filetes | `drawable-nodpi/lens_click_mark.png` | Splash, telas de autenticação e cabeçalho das telas internas |
+| Abertura isolada | `drawable-*/ic_launcher_foreground.png` | Ícone do app (o mesmo desenho em preto sólido alimenta a camada *monochrome* dos ícones temáticos) |
+| Lockup transparente com a palavra-marca | `assets/brand_lockup.png` | Base para o banner e para outras peças da marca |
+| Arte-base sem letreiro | `assets/hero.jpg` | Fotografia original com o texto embutido removido, pronta para receber novas composições |
+| Banner montado | `assets/banner.jpg` | Cabeçalho deste README |
+
+Na splash, o ícone é declarado em `Theme.LensClickApp.Starting` (`windowSplashScreenAnimatedIcon`) usando `@drawable/splash_icon`, gerado nas densidades `mdpi`→`xxxhdpi` dentro da especificação do Android 12+: **caixa de 288 dp com o desenho dentro do círculo de 192 dp** que o sistema exibe. O logo em si é desenhado em preto sólido e recolorido em tempo de execução (`BlendMode.SrcIn`), o que permite usar a mesma arte em off-white sobre a fotografia do Onboarding e em dourado nas telas claras.
 
 ## 🗂️ Estrutura do projeto
 
 ```
 LensClickApp/
 ├── app/
-│   ├── build.gradle.kts              # configuração do módulo Android
+│   ├── build.gradle.kts                  # configuração do módulo Android
 │   └── src/
 │       ├── main/
 │       │   ├── AndroidManifest.xml
 │       │   ├── java/com/example/lensclickapp/
-│       │   │   ├── MainActivity.kt   # Activity única (edge-to-edge + tema)
+│       │   │   ├── LensClickApplication.kt   # Application + repositório
+│       │   │   ├── MainActivity.kt           # Activity única (edge-to-edge + tema)
 │       │   │   ├── data/
-│       │   │   │   └── LensClickData.kt   # modelos Photographer/Budget + mock
+│       │   │   │   ├── LensClickData.kt      # entidades Photographer/Budget/User + mock
+│       │   │   │   ├── LensClickDatabase.kt  # Room + migração
+│       │   │   │   ├── LensClickDao.kt
+│       │   │   │   └── LensClickRepository.kt
 │       │   │   └── ui/
-│       │   │       ├── LensClickApp.kt    # as 11 telas + navegação por estado
-│       │   │       └── theme/             # Color, Type e LensClickAppTheme (M3)
-│       │   └── res/                  # ícones, imagem de onboarding e strings (pt-BR)
-│       ├── androidTest/              # testes instrumentados (exemplo)
-│       └── test/                     # testes de unidade (exemplo)
+│       │   │       ├── LensClickApp.kt       # as 17 telas + navegação por estado
+│       │   │       ├── LensClickViewModel.kt
+│       │   │       └── theme/                # Color, Type e LensClickAppTheme (M3)
+│       │   └── res/
+│       │       ├── drawable-nodpi/           # fotos e marca (bitmaps em tamanho natural)
+│       │       ├── drawable-*/               # ícone da splash e camadas do ícone do app
+│       │       ├── mipmap-*/                 # ícones do launcher (adaptativo + legado)
+│       │       └── values/                   # cores, tema e strings (pt-BR)
+│       ├── androidTest/                      # testes instrumentados (exemplo)
+│       └── test/                             # testes de unidade (exemplo)
+├── assets/                                   # banner, arte-base, ícone e lockup da marca
 ├── gradle/
-│   ├── libs.versions.toml            # catálogo central de versões
-│   └── wrapper/                      # Gradle 9.3.1
-├── build.gradle.kts                  # build raiz
-├── settings.gradle.kts               # módulos e repositórios
-└── gradlew / gradlew.bat             # wrapper multiplataforma
+│   ├── libs.versions.toml                    # catálogo central de versões
+│   └── wrapper/                              # Gradle 9.3.1
+├── build.gradle.kts                          # build raiz
+├── settings.gradle.kts                       # módulos e repositórios
+└── gradlew / gradlew.bat                     # wrapper multiplataforma
 ```
 
 ## 🚀 Como executar
 
 ### Pré-requisitos
 
-- **Android Studio** recente (com suporte a AGP 9.x) — ou apenas um JDK 17+ na CLI
+- **Android Studio** recente (com suporte a AGP 9.x) — ou apenas um JDK 17 ou superior na linha de comando
 - **SDK Platform 36** instalado no Android SDK Manager
 
 ### Pelo Android Studio
@@ -113,26 +201,15 @@ LensClickApp/
 
 > 💡 No Windows, use `gradlew.bat` no lugar de `./gradlew`.
 
-## 🎨 Identidade visual
-
-O design do app segue uma direção **editorial e atemporal**, inspirada no universo da fotografia analógica:
-
-| Cor | Hex | Uso |
-|---|---|---|
-| 🖤 Tinta (*Ink*) | `#11110F` | Fundos fortes, botões primários e texto principal |
-| 🤍 Papel | `#F6F3EB` | Fundo geral do app |
-| ⚪ Branco | `#FFFEFA` | Superfícies elevadas (cartões, campos) |
-| 🩶 Linha | `#E2DDD2` | Bordas e divisórias |
-| 🩶 Cinza | `#716D64` | Texto secundário e placeholders |
-| 🟡 Dourado | `#9A6A24` | Destaques, avaliações e preços |
-
-Detalhes que fazem a diferença: o **logotipo** (uma lente com abertura estilizada) é desenhado via `Canvas` no próprio código, os cantos são arredondados e suaves, e a tipografia usa pesos semibold com espaçamento de letras marcante — tudo para reforçar um clima sofisticado de estúdio fotográfico.
-
 ## 📌 Status do projeto
 
-Esta versão é uma **interface completa e navegável** com dados de exemplo: onboarding, autenticação, descoberta de fotógrafos, orçamentos, conversas e conta funcionam ponta a ponta no cliente, usando os modelos e catálogos locais de `LensClickData.kt`.
+Esta versão é uma **interface completa e navegável** com dados locais: onboarding, autenticação, descoberta de fotógrafos, orçamentos, conversas e as telas do modo profissional funcionam ponta a ponta no cliente, com as informações gravadas em Room no próprio aparelho.
 
-Como próximo passo natural, a UI está pronta para ser conectada ao **backend da plataforma LensClick** — autenticação real, fotógrafos, orçamentos e mensagens em tempo real.
+Próximos passos naturais:
+
+- conectar a UI ao **backend da plataforma LensClick** — autenticação real, catálogo de fotógrafos, propostas e mensagens em tempo real;
+- substituir o hash local de senha por um fluxo de autenticação com token;
+- levar a navegação por estado para `Navigation Compose`, com deep links para perfil e conversas.
 
 ## 📄 Licença
 
