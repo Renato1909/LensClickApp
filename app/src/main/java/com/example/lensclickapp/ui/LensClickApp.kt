@@ -576,18 +576,30 @@ private fun PhotographerBottomNav(active: Screen, onNavigate: (Screen) -> Unit) 
         Triple("□", "Agenda", Screen.ProAgenda),
         Triple("♙", "Perfil", Screen.ProProfile)
     )
-    Row(
-        Modifier.fillMaxWidth().background(Ink).padding(horizontal = 8.dp, vertical = 9.dp),
-        horizontalArrangement = Arrangement.SpaceAround
-    ) {
-        items.forEach { (icon, label, destination) ->
-            val selected = active == destination
-            Column(
-                Modifier.weight(1f).clip(RoundedCornerShape(18.dp)).background(if (selected) SurfaceHigh else Color.Transparent).clickable { onNavigate(destination) }.padding(vertical = 7.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(icon, color = if (selected) Ink else Paper, fontSize = 18.sp)
-                Text(label, color = if (selected) Ink else Paper.copy(.7f), fontSize = 9.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+    Box(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
+        Row(
+            Modifier.fillMaxWidth()
+                .shadow(18.dp, RoundedCornerShape(29.dp))
+                .clip(RoundedCornerShape(29.dp))
+                .background(Ink)
+                .border(1.dp, Color.White.copy(.10f), RoundedCornerShape(29.dp))
+                .padding(horizontal = 7.dp, vertical = 7.dp),
+            horizontalArrangement = Arrangement.SpaceAround
+        ) {
+            items.forEach { (icon, label, destination) ->
+                val selected = active == destination
+                Column(
+                    Modifier.weight(1f)
+                        .padding(horizontal = 2.dp)
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(if (selected) SurfaceHigh else Color.Transparent)
+                        .clickable { onNavigate(destination) }
+                        .padding(vertical = 7.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(icon, color = if (selected) Ink else Paper.copy(.82f), fontSize = 19.sp, lineHeight = 20.sp)
+                    Text(label, color = if (selected) Ink else Paper.copy(.62f), fontSize = 9.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1)
+                }
             }
         }
     }
