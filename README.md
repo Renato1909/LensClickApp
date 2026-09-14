@@ -60,18 +60,18 @@ Esta versão entrega **17 telas navegáveis**, interface 100% em português do B
 ## 🗺️ Fluxo de telas
 
 ```
-Onboarding ──▶ Tipo de conta ──┬──▶ Cadastro (cliente) ──┐
-     │                         └──▶ Cadastro (fotógrafo)─┤
-     └────────▶ Login ◀──────────────────────────────────┘
-                   │
-     cliente       │        fotógrafo
-        ┌──────────┴───────────┐
-        ▼                      ▼
-     Início              Painel profissional
-        ├─▶ Descobrir ─▶ Perfil do fotógrafo ─▶ Solicitar orçamento   ├─▶ Pedidos
-        ├─▶ Orçamentos                                                 ├─▶ Agenda
-        ├─▶ Conversas ─▶ Chat                                          └─▶ Perfil
-        └─▶ Conta
+Cliente
+  Onboarding ─▶ Tipo de conta ─▶ Login ou Cadastro ─▶ Início
+      ├─▶ Descobrir ─▶ Perfil do fotógrafo ─▶ Solicitar orçamento
+      ├─▶ Meus orçamentos
+      ├─▶ Conversas ─▶ Chat
+      └─▶ Conta
+
+Fotógrafo
+  Onboarding ─▶ Tipo de conta ─▶ Cadastro de fotógrafo ─▶ Painel profissional
+      ├─▶ Pedidos
+      ├─▶ Agenda
+      └─▶ Perfil
 ```
 
 A navegação é uma máquina de estados declarativa (`enum class Screen` + `rememberSaveable`), sem biblioteca de rotas — o app inteiro vive em uma única `Activity`.
@@ -123,16 +123,17 @@ O design segue uma direção **editorial e atemporal**, inspirada na fotografia 
 | 🩶 Cinza | `#716D64` | Texto secundário e placeholders |
 | 🟡 Dourado | `#9A6A24` | Destaques, avaliações e preços |
 
-**A marca em três formatos**
+**Formatos da marca**
 
 | Formato | Arquivo | Onde aparece |
 |---|---|---|
 | Conjunto completo — monograma *LC* + abertura + filetes | `drawable-nodpi/lens_click_mark.png` | Splash, telas de autenticação e cabeçalho das telas internas |
 | Abertura isolada | `drawable-*/ic_launcher_foreground.png` | Ícone do app (o mesmo desenho em preto sólido alimenta a camada *monochrome* dos ícones temáticos) |
 | Lockup transparente com a palavra-marca | `assets/brand_lockup.png` | Base para o banner e para outras peças da marca |
+| Arte-base sem letreiro | `assets/hero.jpg` | Fotografia original com o texto embutido removido, pronta para receber novas composições |
 | Banner montado | `assets/banner.jpg` | Cabeçalho deste README |
 
-Na splash, o ícone é declarado em `Theme.LensClickApp.Starting` (`windowSplashScreenAnimatedIcon`) usando `@drawable/splash_icon`, gerado nas densidades `mdpi`→`xxxhdpi` dentro da especificação do Android 12+: **caixa de 288 dp com o desenho dentro do círculo de 192 dp** que o sistema exibe. O logo em si é desenhado em preto sólido e recolorido em tempo de execução (`BlendMode.SrcIn`), o que permite usar a mesma arte em off-white sobre a foto do onboarding e em dourado nas telas claras.
+Na splash, o ícone é declarado em `Theme.LensClickApp.Starting` (`windowSplashScreenAnimatedIcon`) usando `@drawable/splash_icon`, gerado nas densidades `mdpi`→`xxxhdpi` dentro da especificação do Android 12+: **caixa de 288 dp com o desenho dentro do círculo de 192 dp** que o sistema exibe. O logo em si é desenhado em preto sólido e recolorido em tempo de execução (`BlendMode.SrcIn`), o que permite usar a mesma arte em off-white sobre a fotografia do Onboarding e em dourado nas telas claras.
 
 ## 🗂️ Estrutura do projeto
 
@@ -162,7 +163,7 @@ LensClickApp/
 │       │       └── values/                   # cores, tema e strings (pt-BR)
 │       ├── androidTest/                      # testes instrumentados (exemplo)
 │       └── test/                             # testes de unidade (exemplo)
-├── assets/                                   # banner, ícone e lockup usados no README
+├── assets/                                   # banner, arte-base, ícone e lockup da marca
 ├── gradle/
 │   ├── libs.versions.toml                    # catálogo central de versões
 │   └── wrapper/                              # Gradle 9.3.1
@@ -175,7 +176,7 @@ LensClickApp/
 
 ### Pré-requisitos
 
-- **Android Studio** recente (com suporte a AGP 9.x) — ou apenas um JDK 17+ na linha de comando
+- **Android Studio** recente (com suporte a AGP 9.x) — ou apenas um JDK 17 ou superior na linha de comando
 - **SDK Platform 36** instalado no Android SDK Manager
 
 ### Pelo Android Studio
