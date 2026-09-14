@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Ícone para API 24–25 (antes dos adaptive icons): o glifo da abertura já vem
+<!-- Ícone para API 24–25 (antes dos adaptive icons): o monograma LC já vem
      posicionado com a folga de segurança, então não são necessárias margens extras. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>

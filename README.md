@@ -1,9 +1,9 @@
 <p align="center">
-  <img src="assets/banner.jpg" alt="Lens Click — banner com câmera analógica, luz dourada e o logotipo da marca" width="100%" />
+  <img src="assets/banner.jpg" alt="Lens Click — banner com câmera analógica e o monograma L sobre C da marca" width="100%" />
 </p>
 
 <p align="center">
-  <img src="assets/icon.png" alt="Ícone do Lens Click: abertura de lente dourada sobre papel" width="104" />
+  <img src="assets/icon.png" alt="Logotipo do Lens Click: monograma L sobre C com obturador fotográfico, sobre papel" width="104" />
 </p>
 
 <h1 align="center">Lens Click</h1>
@@ -127,13 +127,14 @@ O design segue uma direção **editorial e atemporal**, inspirada na fotografia 
 
 | Formato | Arquivo | Onde aparece |
 |---|---|---|
-| Conjunto completo — monograma *LC* + abertura + filetes | `drawable-nodpi/lens_click_mark.png` | Splash, telas de autenticação e cabeçalho das telas internas |
-| Abertura isolada | `drawable-*/ic_launcher_foreground.png` | Ícone do app (o mesmo desenho em preto sólido alimenta a camada *monochrome* dos ícones temáticos) |
-| Lockup transparente com a palavra-marca | `assets/brand_lockup.png` | Base para o banner e para outras peças da marca |
-| Arte-base sem letreiro | `assets/hero.jpg` | Fotografia original com o texto embutido removido, pronta para receber novas composições |
-| Banner montado | `assets/banner.jpg` | Cabeçalho deste README |
+| Monograma *LC* completo — letras sobrepostas, obturador e filetes | `drawable-nodpi/lens_click_mark.png` | Splash, telas de autenticação e cabeçalho das telas internas |
+| Monograma *LC* compacto | `drawable-*/ic_launcher_foreground.png` | Ícone do app e camada *monochrome* dos ícones temáticos |
+| Lockup transparente do monograma | `assets/brand_lockup.png` | Arte-base da marca para materiais editoriais |
+| Ícone da marca sobre papel | `assets/icon.png` | Apresentação da marca neste README e em outras peças |
+| Arte-base sem letreiro | `assets/hero.jpg` | Fotografia original sem texto, pronta para receber novas composições |
+| Banner montado apenas com o monograma | `assets/banner.jpg` | Cabeçalho deste README |
 
-Na splash, o ícone é declarado em `Theme.LensClickApp.Starting` (`windowSplashScreenAnimatedIcon`) usando `@drawable/splash_icon`, gerado nas densidades `mdpi`→`xxxhdpi` dentro da especificação do Android 12+: **caixa de 288 dp com o desenho dentro do círculo de 192 dp** que o sistema exibe. O logo em si é desenhado em preto sólido e recolorido em tempo de execução (`BlendMode.SrcIn`), o que permite usar a mesma arte em off-white sobre a fotografia do Onboarding e em dourado nas telas claras.
+Na splash, o monograma é declarado em `Theme.LensClickApp.Starting` (`windowSplashScreenAnimatedIcon`) usando `@drawable/splash_icon`, gerado nas densidades `mdpi`→`xxxhdpi` dentro da especificação do Android 12+: **caixa de 288 dp com o desenho dentro do círculo de 192 dp** que o sistema exibe. A arte do monograma é desenhada em preto sólido e recolorida em tempo de execução (`BlendMode.SrcIn`), o que permite usar a mesma logo em off-white sobre a fotografia do Onboarding e em dourado nas telas claras.
 
 ## 🗂️ Estrutura do projeto
 

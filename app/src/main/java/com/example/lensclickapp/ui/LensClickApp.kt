@@ -144,7 +144,7 @@ private fun LogoAsset(modifier: Modifier = Modifier, size: Int, onDark: Boolean 
     ) {
         Image(
             painter = painterResource(R.drawable.lens_click_mark),
-            contentDescription = "Lens Click",
+            contentDescription = "Monograma Lens Click",
             modifier = Modifier.fillMaxSize()
                 .graphicsLayer {
                     scaleX = 1.12f
