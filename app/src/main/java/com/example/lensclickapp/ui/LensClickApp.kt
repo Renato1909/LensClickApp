@@ -427,10 +427,23 @@ private fun HomeScreen(photographers: List<Photographer>, onNavigate: (Screen) -
     }
 }
 
-@Composable private fun PhotographerCards(photographers: List<Photographer>, onOpen: () -> Unit) { LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) { items(photographers.take(3), key = { it.id }) { p -> Column(Modifier.width(148.dp).shadow(5.dp, RoundedCornerShape(18.dp)).clip(RoundedCornerShape(18.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(18.dp)).clickable(onClick = onOpen).padding(bottom = 12.dp)) { Photo(Modifier.fillMaxWidth().height(126.dp)); Text(p.name, color = Ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(11.dp, 9.dp, 11.dp, 0.dp)); Text(p.specialty, color = Muted, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 11.dp)); Text("★ 5,0", color = Gold, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp)) } } } }
+@Composable private fun PhotographerCards(photographers: List<Photographer>, onOpen: () -> Unit) { LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) { items(photographers.take(3), key = { it.id }) { p -> Column(Modifier.width(148.dp).shadow(5.dp, RoundedCornerShape(18.dp)).clip(RoundedCornerShape(18.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(18.dp)).clickable(onClick = onOpen).padding(bottom = 12.dp)) { Photo(Modifier.fillMaxWidth().height(126.dp), photographerImage(p)); Text(p.name, color = Ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(11.dp, 9.dp, 11.dp, 0.dp)); Text(p.specialty, color = Muted, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 11.dp)); Text("★ 5,0", color = Gold, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp)) } } } }
 
-@Composable private fun Photo(modifier: Modifier = Modifier) = Image(painterResource(R.drawable.lens_mountains), null, modifier.clip(RoundedCornerShape(10.dp)), contentScale = ContentScale.Crop)
-@Composable private fun PortfolioStrip() = Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { repeat(3) { Photo(Modifier.weight(1f).height(78.dp)) } }
+private fun photographerImage(photographer: Photographer): Int = when {
+    photographer.name == "Mariana Lopes" -> R.drawable.card_wedding
+    photographer.name == "Lucas Almeida" -> R.drawable.card_portrait_outdoor
+    photographer.name == "Carlos Nobre" -> R.drawable.card_event
+    photographer.name == "Juliana Reis" -> R.drawable.card_portrait_studio
+    photographer.specialty.contains("casamento", ignoreCase = true) -> R.drawable.card_wedding
+    photographer.specialty.contains("corporativo", ignoreCase = true) -> R.drawable.card_corporate
+    photographer.specialty.contains("evento", ignoreCase = true) -> R.drawable.card_event
+    else -> R.drawable.card_portrait_outdoor
+}
+
+@Composable private fun Photo(modifier: Modifier = Modifier, imageRes: Int = R.drawable.lens_mountains) = Image(painterResource(imageRes), null, modifier.clip(RoundedCornerShape(10.dp)), contentScale = ContentScale.Crop)
+@Composable private fun PortfolioStrip() = Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    listOf(R.drawable.card_wedding, R.drawable.card_portrait_outdoor, R.drawable.card_event).forEach { image -> Photo(Modifier.weight(1f).height(78.dp), image) }
+}
 
 @Composable
 private fun SearchScreen(photographers: List<Photographer>, onNavigate: (Screen) -> Unit) = AppPage(Screen.Search, onNavigate) {
@@ -466,7 +479,7 @@ private fun SearchScreen(photographers: List<Photographer>, onNavigate: (Screen)
 @Composable private fun PhotographerRow(p: Photographer, open: () -> Unit) {
     var favorite by rememberSaveable { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth().shadow(2.dp, RoundedCornerShape(16.dp)).clip(RoundedCornerShape(16.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(16.dp)).clickable(onClick = open).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Avatar(p.initials, Modifier.size(62.dp)); Spacer(Modifier.width(12.dp)); Column(Modifier.weight(1f)) { Text(p.name, color = Ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold); Text(p.specialty, color = Muted, fontSize = 10.sp); Text(p.city, color = Muted, fontSize = 10.sp); Text("★ 5,0 (128)", color = Gold, fontSize = 10.sp) }
+        Image(painterResource(photographerImage(p)), p.name, Modifier.size(62.dp).clip(CircleShape), contentScale = ContentScale.Crop); Spacer(Modifier.width(12.dp)); Column(Modifier.weight(1f)) { Text(p.name, color = Ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold); Text(p.specialty, color = Muted, fontSize = 10.sp); Text(p.city, color = Muted, fontSize = 10.sp); Text("★ 5,0 (128)", color = Gold, fontSize = 10.sp) }
         Column(horizontalAlignment = Alignment.End) { Text(if (favorite) "♥" else "♡", color = Ink, fontSize = 22.sp, modifier = Modifier.clip(CircleShape).clickable { favorite = !favorite }.padding(6.dp)); Spacer(Modifier.height(9.dp)); Text("A partir de ${p.price}", color = Ink, fontSize = 9.sp, fontWeight = FontWeight.Medium) }
     }
 }
@@ -480,7 +493,7 @@ private fun PhotographerScreen(onBack: () -> Unit, onQuote: () -> Unit) {
         Box(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             Column {
                 Box {
-                    Photo(Modifier.fillMaxWidth().height(240.dp))
+                    Photo(Modifier.fillMaxWidth().height(240.dp), R.drawable.card_portrait_outdoor)
                     Box(Modifier.padding(16.dp).size(42.dp).clip(CircleShape).background(Color.Black.copy(.58f)).clickable(onClick = onBack), contentAlignment = Alignment.Center) { Text("‹", color = Color.White, fontSize = 34.sp) }
                     Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.TopEnd) { CompactLogo(42) }
                 }
