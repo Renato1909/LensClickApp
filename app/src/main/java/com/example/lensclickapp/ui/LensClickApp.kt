@@ -329,6 +329,16 @@ private fun LensField(label: String, value: String, onChange: (String) -> Unit, 
 
 @Composable private fun PrimaryButton(text: String, onClick: () -> Unit, enabled: Boolean = true) = Button(onClick, enabled = enabled, modifier = Modifier.fillMaxWidth().height(54.dp).shadow(if (enabled) 7.dp else 0.dp, RoundedCornerShape(18.dp)), shape = RoundedCornerShape(18.dp), colors = ButtonDefaults.buttonColors(containerColor = Ink, contentColor = Color.White, disabledContainerColor = Line, disabledContentColor = Muted)) { Text(text, fontWeight = FontWeight.SemiBold) }
 
+@Composable
+private fun LogoutButton(onClick: () -> Unit) = Button(
+    onClick = onClick,
+    modifier = Modifier.fillMaxWidth().height(54.dp).shadow(4.dp, RoundedCornerShape(17.dp)),
+    shape = RoundedCornerShape(17.dp),
+    colors = ButtonDefaults.buttonColors(containerColor = Ink, contentColor = Color.White)
+) {
+    Text("Sair da conta", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+}
+
 @Composable private fun CenterLink(prefix: String, action: String, click: () -> Unit) = Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) { Text(prefix, color = Muted, fontSize = 12.sp); TextButton(click, contentPadding = PaddingValues(5.dp)) { Text(action, color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Bold) } }
 
 @Composable
@@ -712,7 +722,8 @@ private fun PhotographerProfileScreen(
         Spacer(Modifier.height(18.dp))
         PrimaryButton("Usar o app como cliente", onClientMode)
         Spacer(Modifier.height(10.dp))
-        OutlinedButton(onClick = onLogout, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(17.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Ink)) { Text("Sair da conta", color = Ink) }
+        LogoutButton(onLogout)
+        Spacer(Modifier.height(8.dp))
     }
 }
 
@@ -722,7 +733,7 @@ private fun initialsForDisplay(name: String?): String = name.orEmpty().trim().sp
 private fun AccountScreen(user: User?, canUseProfessionalMode: Boolean, onNavigate: (Screen) -> Unit, onProfessionalMode: () -> Unit, onLogout: () -> Unit) = AppPage(Screen.Account, onNavigate) {
     var selectedAction by rememberSaveable { mutableStateOf<String?>(null) }
     val actions = listOf("♙  Meus dados", "⚙  Configurações", "♢  Segurança", "♧  Notificações", "?  Ajuda e suporte", "ⓘ  Sobre o Lens Click")
-    Column(Modifier.fillMaxSize().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { Text("⚙", color = Ink, fontSize = 24.sp, modifier = Modifier.clip(CircleShape).clickable { selectedAction = "Configurações" }.padding(8.dp)) }
         Avatar(initialsForDisplay(user?.name), Modifier.size(86.dp)); Spacer(Modifier.height(10.dp)); Text(user?.name ?: "Minha conta", color = Ink, fontSize = 19.sp, fontWeight = FontWeight.SemiBold); Text(user?.email.orEmpty(), color = Muted, fontSize = 11.sp); Text(if (canUseProfessionalMode) "Modo cliente • conta de fotógrafo" else "Conta de cliente", color = Gold, fontSize = 10.sp, modifier = Modifier.padding(top = 5.dp)); Spacer(Modifier.height(22.dp))
         if (canUseProfessionalMode) {
@@ -730,7 +741,7 @@ private fun AccountScreen(user: User?, canUseProfessionalMode: Boolean, onNaviga
             Spacer(Modifier.height(14.dp))
         }
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(12.dp))) { actions.forEach { action -> Row(Modifier.fillMaxWidth().clickable { selectedAction = action.substringAfter("  ") }.padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) { Text(action, color = Ink, fontSize = 13.sp); Text("›", color = Muted, fontSize = 19.sp) }; HorizontalDivider(color = Line) } }
-        Spacer(Modifier.height(24.dp)); Button(onLogout, Modifier.fillMaxWidth().height(52.dp), colors = ButtonDefaults.buttonColors(Ink, Color.White), shape = RoundedCornerShape(17.dp)) { Text("⇥  Sair da conta", fontWeight = FontWeight.SemiBold) }
+        Spacer(Modifier.height(24.dp)); LogoutButton(onLogout); Spacer(Modifier.height(8.dp))
     }
     selectedAction?.let { action -> ActionDialog(action, "Esta área foi acionada corretamente. A próxima etapa é conectá-la aos dados reais da conta.") { selectedAction = null } }
 }
