@@ -8,16 +8,17 @@ O aplicativo possui 17 telas em Jetpack Compose e persiste dados locais com Room
 
 ## Fase 1 — fundação Android
 
-- [ ] Validar build limpo, lint, testes e instalação em emulador.
-- [ ] Substituir testes de exemplo por uma linha de base útil.
-- [ ] Criar CI para build, lint e testes.
-- [ ] Definir pacote definitivo, flavors/ambientes e versionamento.
+- [x] Substituir testes de exemplo por uma linha de base útil (testes JVM de repositório/ViewModel + instrumentado de migração Room 2→3).
+- [x] Criar CI para build, lint e testes (`.github/workflows/android.yml`: build debug, testes JVM, lint, instrumentados em emuladores API 24/36).
+- [x] Remover credencial do Room (migração 2→3 descarta `passwordHash`; hashes de demonstração vivem apenas em memória no processo).
+- [ ] Validar build limpo, lint, testes e instalação em emulador **local** (bloqueado: esta máquina não tem Android SDK; ver `docs/AMBIENTE_ANDROID.md`). A validação ocorre no CI.
+- [ ] Definir pacote definitivo, flavors/ambientes e versionamento (depende do mantenedor).
 - [ ] Separar melhor navegação, domínio, dados locais e dados remotos.
 - [ ] Adotar Navigation Compose e preparar deep links.
 
 ## Fase 2 — contrato e paridade
 
-- [ ] Criar `docs/MATRIZ_PARIDADE.md` comparando app, web e API.
+- [x] Criar `docs/MATRIZ_PARIDADE.md` comparando app, web e API (primeira versão, baseada no commit `c3358c2` da plataforma).
 - [ ] Aprovar o escopo do primeiro lançamento.
 - [ ] Definir autenticação móvel revogável com o backend.
 - [ ] Definir cliente HTTP, serialização, erros e compatibilidade da API.

@@ -53,7 +53,7 @@ private val Gold = Color(0xFF9A6A24)
 private enum class Screen { Onboarding, AccountType, Login, SignUp, PhotographerSignUp, Home, Search, Photographer, Quote, Budgets, Conversations, Chat, Account, ProDashboard, ProRequests, ProAgenda, ProProfile }
 
 @Composable
-fun LensClickApp(viewModel: LensClickViewModel = viewModel()) {
+fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickViewModel.Factory)) {
     var screen by rememberSaveable { mutableStateOf(Screen.Onboarding) }
     var previous by rememberSaveable { mutableStateOf(Screen.Home) }
     val photographers by viewModel.photographers.collectAsStateWithLifecycle()

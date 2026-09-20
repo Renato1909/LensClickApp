@@ -1,9 +1,12 @@
 package com.example.lensclickapp.ui
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.lensclickapp.LensClickApplication
+import com.example.lensclickapp.data.LensClickRepository
 import com.example.lensclickapp.data.User
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -12,8 +15,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-class LensClickViewModel(application: Application) : AndroidViewModel(application) {
-    private val repository = (application as LensClickApplication).repository
+class LensClickViewModel(private val repository: LensClickRepository) : ViewModel() {
+    companion object {
+        val Factory = viewModelFactory {
+            initializer {
+                LensClickViewModel((this[APPLICATION_KEY] as LensClickApplication).repository)
+            }
+        }
+    }
     private val _currentUser = MutableStateFlow<User?>(null)
     val currentUser: StateFlow<User?> = _currentUser.asStateFlow()
 
