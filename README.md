@@ -38,7 +38,7 @@ Esta versão entrega **17 telas navegáveis**, interface 100% em português do B
 |---|---|
 | 🪪 **Onboarding** | Boas-vindas em tela cheia com fotografia, gradiente escuro e a marca aplicada em dourado e off-white |
 | 🧑🤝🧑 **Tipo de conta** | Escolha entre conta de cliente ou de fotógrafo antes do cadastro |
-| 🔐 **Login & Cadastro** | Autenticação com validação (senha × confirmação, aceite dos Termos), aviso de e-mail já cadastrado e recuperação de senha |
+| 🔐 **Login & Cadastro** | Autenticação de demonstração local, com validação de formulário (senha × confirmação, aceite dos Termos), aviso de e-mail já cadastrado e recuperação de senha demonstrativa |
 | 🏠 **Início** | Localização, busca rápida, categorias (Casamento, Ensaio, Eventos, Infantil, Corporativo), fotógrafos em destaque e portfólios em alta |
 | 🔎 **Descobrir** | Busca por nome ou estilo, filtros por categoria, favoritos e contador de resultados |
 | 👤 **Perfil do fotógrafo** | Bio, especialidades, estatísticas (experiência, ensaios, satisfação), avaliações, portfólio e preço "a partir de" |
@@ -92,21 +92,23 @@ A navegação é uma máquina de estados declarativa (`enum class Screen` + `rem
 ```
 UI (Compose)  ──▶  LensClickViewModel  ──▶  LensClickRepository  ──▶  LensClickDao  ──▶  Room
        ▲                    │                        │
-       └──── StateFlow ─────┘                  SHA-256 na senha
+       └──── StateFlow ─────┘             credencial demo somente em memória
 ```
 
 - **`ui/`** — as 17 telas, componentes reutilizáveis (`PrimaryButton`, `LensField`, `BottomNav`, `LogoAsset`) e o tema Material 3.
 - **`ui/LensClickViewModel`** — estado observável (`photographers`, `budgets`, `currentUser`) e as ações de login, cadastro, orçamento e logout.
-- **`data/`** — entidades `Photographer`, `Budget` e `User`; o `Repository` semeia dados de exemplo na primeira execução e guarda a senha como hash SHA-256.
+- **`data/`** — entidades `Photographer`, `Budget` e `User`; o `Repository` semeia dados de exemplo na primeira execução. **O Room armazena perfis, fotógrafos e orçamentos, mas não armazena senhas nem hashes de senha.** Os hashes usados pela autenticação de demonstração ficam apenas em memória durante o processo.
 
 ## 🔑 Conta de demonstração
 
-O app cria uma conta de cliente e um catálogo de fotógrafos na primeira execução. A tela de login já vem preenchida:
+O app cria uma conta de cliente e um catálogo de fotógrafos na primeira execução. A autenticação abaixo é **somente para demonstração local**:
 
 | Campo | Valor |
 |---|---|
 | E-mail | `seu@email.com` |
 | Senha | `lensclick` |
+
+A credencial de demonstração não é persistida no Room. O hash fica somente em memória e desaparece quando o processo do aplicativo é encerrado. Isso **não é autenticação de produção** e será substituído pelo contrato de autenticação do backend antes de uma release conectada.
 
 Para conhecer o **modo fotógrafo**, use *Cadastrar como fotógrafo* no fluxo de criação de conta — o painel profissional abre automaticamente para contas com esse papel.
 
@@ -204,13 +206,14 @@ LensClickApp/
 
 ## 📌 Status do projeto
 
-Esta versão é uma **interface completa e navegável** com dados locais: onboarding, autenticação, descoberta de fotógrafos, orçamentos, conversas e as telas do modo profissional funcionam ponta a ponta no cliente, com as informações gravadas em Room no próprio aparelho.
+Esta versão é uma **interface completa e navegável** com dados locais: onboarding, autenticação de demonstração, descoberta de fotógrafos, orçamentos, conversas e as telas do modo profissional funcionam localmente no cliente. O Room persiste os dados de aplicação, mas **não persiste credenciais ou hashes de senha**. O backend da plataforma ainda não está conectado.
 
 Próximos passos naturais:
 
-- conectar a UI ao **backend da plataforma LensClick** — autenticação real, catálogo de fotógrafos, propostas e mensagens em tempo real;
-- substituir o hash local de senha por um fluxo de autenticação com token;
-- levar a navegação por estado para `Navigation Compose`, com deep links para perfil e conversas.
+- definir o **contrato de autenticação móvel revogável** com o backend da plataforma LensClick;
+- conectar a UI ao backend somente depois desse contrato, começando por autenticação e conta;
+- substituir a navegação por estado por `Navigation Compose`, com deep links para perfil e conversas;
+- separar explicitamente modelos/cliente HTTP remotos dos modelos locais de Room.
 
 O planejamento consolidado está em:
 
