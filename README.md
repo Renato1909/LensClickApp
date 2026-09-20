@@ -212,6 +212,12 @@ Próximos passos naturais:
 - substituir o hash local de senha por um fluxo de autenticação com token;
 - levar a navegação por estado para `Navigation Compose`, com deep links para perfil e conversas.
 
+O planejamento consolidado está em:
+
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — ordem de evolução do aplicativo;
+- [`docs/PLANO_CONVERGENCIA_VALIDACAO_PUBLICACAO.md`](docs/PLANO_CONVERGENCIA_VALIDACAO_PUBLICACAO.md) — integração com a plataforma, 2FA, validação e Google Play;
+- [`docs/HANDOFF.md`](docs/HANDOFF.md) — estado técnico e continuidade do trabalho.
+
 ## 📄 Licença
 
 Este repositório ainda não possui licença declarada. Consulte os mantenedores antes de reutilizar qualquer parte do código.
