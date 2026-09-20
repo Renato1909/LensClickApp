@@ -30,8 +30,8 @@ class LensClickMigrationTest {
 
     @Test
     fun migration2To3DropsPasswordColumnAndKeepsUsers() {
-        // O schema v2 é o mais antigo exportado (a v1 nunca teve exportSchema ativo),
-        // então a suíte instrumentada cobre diretamente a migração desta entrega.
+        // A v1/v2 nunca tiveram exportSchema ativo; o 2.json versionado foi reconstruído
+        // a partir do 3.json (v2 = v3 + coluna passwordHash), reproduzindo a entidade v2.
         // createDatabase recria o schema v2 exato (com passwordHash e índices).
         helper.createDatabase(testDb, 2).apply {
             execSQL(
