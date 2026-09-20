@@ -30,33 +30,22 @@ class LensClickMigrationTest {
 
     @Test
     fun migration2To3DropsPasswordColumnAndKeepsUsers() {
+        // O schema v2 é o mais antigo exportado (a v1 nunca teve exportSchema ativo),
+        // então a suíte instrumentada cobre diretamente a migração desta entrega.
+        // createDatabase recria o schema v2 exato (com passwordHash e índices).
         helper.createDatabase(testDb, 2).apply {
-            execSQL(
-                """
-                CREATE TABLE IF NOT EXISTS users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                    name TEXT NOT NULL,
-                    email TEXT NOT NULL,
-                    passwordHash TEXT NOT NULL,
-                    role TEXT NOT NULL DEFAULT 'client',
-                    createdAt INTEGER NOT NULL
-                )
-                """.trimIndent()
-            )
             execSQL(
                 """
                 INSERT INTO users (id, name, email, passwordHash, role, createdAt)
                 VALUES (1, 'Usuário de demonstração', 'seu@email.com', 'hash-legado', 'client', 1000)
                 """.trimIndent()
             )
-            execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_users_email ON users(email)")
             close()
         }
 
         // openDatabase valida o schema v3 exportado contra o resultado migrado.
         val db = helper.runMigrationsAndValidate(
             testDb, 3, true,
-            LensClickDatabase.MIGRATION_1_2,
             LensClickDatabase.MIGRATION_2_3
         )
 
