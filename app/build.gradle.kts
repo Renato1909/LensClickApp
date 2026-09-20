@@ -6,6 +6,11 @@ plugins {
 
 android {
     namespace = "com.example.lensclickapp"
+
+    ksp {
+        arg("room.schemaLocation", "$projectDir/schemas")
+    }
+
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
@@ -56,7 +61,9 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.room.testing)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

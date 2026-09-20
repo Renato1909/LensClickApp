@@ -1,8 +1,14 @@
 package com.example.lensclickapp.data
 
 import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 
+/** Local prototype only. A future mobile API contract must replace this demo session. */
 class LensClickRepository(private val dao: LensClickDao) {
+    // Registration credentials live only for this process; Room stores profiles, never passwords.
+    private val demoPasswordHashes = ConcurrentHashMap<String, String>().apply {
+        put("seu@email.com", hashPassword("lensclick"))
+    }
     val photographers = dao.observePhotographers()
     val budgets = dao.observeBudgets()
 
@@ -13,7 +19,6 @@ class LensClickRepository(private val dao: LensClickDao) {
             User(
                 name = "Usuário de demonstração",
                 email = "seu@email.com",
-                passwordHash = hashPassword("lensclick"),
                 role = "client"
             )
         )
@@ -23,11 +28,12 @@ class LensClickRepository(private val dao: LensClickDao) {
         val user = User(
             name = name.trim(),
             email = email.trim().lowercase(),
-            passwordHash = hashPassword(password),
             role = "client"
         )
         val id = dao.insertUser(user)
-        return if (id == -1L) null else user.copy(id = id)
+        if (id == -1L) return null
+        demoPasswordHashes[user.email] = hashPassword(password)
+        return user.copy(id = id)
     }
 
     suspend fun registerPhotographer(
@@ -42,26 +48,27 @@ class LensClickRepository(private val dao: LensClickDao) {
         val user = User(
             name = name.trim(),
             email = email.trim().lowercase(),
-            passwordHash = hashPassword(password),
             role = "photographer"
         )
         val id = dao.insertPhotographerAccount(
             user = user,
             photographer = Photographer(
-            name = name.trim(),
-            specialty = specialty.trim(),
-            initials = initialsFor(name),
-            price = price.trim(),
-            city = city.trim(),
-            bio = bio.trim()
+                name = name.trim(),
+                specialty = specialty.trim(),
+                initials = initialsFor(name),
+                price = price.trim(),
+                city = city.trim(),
+                bio = bio.trim()
             )
         )
-        return if (id == -1L) null else user.copy(id = id)
+        if (id == -1L) return null
+        demoPasswordHashes[user.email] = hashPassword(password)
+        return user.copy(id = id)
     }
 
     suspend fun authenticate(email: String, password: String): User? {
         val user = dao.findUser(email.trim().lowercase()) ?: return null
-        return user.takeIf { it.passwordHash == hashPassword(password) }
+        return user.takeIf { demoPasswordHashes[it.email] == hashPassword(password) }
     }
 
     suspend fun createBudget(

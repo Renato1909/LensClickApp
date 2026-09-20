@@ -34,7 +34,6 @@ data class User(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val email: String,
-    val passwordHash: String,
     @ColumnInfo(defaultValue = "'client'") val role: String = "client",
     val createdAt: Long = System.currentTimeMillis()
 )

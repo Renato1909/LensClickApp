@@ -9,8 +9,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [Photographer::class, Budget::class, User::class],
-    version = 2,
-    exportSchema = false
+    version = 3,
+    exportSchema = true
 )
 abstract class LensClickDatabase : RoomDatabase() {
     abstract fun lensClickDao(): LensClickDao
@@ -18,7 +18,7 @@ abstract class LensClickDatabase : RoomDatabase() {
     companion object {
         @Volatile private var instance: LensClickDatabase? = null
 
-        private val MIGRATION_1_2 = object : Migration(1, 2) {
+        val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'client'")
                 db.execSQL("ALTER TABLE photographers ADD COLUMN userId INTEGER")
@@ -28,13 +28,35 @@ abstract class LensClickDatabase : RoomDatabase() {
             }
         }
 
+        // Keep local prototype profiles, but never keep password material in Room.
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE users_without_credentials (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        name TEXT NOT NULL,
+                        email TEXT NOT NULL,
+                        role TEXT NOT NULL DEFAULT 'client',
+                        createdAt INTEGER NOT NULL
+                    )
+                """.trimIndent())
+                db.execSQL("""
+                    INSERT INTO users_without_credentials (id, name, email, role, createdAt)
+                    SELECT id, name, email, role, createdAt FROM users
+                """.trimIndent())
+                db.execSQL("DROP TABLE users")
+                db.execSQL("ALTER TABLE users_without_credentials RENAME TO users")
+                db.execSQL("CREATE UNIQUE INDEX index_users_email ON users(email)")
+            }
+        }
+
         fun getInstance(context: Context): LensClickDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     LensClickDatabase::class.java,
                     "lens_click.db"
-                ).addMigrations(MIGRATION_1_2)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                     .also { instance = it }
             }
