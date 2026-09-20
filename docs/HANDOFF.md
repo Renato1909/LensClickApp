@@ -19,7 +19,7 @@
 - backend real ainda não conectado;
 - conta de demonstração (`seu@email.com` / `lensclick`) segue sendo protótipo e não pode chegar à release pública como autenticação real.
 
-## Fundação entregue (branch `codex/fundacao-android-ci`)
+## Fundação entregue (integrada em `main` via PR #4, commit `fbbd934`)
 
 - **CI Android** em `.github/workflows/android.yml`: job de build/lint/testes JVM (Ubuntu, JDK 21, SDK 36.1) e jobs instrumentados em emuladores API 24 e 36, actions fixadas por SHA, sem segredos.
 - **Testes úteis**: `LensClickRepositoryTest` (7 casos), `LensClickViewModelTest` (5 casos) com `FakeLensClickDao` em memória; `LensClickMigrationTest` instrumentado valida que a migração 2→3 descarta `passwordHash` e preserva usuários.
