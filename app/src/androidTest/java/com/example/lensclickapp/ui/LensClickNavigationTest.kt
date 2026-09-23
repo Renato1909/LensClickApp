@@ -3,9 +3,11 @@ package com.example.lensclickapp.ui
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.printToString
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.espresso.Espresso
@@ -34,8 +36,8 @@ class LensClickNavigationTest {
         rule.onNodeWithText("Entrar").performClick()
         awaitText("Buscar")
         rule.onNodeWithText("Buscar").performClick()
-        awaitText("Lucas Almeida")
-        rule.onNodeWithText("Lucas Almeida").performClick()
+        awaitText("4 profissionais")
+        rule.onNodeWithContentDescription("Carlos Nobre").performClick()
         rule.onNodeWithText("Solicitar orçamento").performClick()
         Espresso.pressBack()
         awaitText("Lucas Almeida")
@@ -51,7 +53,7 @@ class LensClickNavigationTest {
         rule.onNodeWithText("Entrar").performClick()
         awaitText("Perfil")
         rule.onNodeWithText("Perfil").performClick()
-        rule.onNodeWithText("Sair da conta").performClick()
+        rule.onNodeWithText("Sair da conta").performScrollTo().performClick()
         awaitText("Bem-vindo de volta!")
         rule.onNodeWithText("Bem-vindo de volta!").assertIsDisplayed()
         rule.onNodeWithText("Minha conta").assertDoesNotExist()
