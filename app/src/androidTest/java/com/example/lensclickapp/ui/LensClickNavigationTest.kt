@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.espresso.Espresso
@@ -16,28 +17,30 @@ import org.junit.runner.RunWith
 class LensClickNavigationTest {
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
 
+    private fun awaitText(text: String) {
+        try {
+            rule.waitUntil(10_000) {
+                rule.onAllNodes(hasText(text)).fetchSemanticsNodes().isNotEmpty()
+            }
+        } catch (error: Exception) {
+            throw AssertionError("Tela não contém '$text':\n${rule.onRoot().printToString()}", error)
+        }
+    }
+
     @Test fun backFromQuoteReturnsThroughProfileToDiscovery() {
         rule.onNodeWithText("Entrar").performClick()
         rule.onNodeWithText("Bem-vindo de volta!").assertIsDisplayed()
         rule.onNodeWithText("Entrar").performClick()
-        rule.waitUntil(10_000) {
-            rule.onAllNodes(hasText("Buscar")).fetchSemanticsNodes().isNotEmpty()
-        }
+        awaitText("Buscar")
         rule.onNodeWithText("Buscar").performClick()
-        rule.waitUntil(10_000) {
-            rule.onAllNodes(hasText("Lucas Almeida")).fetchSemanticsNodes().isNotEmpty()
-        }
+        awaitText("Lucas Almeida")
         rule.onNodeWithText("Lucas Almeida").performClick()
         rule.onNodeWithText("Solicitar orçamento").performClick()
         Espresso.pressBack()
-        rule.waitUntil(10_000) {
-            rule.onAllNodes(hasText("Lucas Almeida")).fetchSemanticsNodes().isNotEmpty()
-        }
+        awaitText("Lucas Almeida")
         rule.onNodeWithText("Lucas Almeida").assertIsDisplayed()
         Espresso.pressBack()
-        rule.waitUntil(10_000) {
-            rule.onAllNodes(hasText("Descobrir")).fetchSemanticsNodes().isNotEmpty()
-        }
+        awaitText("Descobrir")
         rule.onNodeWithText("Descobrir").assertIsDisplayed()
         rule.onNodeWithText("Solicitar orçamento").assertDoesNotExist()
     }
@@ -45,14 +48,10 @@ class LensClickNavigationTest {
     @Test fun logoutClearsPrivateNavigation() {
         rule.onNodeWithText("Entrar").performClick()
         rule.onNodeWithText("Entrar").performClick()
-        rule.waitUntil(10_000) {
-            rule.onAllNodes(hasText("Perfil")).fetchSemanticsNodes().isNotEmpty()
-        }
+        awaitText("Perfil")
         rule.onNodeWithText("Perfil").performClick()
         rule.onNodeWithText("Sair da conta").performClick()
-        rule.waitUntil(10_000) {
-            rule.onAllNodes(hasText("Bem-vindo de volta!")).fetchSemanticsNodes().isNotEmpty()
-        }
+        awaitText("Bem-vindo de volta!")
         rule.onNodeWithText("Bem-vindo de volta!").assertIsDisplayed()
         rule.onNodeWithText("Minha conta").assertDoesNotExist()
     }
