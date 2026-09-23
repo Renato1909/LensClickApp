@@ -28,6 +28,8 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -59,12 +61,16 @@ private enum class Screen { Onboarding, AccountType, Login, SignUp, Photographer
 @Composable
 fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickViewModel.Factory)) {
     val navController = rememberNavController()
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val currentEntry by navController.currentBackStackEntryAsState()
     val photographers by viewModel.photographers.collectAsStateWithLifecycle()
     val budgets by viewModel.budgets.collectAsStateWithLifecycle()
     val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
     val currentPhotographer = photographers.firstOrNull { it.userId == currentUser?.id }
     fun resetTo(target: Screen) {
+        focusManager.clearFocus()
+        keyboardController?.hide()
         navController.navigate(target.name) {
             popUpTo(navController.graph.id)
             launchSingleTop = true
@@ -75,6 +81,8 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
                 Screen.ProDashboard, Screen.ProRequests, Screen.ProAgenda, Screen.ProProfile)) {
             resetTo(target)
         } else {
+            focusManager.clearFocus()
+            keyboardController?.hide()
             navController.navigate(target.name) { launchSingleTop = true }
         }
     }
