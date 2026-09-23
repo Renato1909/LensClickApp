@@ -39,6 +39,8 @@ class LensClickNavigationTest {
         awaitText("4 profissionais")
         rule.onNodeWithContentDescription("Carlos Nobre").performClick()
         rule.onNodeWithText("Solicitar orçamento").performClick()
+        awaitText("Descrição do evento")
+        rule.waitForIdle()
         Espresso.pressBack()
         awaitText("Lucas Almeida")
         rule.onNodeWithText("Lucas Almeida").assertIsDisplayed()
