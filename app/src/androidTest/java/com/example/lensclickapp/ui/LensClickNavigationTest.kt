@@ -23,7 +23,7 @@ class LensClickNavigationTest {
             rule.waitUntil(10_000) {
                 rule.onAllNodes(hasText(text)).fetchSemanticsNodes().isNotEmpty()
             }
-        } catch (error: Exception) {
+        } catch (error: Throwable) {
             throw AssertionError("Tela não contém '$text':\n${rule.onRoot().printToString()}", error)
         }
     }
