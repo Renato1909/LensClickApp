@@ -81,7 +81,7 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
 
     LaunchedEffect(currentEntry?.destination?.route, currentUser) {
         val route = currentEntry?.destination?.route ?: return@LaunchedEffect
-        if (currentUser == null && Screen.entries.any { it.name == route && it !in setOf(
+        if (viewModel.currentUser.value == null && Screen.entries.any { it.name == route && it !in setOf(
                 Screen.Onboarding, Screen.AccountType, Screen.Login, Screen.SignUp, Screen.PhotographerSignUp) }) {
             resetTo(Screen.Login)
         }

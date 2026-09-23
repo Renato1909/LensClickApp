@@ -30,8 +30,14 @@ class LensClickNavigationTest {
         rule.onNodeWithText("Lucas Almeida").performClick()
         rule.onNodeWithText("Solicitar orçamento").performClick()
         Espresso.pressBack()
+        rule.waitUntil(10_000) {
+            rule.onAllNodes(hasText("Lucas Almeida")).fetchSemanticsNodes().isNotEmpty()
+        }
         rule.onNodeWithText("Lucas Almeida").assertIsDisplayed()
         Espresso.pressBack()
+        rule.waitUntil(10_000) {
+            rule.onAllNodes(hasText("Descobrir")).fetchSemanticsNodes().isNotEmpty()
+        }
         rule.onNodeWithText("Descobrir").assertIsDisplayed()
         rule.onNodeWithText("Solicitar orçamento").assertDoesNotExist()
     }
@@ -44,6 +50,9 @@ class LensClickNavigationTest {
         }
         rule.onNodeWithText("Perfil").performClick()
         rule.onNodeWithText("Sair da conta").performClick()
+        rule.waitUntil(10_000) {
+            rule.onAllNodes(hasText("Bem-vindo de volta!")).fetchSemanticsNodes().isNotEmpty()
+        }
         rule.onNodeWithText("Bem-vindo de volta!").assertIsDisplayed()
         rule.onNodeWithText("Minha conta").assertDoesNotExist()
     }
