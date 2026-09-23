@@ -1,7 +1,7 @@
 package com.example.lensclickapp.ui
 
-import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -21,11 +21,11 @@ class LensClickNavigationTest {
         rule.onNodeWithText("Bem-vindo de volta!").assertIsDisplayed()
         rule.onNodeWithText("Entrar").performClick()
         rule.waitUntil(10_000) {
-            rule.onAllNodesWithText("Buscar").fetchSemanticsNodes().isNotEmpty()
+            rule.onAllNodes(hasText("Buscar")).fetchSemanticsNodes().isNotEmpty()
         }
         rule.onNodeWithText("Buscar").performClick()
         rule.waitUntil(10_000) {
-            rule.onAllNodesWithText("Lucas Almeida").fetchSemanticsNodes().isNotEmpty()
+            rule.onAllNodes(hasText("Lucas Almeida")).fetchSemanticsNodes().isNotEmpty()
         }
         rule.onNodeWithText("Lucas Almeida").performClick()
         rule.onNodeWithText("Solicitar orçamento").performClick()
@@ -40,7 +40,7 @@ class LensClickNavigationTest {
         rule.onNodeWithText("Entrar").performClick()
         rule.onNodeWithText("Entrar").performClick()
         rule.waitUntil(10_000) {
-            rule.onAllNodesWithText("Perfil").fetchSemanticsNodes().isNotEmpty()
+            rule.onAllNodes(hasText("Perfil")).fetchSemanticsNodes().isNotEmpty()
         }
         rule.onNodeWithText("Perfil").performClick()
         rule.onNodeWithText("Sair da conta").performClick()
