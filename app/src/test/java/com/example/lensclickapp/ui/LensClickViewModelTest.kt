@@ -3,6 +3,8 @@ package com.example.lensclickapp.ui
 import androidx.lifecycle.ViewModelStore
 import com.example.lensclickapp.data.FakeLensClickDao
 import com.example.lensclickapp.data.LensClickRepository
+import com.example.lensclickapp.data.PublicPhotographerPage
+import com.example.lensclickapp.data.PublicPhotographersGateway
 import com.example.lensclickapp.data.User
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -124,5 +126,24 @@ class LensClickViewModelTest {
         assertTrue(done)
         assertEquals(originalCount + 1, viewModel.budgets.value.size)
         assertEquals("Ensaio", viewModel.budgets.value.last().title)
+    }
+
+    @Test
+    fun publicSearchUsesServerFiltersAndExposesAnEmptyPage() = runTest(dispatcher) {
+        var requested: Triple<String, String?, Int>? = null
+        val gateway = object : PublicPhotographersGateway {
+            override suspend fun list(city: String, specialty: String?, page: Int): PublicPhotographerPage {
+                requested = Triple(city, specialty, page)
+                return PublicPhotographerPage(emptyList(), page, 0, 0)
+            }
+        }
+        viewModel = LensClickViewModel(LensClickRepository(dao), gateway)
+        store.put("test", viewModel)
+
+        viewModel.searchPublicPhotographers("Recife", "wedding", 2)
+        advanceUntilIdle()
+
+        assertEquals(Triple("Recife", "wedding", 2), requested)
+        assertEquals(PublicSearchState.Ready(PublicPhotographerPage(emptyList(), 2, 0, 0)), viewModel.publicSearch.value)
     }
 }
