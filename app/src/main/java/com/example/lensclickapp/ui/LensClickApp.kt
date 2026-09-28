@@ -46,7 +46,11 @@ import androidx.navigation.compose.rememberNavController
 import com.example.lensclickapp.R
 import com.example.lensclickapp.data.Budget
 import com.example.lensclickapp.data.Photographer
+import com.example.lensclickapp.data.PublicPhotographer
 import com.example.lensclickapp.data.User
+import java.text.NumberFormat
+import java.util.Locale
+import kotlinx.coroutines.delay
 
 private val Ink = Color(0xFF11110F)
 private val Surface = Color(0xFFF6F3EB)
@@ -78,7 +82,8 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
     }
     fun go(target: Screen) {
         if (target in setOf(Screen.Home, Screen.Search, Screen.Budgets, Screen.Conversations, Screen.Account,
-                Screen.ProDashboard, Screen.ProRequests, Screen.ProAgenda, Screen.ProProfile)) {
+                Screen.ProDashboard, Screen.ProRequests, Screen.ProAgenda, Screen.ProProfile) &&
+                !(target == Screen.Search && currentUser == null)) {
             resetTo(target)
         } else {
             focusManager.clearFocus()
@@ -90,14 +95,14 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
     LaunchedEffect(currentEntry?.destination?.route, currentUser) {
         val route = currentEntry?.destination?.route ?: return@LaunchedEffect
         if (viewModel.currentUser.value == null && Screen.entries.any { it.name == route && it !in setOf(
-                Screen.Onboarding, Screen.AccountType, Screen.Login, Screen.SignUp, Screen.PhotographerSignUp) }) {
+                Screen.Onboarding, Screen.AccountType, Screen.Login, Screen.SignUp, Screen.PhotographerSignUp, Screen.Search) }) {
             resetTo(Screen.Login)
         }
     }
 
     androidx.compose.material3.Surface(modifier = Modifier.fillMaxSize(), color = Paper) {
         NavHost(navController = navController, startDestination = Screen.Onboarding.name) {
-            composable(Screen.Onboarding.name) { OnboardingScreen(onStart = { go(Screen.AccountType) }, onLogin = { go(Screen.Login) }) }
+            composable(Screen.Onboarding.name) { OnboardingScreen(onStart = { go(Screen.AccountType) }, onLogin = { go(Screen.Login) }, onBrowse = { go(Screen.Search) }) }
             composable(Screen.AccountType.name) { AccountTypeScreen(
                 onClient = { go(Screen.SignUp) },
                 onPhotographer = { go(Screen.PhotographerSignUp) },
@@ -138,7 +143,7 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
                 onLogin = { go(Screen.Login) }
             ) }
             composable(Screen.Home.name) { HomeScreen(photographers, onNavigate = ::go) }
-            composable(Screen.Search.name) { SearchScreen(photographers, onNavigate = ::go) }
+            composable(Screen.Search.name) { SearchScreen(viewModel, guest = currentUser == null, onNavigate = ::go) }
             composable(Screen.Photographer.name) { PhotographerScreen(onBack = { navController.popBackStack() }, onQuote = { go(Screen.Quote) }) }
             composable(Screen.Quote.name) { QuoteScreen(
                 onBack = { navController.popBackStack() },
@@ -208,7 +213,7 @@ private fun LogoAsset(modifier: Modifier = Modifier, size: Int, onDark: Boolean 
 private fun CompactLogo(size: Int = 42) = LogoAsset(size = size)
 
 @Composable
-private fun OnboardingScreen(onStart: () -> Unit, onLogin: () -> Unit) {
+private fun OnboardingScreen(onStart: () -> Unit, onLogin: () -> Unit, onBrowse: () -> Unit) {
     Box(Modifier.fillMaxSize()) {
         Image(painterResource(R.drawable.lens_mountains), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(.18f), Color.Black.copy(.55f), Ink))))
@@ -223,6 +228,7 @@ private fun OnboardingScreen(onStart: () -> Unit, onLogin: () -> Unit) {
             Button(onStart, Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(18.dp), colors = ButtonDefaults.buttonColors(Paper, Ink)) { Text("Começar", fontWeight = FontWeight.SemiBold) }
             Spacer(Modifier.height(12.dp))
             OutlinedButton(onClick = onLogin, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(18.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(.55f))) { Text("Entrar", color = Color.White, fontWeight = FontWeight.Medium) }
+            TextButton(onClick = onBrowse) { Text("Explorar fotógrafos", color = Color.White) }
         }
     }
 }
@@ -387,13 +393,17 @@ private fun ActionDialog(title: String, message: String, onDismiss: () -> Unit) 
 }
 
 @Composable
-private fun AppPage(active: Screen, onNavigate: (Screen) -> Unit, content: @Composable ColumnScope.() -> Unit) {
+private fun AppPage(active: Screen, onNavigate: (Screen) -> Unit, guest: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             BrandMark()
         }
         Column(Modifier.weight(1f).fillMaxWidth()) { content() }
-        BottomNav(active, onNavigate)
+        if (guest) {
+            TextButton(onClick = { onNavigate(Screen.Login) }, modifier = Modifier.fillMaxWidth()) {
+                Text("Entrar para usar sua conta", color = Ink)
+            }
+        } else BottomNav(active, onNavigate)
     }
 }
 
@@ -479,29 +489,76 @@ private fun photographerImage(photographer: Photographer): Int = when {
 }
 
 @Composable
-private fun SearchScreen(photographers: List<Photographer>, onNavigate: (Screen) -> Unit) = AppPage(Screen.Search, onNavigate) {
-    var query by rememberSaveable { mutableStateOf("") }
+private fun SearchScreen(viewModel: LensClickViewModel, guest: Boolean, onNavigate: (Screen) -> Unit) = AppPage(Screen.Search, onNavigate, guest) {
+    var city by rememberSaveable { mutableStateOf("") }
     var selectedFilter by rememberSaveable { mutableStateOf(0) }
+    var page by rememberSaveable { mutableIntStateOf(1) }
+    var retry by rememberSaveable { mutableIntStateOf(0) }
+    val state by viewModel.publicSearch.collectAsStateWithLifecycle()
+    val filters = listOf("Todos" to null, "Casamento" to "wedding", "Retratos" to "portrait", "Eventos" to "events", "Corporativo" to "corporate")
+    LaunchedEffect(city, selectedFilter, page, retry) {
+        delay(300)
+        viewModel.searchPublicPhotographers(city, filters[selectedFilter].second, page)
+    }
     Column(Modifier.fillMaxSize().padding(top = 8.dp)) {
         Text("Descobrir", color = Ink, fontSize = 27.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(20.dp, 8.dp))
-        OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = 20.dp), placeholder = { Text("Nome, estilo ou cidade", color = Muted, fontSize = 12.sp) }, leadingIcon = { Text("⌕", color = Ink, fontSize = 20.sp) }, singleLine = true, shape = RoundedCornerShape(17.dp), colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Ink, unfocusedTextColor = Ink, focusedContainerColor = SurfaceHigh, unfocusedContainerColor = SurfaceHigh, focusedBorderColor = Ink, unfocusedBorderColor = Line, cursorColor = Ink))
-        val filters = listOf("Todos", "Casamento", "Ensaios", "Eventos", "Corporativo")
-        Row(Modifier.padding(20.dp, 12.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { filters.forEachIndexed { index, label -> FilterChip(label, selectedFilter == index) { selectedFilter = index } } }
-        val selectedCategory = filters[selectedFilter]
-        val results = photographers.filter { photographer ->
-            val matchesQuery = query.isBlank() || photographer.name.contains(query, true) || photographer.specialty.contains(query, true)
-            val matchesCategory = selectedFilter == 0 || photographer.specialty.contains(selectedCategory.removeSuffix("s"), true)
-            matchesQuery && matchesCategory
+        OutlinedTextField(city, { city = it; page = 1 }, Modifier.fillMaxWidth().padding(horizontal = 20.dp), placeholder = { Text("Filtrar por cidade", color = Muted, fontSize = 12.sp) }, leadingIcon = { Text("⌕", color = Ink, fontSize = 20.sp) }, singleLine = true, shape = RoundedCornerShape(17.dp), colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Ink, unfocusedTextColor = Ink, focusedContainerColor = SurfaceHigh, unfocusedContainerColor = SurfaceHigh, focusedBorderColor = Ink, unfocusedBorderColor = Line, cursorColor = Ink))
+        Row(Modifier.padding(20.dp, 12.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            filters.forEachIndexed { index, filter -> FilterChip(filter.first, selectedFilter == index) { selectedFilter = index; page = 1 } }
         }
-        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 2.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("${results.size} ${if (results.size == 1) "profissional" else "profissionais"}", color = Muted, fontSize = 11.sp)
-            if (query.isNotBlank() || selectedFilter != 0) TextButton(onClick = { query = ""; selectedFilter = 0 }, contentPadding = PaddingValues(6.dp)) { Text("Limpar filtros", color = Ink, fontSize = 10.sp, fontWeight = FontWeight.SemiBold) }
-        }
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 20.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (results.isEmpty()) item { Column(Modifier.fillParentMaxWidth().padding(vertical = 48.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text("Nenhum resultado", color = Ink, fontWeight = FontWeight.SemiBold); Text("Tente outro nome ou remova os filtros.", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 5.dp)) } }
-            items(results) { p -> PhotographerRow(p, { onNavigate(Screen.Photographer) }) }
+        when (val result = state) {
+            PublicSearchState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Ink) }
+            PublicSearchState.Error -> Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                Text("Não foi possível carregar os fotógrafos.", color = Ink)
+                TextButton(onClick = { retry++ }) { Text("Tentar novamente", color = Ink) }
+            }
+            is PublicSearchState.Ready -> {
+                Text("${result.page.total} ${if (result.page.total == 1) "profissional" else "profissionais"}", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp))
+                LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 20.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (result.page.photographers.isEmpty()) item { Text("Nenhum fotógrafo publicado encontrado. Tente outra cidade ou especialidade.", color = Muted, modifier = Modifier.padding(vertical = 40.dp)) }
+                    items(result.page.photographers, key = { it.slug }) { photographer -> PublicPhotographerRow(photographer) }
+                }
+                if (result.page.totalPages > 1) Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { page-- }, enabled = page > 1) { Text("Anterior") }
+                    Text("${result.page.page} / ${result.page.totalPages}", color = Muted, fontSize = 12.sp)
+                    TextButton(onClick = { page++ }, enabled = page < result.page.totalPages) { Text("Próxima") }
+                }
+            }
         }
     }
+}
+
+@Composable
+private fun PublicPhotographerRow(photographer: PublicPhotographer) {
+    val location = listOf(photographer.city, photographer.state).filter { it.isNotBlank() }.joinToString(", ")
+    val price = photographer.startingPriceCents?.let {
+        NumberFormat.getCurrencyInstance(Locale.forLanguageTag("pt-BR")).format(it / 100.0)
+    }
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(16.dp)).padding(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Avatar(initialsForDisplay(photographer.name), Modifier.size(52.dp))
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text(photographer.name, color = Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                if (location.isNotBlank()) Text(location, color = Muted, fontSize = 11.sp)
+                Text(photographer.specialties.joinToString(" · ") { specialtyLabel(it) }, color = Muted, fontSize = 11.sp)
+            }
+        }
+        if (price != null || photographer.ratingAverage != null) {
+            Spacer(Modifier.height(9.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                if (price != null) Text("A partir de $price", color = Ink, fontSize = 11.sp)
+                if (photographer.ratingAverage != null) Text("★ ${photographer.ratingAverage} (${photographer.reviewCount})", color = Gold, fontSize = 11.sp)
+            }
+        }
+    }
+}
+
+private fun specialtyLabel(value: String): String = when (value) {
+    "wedding" -> "Casamento"; "events" -> "Eventos"; "portrait" -> "Retratos"
+    "family" -> "Família"; "corporate" -> "Corporativo"; "product" -> "Produto"
+    "fashion" -> "Moda"; "newborn" -> "Recém-nascidos"; "nature" -> "Natureza"
+    "real-estate" -> "Imóveis"; else -> value
 }
 
 @Composable private fun FilterChip(text: String, selected: Boolean = false, onClick: (() -> Unit)? = null) {
