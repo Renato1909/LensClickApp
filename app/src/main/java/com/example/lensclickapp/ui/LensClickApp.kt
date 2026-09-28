@@ -566,14 +566,6 @@ private fun specialtyLabel(value: String): String = when (value) {
     Box(Modifier.clip(RoundedCornerShape(14.dp)).background(if (selected) Ink else SurfaceHigh).border(1.dp, if (selected) Ink else Line, RoundedCornerShape(14.dp)).then(interaction).padding(horizontal = 14.dp, vertical = 10.dp)) { Text(text, color = if (selected) Color.White else Ink, fontSize = 10.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal) }
 }
 
-@Composable private fun PhotographerRow(p: Photographer, open: () -> Unit) {
-    var favorite by rememberSaveable { mutableStateOf(false) }
-    Row(Modifier.fillMaxWidth().shadow(2.dp, RoundedCornerShape(16.dp)).clip(RoundedCornerShape(16.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(16.dp)).clickable(onClick = open).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Image(painterResource(photographerImage(p)), p.name, Modifier.size(62.dp).clip(CircleShape), contentScale = ContentScale.Crop); Spacer(Modifier.width(12.dp)); Column(Modifier.weight(1f)) { Text(p.name, color = Ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold); Text(p.specialty, color = Muted, fontSize = 10.sp); Text(p.city, color = Muted, fontSize = 10.sp); Text("★ 5,0 (128)", color = Gold, fontSize = 10.sp) }
-        Column(horizontalAlignment = Alignment.End) { Text(if (favorite) "♥" else "♡", color = Ink, fontSize = 22.sp, modifier = Modifier.clip(CircleShape).clickable { favorite = !favorite }.padding(6.dp)); Spacer(Modifier.height(9.dp)); Text("A partir de ${p.price}", color = Ink, fontSize = 9.sp, fontWeight = FontWeight.Medium) }
-    }
-}
-
 @Composable private fun Avatar(initials: String, modifier: Modifier = Modifier) = Box(modifier.clip(CircleShape).background(Brush.linearGradient(listOf(Color(0xFF6E5948), SurfaceHigh))).border(1.dp, Ink.copy(.5f), CircleShape), contentAlignment = Alignment.Center) { Text(initials, color = Paper, fontSize = 15.sp, fontWeight = FontWeight.Bold) }
 
 @Composable
