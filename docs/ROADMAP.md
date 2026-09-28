@@ -13,8 +13,10 @@ O aplicativo possui 17 telas em Jetpack Compose e persiste dados locais com Room
 - [x] Remover credencial do Room (migração 2→3 descarta `passwordHash`; hashes de demonstração vivem apenas em memória no processo).
 - [ ] Validar build limpo, lint, testes e instalação em emulador **local** (bloqueado: esta máquina não tem Android SDK; ver `docs/AMBIENTE_ANDROID.md`). A validação ocorre no CI.
 - [ ] Definir pacote definitivo, flavors/ambientes e versionamento (depende do mantenedor).
-- [ ] Separar melhor navegação, domínio, dados locais e dados remotos.
-- [ ] Adotar Navigation Compose e preparar deep links.
+- [ ] Separar melhor domínio, dados locais e dados remotos.
+- [x] Adotar Navigation Compose para as 17 telas, com pilha de retorno e testes de navegação.
+- [ ] Definir identificadores de destino e domínio antes de adicionar deep links.
+- [x] Impedir persistência de senhas em estado salvo e desabilitar backup/transferência do protótipo local.
 
 ## Fase 2 — contrato e paridade
 
@@ -72,5 +74,5 @@ O aplicativo possui 17 telas em Jetpack Compose e persiste dados locais com Room
 
 ## Próxima entrega
 
-Executar a Fase 1 e criar a primeira versão de `docs/MATRIZ_PARIDADE.md`. Nenhuma conexão com produção deve começar antes da decisão do contrato de autenticação móvel.
+Revisar o contrato móvel proposto com a plataforma, definir pacote e ambientes e separar interfaces de dados locais/remotos. Nenhuma conexão com produção deve começar antes da aprovação e implementação do contrato móvel.
 

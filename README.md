@@ -55,7 +55,7 @@ Esta versão entrega **17 telas navegáveis**, interface 100% em português do B
 | 📨 **Pedidos** | Solicitações de clientes disponíveis para atender |
 | 🗓️ **Agenda** | Trabalhos já confirmados pelo fotógrafo |
 | ♙ **Perfil profissional** | Bio, cidade, especialidade e preço inicial do cadastro, com alternância entre modo fotógrafo e modo cliente |
-| 🧭 **Navegação** | Barra inferior flutuante (5 abas no modo cliente, 4 no modo profissional) e navegação por estado entre as 17 telas |
+| 🧭 **Navegação** | Barra inferior flutuante (5 abas no modo cliente, 4 no modo profissional) e Navigation Compose entre as 17 telas |
 
 ## 🗺️ Fluxo de telas
 
@@ -74,7 +74,7 @@ Fotógrafo
       └─▶ Perfil
 ```
 
-A navegação é uma máquina de estados declarativa (`enum class Screen` + `rememberSaveable`), sem biblioteca de rotas — o app inteiro vive em uma única `Activity`.
+A navegação usa `Navigation Compose` em uma única `Activity`. Telas de detalhe mantêm uma pilha de retorno; login, logout, abas e troca de modo limpam a pilha anterior. Links profundos ainda dependem de rotas e domínio aprovados.
 
 ## 🧱 Stack e arquitetura
 
@@ -156,7 +156,7 @@ LensClickApp/
 │       │   │   │   ├── LensClickDao.kt
 │       │   │   │   └── LensClickRepository.kt
 │       │   │   └── ui/
-│       │   │       ├── LensClickApp.kt       # as 17 telas + navegação por estado
+│       │   │       ├── LensClickApp.kt       # as 17 telas + Navigation Compose
 │       │   │       ├── LensClickViewModel.kt
 │       │   │       └── theme/                # Color, Type e LensClickAppTheme (M3)
 │       │   └── res/
@@ -212,7 +212,7 @@ Próximos passos naturais:
 
 - definir o **contrato de autenticação móvel revogável** com o backend da plataforma LensClick;
 - conectar a UI ao backend somente depois desse contrato, começando por autenticação e conta;
-- substituir a navegação por estado por `Navigation Compose`, com deep links para perfil e conversas;
+- definir rotas com identificadores reais e domínio aprovado antes de adicionar deep links para perfil e conversas;
 - separar explicitamente modelos/cliente HTTP remotos dos modelos locais de Room.
 
 O planejamento consolidado está em:

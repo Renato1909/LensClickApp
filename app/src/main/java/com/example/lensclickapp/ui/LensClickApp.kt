@@ -28,6 +28,8 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -37,6 +39,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
 import com.example.lensclickapp.R
 import com.example.lensclickapp.data.Budget
 import com.example.lensclickapp.data.Photographer
@@ -54,79 +60,106 @@ private enum class Screen { Onboarding, AccountType, Login, SignUp, Photographer
 
 @Composable
 fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickViewModel.Factory)) {
-    var screen by rememberSaveable { mutableStateOf(Screen.Onboarding) }
-    var previous by rememberSaveable { mutableStateOf(Screen.Home) }
+    val navController = rememberNavController()
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val currentEntry by navController.currentBackStackEntryAsState()
     val photographers by viewModel.photographers.collectAsStateWithLifecycle()
     val budgets by viewModel.budgets.collectAsStateWithLifecycle()
     val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
     val currentPhotographer = photographers.firstOrNull { it.userId == currentUser?.id }
-    fun go(target: Screen) { previous = screen; screen = target }
+    fun resetTo(target: Screen) {
+        focusManager.clearFocus()
+        keyboardController?.hide()
+        navController.navigate(target.name) {
+            popUpTo(navController.graph.id)
+            launchSingleTop = true
+        }
+    }
+    fun go(target: Screen) {
+        if (target in setOf(Screen.Home, Screen.Search, Screen.Budgets, Screen.Conversations, Screen.Account,
+                Screen.ProDashboard, Screen.ProRequests, Screen.ProAgenda, Screen.ProProfile)) {
+            resetTo(target)
+        } else {
+            focusManager.clearFocus()
+            keyboardController?.hide()
+            navController.navigate(target.name) { launchSingleTop = true }
+        }
+    }
+
+    LaunchedEffect(currentEntry?.destination?.route, currentUser) {
+        val route = currentEntry?.destination?.route ?: return@LaunchedEffect
+        if (viewModel.currentUser.value == null && Screen.entries.any { it.name == route && it !in setOf(
+                Screen.Onboarding, Screen.AccountType, Screen.Login, Screen.SignUp, Screen.PhotographerSignUp) }) {
+            resetTo(Screen.Login)
+        }
+    }
 
     androidx.compose.material3.Surface(modifier = Modifier.fillMaxSize(), color = Paper) {
-        when (screen) {
-            Screen.Onboarding -> OnboardingScreen(onStart = { go(Screen.AccountType) }, onLogin = { go(Screen.Login) })
-            Screen.AccountType -> AccountTypeScreen(
+        NavHost(navController = navController, startDestination = Screen.Onboarding.name) {
+            composable(Screen.Onboarding.name) { OnboardingScreen(onStart = { go(Screen.AccountType) }, onLogin = { go(Screen.Login) }) }
+            composable(Screen.AccountType.name) { AccountTypeScreen(
                 onClient = { go(Screen.SignUp) },
                 onPhotographer = { go(Screen.PhotographerSignUp) },
                 onLogin = { go(Screen.Login) }
-            )
-            Screen.Login -> LoginScreen(
+            ) }
+            composable(Screen.Login.name) { LoginScreen(
                 onLogin = { email, password, result ->
                     viewModel.login(email, password) { user ->
                         val success = user != null
                         result(success)
                         if (user?.role == "photographer") {
-                            go(Screen.ProDashboard)
+                            resetTo(Screen.ProDashboard)
                         } else if (success) {
-                            go(Screen.Home)
+                            resetTo(Screen.Home)
                         }
                     }
                 },
                 onSignUp = { go(Screen.AccountType) }
-            )
-            Screen.SignUp -> SignUpScreen(
+            ) }
+            composable(Screen.SignUp.name) { SignUpScreen(
                 onDone = { name, email, password, result ->
                     viewModel.register(name, email, password) { success ->
                         result(success)
-                        if (success) go(Screen.Home)
+                        if (success) resetTo(Screen.Home)
                     }
                 },
                 onLogin = { go(Screen.Login) }
-            )
-            Screen.PhotographerSignUp -> PhotographerSignUpScreen(
+            ) }
+            composable(Screen.PhotographerSignUp.name) { PhotographerSignUpScreen(
                 onDone = { name, email, password, specialty, city, price, bio, result ->
                     viewModel.registerPhotographer(name, email, password, specialty, city, price, bio) { success ->
                         result(success)
                         if (success) {
-                            go(Screen.ProDashboard)
+                            resetTo(Screen.ProDashboard)
                         }
                     }
                 },
                 onLogin = { go(Screen.Login) }
-            )
-            Screen.Home -> HomeScreen(photographers, onNavigate = ::go)
-            Screen.Search -> SearchScreen(photographers, onNavigate = ::go)
-            Screen.Photographer -> PhotographerScreen(onBack = { screen = previous }, onQuote = { go(Screen.Quote) })
-            Screen.Quote -> QuoteScreen(
-                onBack = { screen = previous },
+            ) }
+            composable(Screen.Home.name) { HomeScreen(photographers, onNavigate = ::go) }
+            composable(Screen.Search.name) { SearchScreen(photographers, onNavigate = ::go) }
+            composable(Screen.Photographer.name) { PhotographerScreen(onBack = { navController.popBackStack() }, onQuote = { go(Screen.Quote) }) }
+            composable(Screen.Quote.name) { QuoteScreen(
+                onBack = { navController.popBackStack() },
                 onSent = { type, date, place, duration, description, details ->
                     viewModel.createBudget(type, date, place, duration, description, details) { go(Screen.Budgets) }
                 }
-            )
-            Screen.Budgets -> BudgetsScreen(budgets, onNavigate = ::go)
-            Screen.Conversations -> ConversationsScreen(photographers, onNavigate = ::go)
-            Screen.Chat -> ChatScreen(onBack = { go(Screen.Conversations) })
-            Screen.Account -> AccountScreen(
+            ) }
+            composable(Screen.Budgets.name) { BudgetsScreen(budgets, onNavigate = ::go) }
+            composable(Screen.Conversations.name) { ConversationsScreen(photographers, onNavigate = ::go) }
+            composable(Screen.Chat.name) { ChatScreen(onBack = { navController.popBackStack() }) }
+            composable(Screen.Account.name) { AccountScreen(
                 user = currentUser,
                 canUseProfessionalMode = currentUser?.role == "photographer",
                 onNavigate = ::go,
-                onProfessionalMode = { go(Screen.ProDashboard) },
-                onLogout = { viewModel.logout(); go(Screen.Login) }
-            )
-            Screen.ProDashboard -> PhotographerDashboardScreen(currentPhotographer, budgets, ::go, onClientMode = { go(Screen.Home) })
-            Screen.ProRequests -> PhotographerRequestsScreen(budgets, ::go)
-            Screen.ProAgenda -> PhotographerAgendaScreen(budgets, ::go)
-            Screen.ProProfile -> PhotographerProfileScreen(currentUser, currentPhotographer, ::go, onClientMode = { go(Screen.Home) }, onLogout = { viewModel.logout(); go(Screen.Login) })
+                onProfessionalMode = { resetTo(Screen.ProDashboard) },
+                onLogout = { viewModel.logout(); resetTo(Screen.Login) }
+            ) }
+            composable(Screen.ProDashboard.name) { PhotographerDashboardScreen(currentPhotographer, budgets, ::go, onClientMode = { resetTo(Screen.Home) }) }
+            composable(Screen.ProRequests.name) { PhotographerRequestsScreen(budgets, ::go) }
+            composable(Screen.ProAgenda.name) { PhotographerAgendaScreen(budgets, ::go) }
+            composable(Screen.ProProfile.name) { PhotographerProfileScreen(currentUser, currentPhotographer, ::go, onClientMode = { resetTo(Screen.Home) }, onLogout = { viewModel.logout(); resetTo(Screen.Login) }) }
         }
     }
 }
@@ -232,7 +265,7 @@ private fun AuthFrame(title: String, subtitle: String, content: @Composable Colu
 @Composable
 private fun LoginScreen(onLogin: (String, String, (Boolean) -> Unit) -> Unit, onSignUp: () -> Unit) {
     var email by rememberSaveable { mutableStateOf("seu@email.com") }
-    var password by rememberSaveable { mutableStateOf("lensclick") }
+    var password by remember { mutableStateOf("lensclick") }
     var recoveryOpen by rememberSaveable { mutableStateOf(false) }
     var loginError by rememberSaveable { mutableStateOf(false) }
     var submitting by rememberSaveable { mutableStateOf(false) }
@@ -257,7 +290,7 @@ private fun LoginScreen(onLogin: (String, String, (Boolean) -> Unit) -> Unit, on
 @Composable
 private fun SignUpScreen(onDone: (String, String, String, (Boolean) -> Unit) -> Unit, onLogin: () -> Unit) = AuthFrame("Crie sua conta", "Preencha os dados abaixo") {
     var name by rememberSaveable { mutableStateOf("") }; var email by rememberSaveable { mutableStateOf("") }
-    var pass by rememberSaveable { mutableStateOf("") }; var confirm by rememberSaveable { mutableStateOf("") }; var accepted by rememberSaveable { mutableStateOf(false) }
+    var pass by remember { mutableStateOf("") }; var confirm by remember { mutableStateOf("") }; var accepted by rememberSaveable { mutableStateOf(false) }
     var emailExists by rememberSaveable { mutableStateOf(false) }; var submitting by rememberSaveable { mutableStateOf(false) }
     LensField("Nome completo", name, { name = it }); Spacer(Modifier.height(11.dp))
     LensField("E-mail", email, { email = it }, KeyboardType.Email); Spacer(Modifier.height(11.dp))
@@ -283,8 +316,8 @@ private fun PhotographerSignUpScreen(
 ) = AuthFrame("Cadastre-se como fotógrafo", "Crie seu perfil profissional") {
     var name by rememberSaveable { mutableStateOf("") }
     var email by rememberSaveable { mutableStateOf("") }
-    var pass by rememberSaveable { mutableStateOf("") }
-    var confirm by rememberSaveable { mutableStateOf("") }
+    var pass by remember { mutableStateOf("") }
+    var confirm by remember { mutableStateOf("") }
     var specialty by rememberSaveable { mutableStateOf("") }
     var city by rememberSaveable { mutableStateOf("") }
     var price by rememberSaveable { mutableStateOf("") }

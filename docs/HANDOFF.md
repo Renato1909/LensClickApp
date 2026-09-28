@@ -13,7 +13,7 @@
 - `compileSdk`/`targetSdk` 36 e `minSdk` 24;
 - `applicationId` atual: `com.example.lensclickapp`;
 - 17 telas navegáveis em uma única Activity;
-- navegação atual por estado (`enum class Screen` + `rememberSaveable`);
+- navegação por `Navigation Compose` nas 17 telas; identificadores/deep links externos ainda pendentes;
 - dados locais em Room para usuários, fotógrafos e orçamentos (schema v3, exportado em `app/schemas/`);
 - **Room não persiste mais senhas**: a migração 2→3 removeu a coluna `passwordHash`; os hashes SHA-256 de demonstração vivem apenas em memória (`ConcurrentHashMap` no repositório) e desaparecem ao reiniciar o processo;
 - backend real ainda não conectado;
@@ -25,6 +25,7 @@
 - **Testes úteis**: `LensClickRepositoryTest` (7 casos), `LensClickViewModelTest` (5 casos) com `FakeLensClickDao` em memória; `LensClickMigrationTest` instrumentado valida que a migração 2→3 descarta `passwordHash` e preserva usuários.
 - **Documentos novos**: `docs/AMBIENTE_ANDROID.md` (diagnóstico do ambiente e requisitos exatos) e `docs/MATRIZ_PARIDADE.md` (paridade app × web/API no commit `c3358c2` da plataforma, com classificação O/N/W/A).
 - **Preparação arquitetural mínima**: `LensClickViewModel` agora recebe o repositório por injeção via `Factory` (testável em JVM), e o Room exporta schema para versionamento.
+- **Segurança local e navegação (entrega seguinte)**: senhas de formulário usam `remember`, sem estado restaurável; backup e transferência do protótipo são excluídos; NavHost substitui o estado de tela anterior, com testes instrumentados de retorno e logout. Confirmar o PR e checks desta entrega antes de considerá-la integrada.
 
 ## Limitação do ambiente local
 
@@ -41,7 +42,7 @@ O aplicativo deve consumir a API da plataforma LensClick e compartilhar usuário
 3. ~~Produzir `docs/MATRIZ_PARIDADE.md`~~ — primeira versão entregue; atualizar a cada fatia.
 4. **Definir com o repositório da plataforma o contrato móvel de autenticação revogável** — Gate C, bloqueio principal antes de qualquer conexão.
 5. Decidir com o mantenedor: `applicationId` definitivo, flavors/ambientes, política de papéis (fotógrafo contratando) e destino da UX de orçamentos/propostas que não existe na API.
-6. Adotar Navigation Compose com deep links e separar dados locais/remotos (cliente HTTP, serialização) após o contrato.
+6. Definir IDs reais, domínio e políticas de link profundo; separar dados locais/remotos (cliente HTTP, serialização) após o contrato.
 7. Integrar por fatias, começando por autenticação e conta.
 8. Projetar 2FA para web e Android após threat model.
 9. Concluir domínio, revisão jurídica, validação integral e publicação por faixas.
