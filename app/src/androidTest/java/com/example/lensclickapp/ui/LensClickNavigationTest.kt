@@ -35,6 +35,10 @@ class LensClickNavigationTest {
         rule.onNodeWithText("Entrar para usar sua conta").assertIsDisplayed()
         rule.waitForIdle()
         Espresso.pressBack()
+        rule.waitForIdle()
+        if (rule.onAllNodes(hasText("Descobrir")).fetchSemanticsNodes().isNotEmpty()) {
+            Espresso.pressBack() // A primeira ação pode apenas fechar o teclado.
+        }
         awaitText("Explorar fotógrafos")
         rule.onNodeWithText("Explorar fotógrafos").assertIsDisplayed()
     }
