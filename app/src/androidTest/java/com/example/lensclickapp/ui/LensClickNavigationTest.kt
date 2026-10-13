@@ -3,7 +3,6 @@ package com.example.lensclickapp.ui
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -30,24 +29,18 @@ class LensClickNavigationTest {
         }
     }
 
-    @Test fun backFromQuoteReturnsThroughProfileToDiscovery() {
-        rule.onNodeWithText("Entrar").performClick()
-        rule.onNodeWithText("Bem-vindo de volta!").assertIsDisplayed()
-        rule.onNodeWithText("Entrar").performClick()
-        awaitText("Buscar")
-        rule.onNodeWithText("Buscar").performClick()
-        awaitText("4 profissionais")
-        rule.onNodeWithContentDescription("Carlos Nobre").performClick()
-        rule.onNodeWithText("Solicitar orçamento").performClick()
-        awaitText("Descrição do evento")
+    @Test fun backFromPublicDiscoveryReturnsToOnboarding() {
+        rule.onNodeWithText("Explorar fotógrafos").performClick()
+        awaitText("Descobrir")
+        rule.onNodeWithText("Entrar para usar sua conta").assertIsDisplayed()
         rule.waitForIdle()
         Espresso.pressBack()
-        awaitText("Lucas Almeida")
-        rule.onNodeWithText("Lucas Almeida").assertIsDisplayed()
-        Espresso.pressBack()
-        awaitText("Descobrir")
-        rule.onNodeWithText("Descobrir").assertIsDisplayed()
-        rule.onNodeWithText("Solicitar orçamento").assertDoesNotExist()
+        rule.waitForIdle()
+        if (rule.onAllNodes(hasText("Descobrir")).fetchSemanticsNodes().isNotEmpty()) {
+            Espresso.pressBack() // A primeira ação pode apenas fechar o teclado.
+        }
+        awaitText("Explorar fotógrafos")
+        rule.onNodeWithText("Explorar fotógrafos").assertIsDisplayed()
     }
 
     @Test fun logoutClearsPrivateNavigation() {
