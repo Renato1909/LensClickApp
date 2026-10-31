@@ -43,12 +43,8 @@ class LensClickNavigationTest {
         rule.onNodeWithText("Explorar fotógrafos").assertIsDisplayed()
     }
 
-    @Test fun logoutClearsPrivateNavigation() {
+    @Test fun loginStartsSignedOutAndDoesNotUseDemoCredentials() {
         rule.onNodeWithText("Entrar").performClick()
-        rule.onNodeWithText("Entrar").performClick()
-        awaitText("Perfil")
-        rule.onNodeWithText("Perfil").performClick()
-        rule.onNodeWithText("Sair da conta").performScrollTo().performClick()
         awaitText("Bem-vindo de volta!")
         rule.onNodeWithText("Bem-vindo de volta!").assertIsDisplayed()
         rule.onNodeWithText("Minha conta").assertDoesNotExist()

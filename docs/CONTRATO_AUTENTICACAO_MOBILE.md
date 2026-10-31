@@ -173,13 +173,13 @@ UI/ViewModels não devem conhecer JSON bruto, headers HTTP ou detalhes do armaze
 
 ## 9. Primeira fatia de produção
 
-1. cadastro;
-2. login;
-3. restauração da sessão;
+1. login;
+2. restauração da sessão;
+3. chamada `/me`;
 4. logout;
-5. recuperação de senha;
-6. verificação de e-mail;
-7. expiração/revogação.
+5. expiração/revogação.
+
+Cadastro, recuperação de senha e verificação de e-mail permanecem fora desta fatia até que existam contratos móveis próprios. A navegação de cadastro continua preservada, mas não cria contas localmente nem usa credenciais de demonstração.
 
 Depois: descoberta, perfis, portfólio, conversas e demais recursos.
 

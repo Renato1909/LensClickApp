@@ -1,4 +1,4 @@
-﻿package com.example.lensclickapp.ui
+package com.example.lensclickapp.ui
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -71,6 +71,7 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
     val photographers by viewModel.photographers.collectAsStateWithLifecycle()
     val budgets by viewModel.budgets.collectAsStateWithLifecycle()
     val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
+    val authentication by viewModel.authentication.collectAsStateWithLifecycle()
     val currentPhotographer = photographers.firstOrNull { it.userId == currentUser?.id }
     fun resetTo(target: Screen) {
         focusManager.clearFocus()
@@ -92,9 +93,17 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
         }
     }
 
-    LaunchedEffect(currentEntry?.destination?.route, currentUser) {
+    LaunchedEffect(currentEntry?.destination?.route, authentication) {
         val route = currentEntry?.destination?.route ?: return@LaunchedEffect
-        if (viewModel.currentUser.value == null && Screen.entries.any { it.name == route && it !in setOf(
+        if (authentication is AuthenticationState.Authenticated &&
+            route in setOf(Screen.Onboarding.name, Screen.AccountType.name, Screen.Login.name, Screen.SignUp.name, Screen.PhotographerSignUp.name)
+        ) {
+            val user = (authentication as AuthenticationState.Authenticated).user
+            resetTo(if (user.role == "photographer") Screen.ProDashboard else Screen.Home)
+        } else if (authentication is AuthenticationState.Error && route == Screen.Onboarding.name) {
+            resetTo(Screen.Login)
+        } else if (authentication !is AuthenticationState.Authenticated &&
+            Screen.entries.any { it.name == route && it !in setOf(
                 Screen.Onboarding, Screen.AccountType, Screen.Login, Screen.SignUp, Screen.PhotographerSignUp, Screen.Search) }) {
             resetTo(Screen.Login)
         }
@@ -109,36 +118,19 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
                 onLogin = { go(Screen.Login) }
             ) }
             composable(Screen.Login.name) { LoginScreen(
-                onLogin = { email, password, result ->
-                    viewModel.login(email, password) { user ->
-                        val success = user != null
-                        result(success)
-                        if (user?.role == "photographer") {
-                            resetTo(Screen.ProDashboard)
-                        } else if (success) {
-                            resetTo(Screen.Home)
-                        }
-                    }
-                },
+                authentication = authentication,
+                onLogin = { email, password -> viewModel.login(email, password) },
                 onSignUp = { go(Screen.AccountType) }
             ) }
             composable(Screen.SignUp.name) { SignUpScreen(
                 onDone = { name, email, password, result ->
-                    viewModel.register(name, email, password) { success ->
-                        result(success)
-                        if (success) resetTo(Screen.Home)
-                    }
+                    viewModel.register(name, email, password, result)
                 },
                 onLogin = { go(Screen.Login) }
             ) }
             composable(Screen.PhotographerSignUp.name) { PhotographerSignUpScreen(
                 onDone = { name, email, password, specialty, city, price, bio, result ->
-                    viewModel.registerPhotographer(name, email, password, specialty, city, price, bio) { success ->
-                        result(success)
-                        if (success) {
-                            resetTo(Screen.ProDashboard)
-                        }
-                    }
+                    viewModel.registerPhotographer(name, email, password, specialty, city, price, bio, result)
                 },
                 onLogin = { go(Screen.Login) }
             ) }
@@ -159,12 +151,12 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
                 canUseProfessionalMode = currentUser?.role == "photographer",
                 onNavigate = ::go,
                 onProfessionalMode = { resetTo(Screen.ProDashboard) },
-                onLogout = { viewModel.logout(); resetTo(Screen.Login) }
+                onLogout = { viewModel.logout() }
             ) }
             composable(Screen.ProDashboard.name) { PhotographerDashboardScreen(currentPhotographer, budgets, ::go, onClientMode = { resetTo(Screen.Home) }) }
             composable(Screen.ProRequests.name) { PhotographerRequestsScreen(budgets, ::go) }
             composable(Screen.ProAgenda.name) { PhotographerAgendaScreen(budgets, ::go) }
-            composable(Screen.ProProfile.name) { PhotographerProfileScreen(currentUser, currentPhotographer, ::go, onClientMode = { resetTo(Screen.Home) }, onLogout = { viewModel.logout(); resetTo(Screen.Login) }) }
+            composable(Screen.ProProfile.name) { PhotographerProfileScreen(currentUser, currentPhotographer, ::go, onClientMode = { resetTo(Screen.Home) }, onLogout = { viewModel.logout() }) }
         }
     }
 }
@@ -269,28 +261,44 @@ private fun AuthFrame(title: String, subtitle: String, content: @Composable Colu
 }
 
 @Composable
-private fun LoginScreen(onLogin: (String, String, (Boolean) -> Unit) -> Unit, onSignUp: () -> Unit) {
-    var email by rememberSaveable { mutableStateOf("seu@email.com") }
-    var password by remember { mutableStateOf("lensclick") }
+private fun LoginScreen(
+    authentication: AuthenticationState,
+    onLogin: (String, String) -> Unit,
+    onSignUp: () -> Unit
+) {
+    var email by rememberSaveable { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
     var recoveryOpen by rememberSaveable { mutableStateOf(false) }
-    var loginError by rememberSaveable { mutableStateOf(false) }
-    var submitting by rememberSaveable { mutableStateOf(false) }
+    val submitting = authentication is AuthenticationState.Loading
+    val errorMessage = when (authentication) {
+        is AuthenticationState.Error -> authentication.code.loginMessage()
+        AuthenticationState.SessionExpired -> "Sua sessão expirou ou foi revogada. Entre novamente."
+        else -> null
+    }
     AuthFrame("Bem-vindo de volta!", "Entre para continuar") {
         LensField("E-mail", email, { email = it }, KeyboardType.Email)
         Spacer(Modifier.height(14.dp))
         LensField("Senha", password, { password = it }, password = true)
         TextButton(onClick = { recoveryOpen = true }, contentPadding = PaddingValues(0.dp)) { Text("Esqueci minha senha", color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Medium) }
         Spacer(Modifier.height(26.dp))
-        if (loginError) Text("E-mail ou senha inválidos.", color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+        if (errorMessage != null) Text(errorMessage, color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
         PrimaryButton("Entrar", {
-            submitting = true
-            loginError = false
-            onLogin(email, password) { success -> submitting = false; loginError = !success }
+            onLogin(email, password)
         }, enabled = email.isNotBlank() && password.isNotBlank() && !submitting)
         Spacer(Modifier.height(12.dp))
         CenterLink("Não tem uma conta?", "Cadastre-se", onSignUp)
     }
+
     if (recoveryOpen) ActionDialog("Recuperar senha", "Enviaremos as instruções de recuperação para $email.") { recoveryOpen = false }
+}
+
+private fun com.example.lensclickapp.data.auth.MobileAuthErrorCode.loginMessage(): String = when (this) {
+    com.example.lensclickapp.data.auth.MobileAuthErrorCode.INVALID_INPUT,
+    com.example.lensclickapp.data.auth.MobileAuthErrorCode.UNAUTHENTICATED -> "E-mail ou senha inválidos."
+    com.example.lensclickapp.data.auth.MobileAuthErrorCode.RATE_LIMITED -> "Muitas tentativas. Aguarde antes de tentar novamente."
+    com.example.lensclickapp.data.auth.MobileAuthErrorCode.NETWORK -> "Não foi possível conectar. Verifique sua internet."
+    com.example.lensclickapp.data.auth.MobileAuthErrorCode.SERVER -> "O serviço está indisponível. Tente novamente."
+    else -> "Não foi possível entrar. Tente novamente."
 }
 
 @Composable
@@ -306,7 +314,7 @@ private fun SignUpScreen(onDone: (String, String, String, (Boolean) -> Unit) -> 
         Checkbox(accepted, { accepted = it }, colors = CheckboxDefaults.colors(checkedColor = Ink, checkmarkColor = Paper))
         Text("Eu aceito os Termos de Uso\ne a Política de Privacidade", color = Ink, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 11.dp))
     }
-    if (emailExists) Text("Este e-mail já está cadastrado.", color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+    if (emailExists) Text("O cadastro remoto será disponibilizado em uma próxima etapa.", color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
     PrimaryButton("Cadastrar", {
         submitting = true
         emailExists = false
@@ -345,7 +353,7 @@ private fun PhotographerSignUpScreen(
         Text("Eu aceito os Termos de Uso\ne a Política de Privacidade", color = Ink, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 11.dp))
     }
     if (pass != confirm && confirm.isNotBlank()) Text("As senhas não coincidem.", color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
-    if (emailExists) Text("Este e-mail já está cadastrado.", color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+    if (emailExists) Text("O cadastro remoto será disponibilizado em uma próxima etapa.", color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
     PrimaryButton("Cadastrar fotógrafo", {
         submitting = true
         emailExists = false

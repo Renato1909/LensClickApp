@@ -5,12 +5,17 @@ import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.AP
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.example.lensclickapp.BuildConfig
 import com.example.lensclickapp.LensClickApplication
 import com.example.lensclickapp.data.LensClickRepository
 import com.example.lensclickapp.data.HttpPublicPhotographersGateway
 import com.example.lensclickapp.data.PublicPhotographerPage
 import com.example.lensclickapp.data.PublicPhotographersGateway
 import com.example.lensclickapp.data.User
+import com.example.lensclickapp.data.auth.MobileAuthErrorCode
+import com.example.lensclickapp.data.auth.MobileAuthException
+import com.example.lensclickapp.data.auth.MobileAuthRepository
+import com.example.lensclickapp.data.auth.MobileUser
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -24,19 +29,31 @@ sealed interface PublicSearchState {
     data class Ready(val page: PublicPhotographerPage) : PublicSearchState
 }
 
+sealed interface AuthenticationState {
+    data object Loading : AuthenticationState
+    data object SignedOut : AuthenticationState
+    data class Authenticated(val user: User) : AuthenticationState
+    data class Error(val code: MobileAuthErrorCode) : AuthenticationState
+    data object SessionExpired : AuthenticationState
+}
+
 class LensClickViewModel(
     private val repository: LensClickRepository,
-    private val publicPhotographers: PublicPhotographersGateway = HttpPublicPhotographersGateway()
+    private val publicPhotographers: PublicPhotographersGateway = HttpPublicPhotographersGateway(),
+    private val mobileAuthRepository: MobileAuthRepository? = null
 ) : ViewModel() {
     companion object {
         val Factory = viewModelFactory {
             initializer {
-                LensClickViewModel((this[APPLICATION_KEY] as LensClickApplication).repository)
+                val application = this[APPLICATION_KEY] as LensClickApplication
+                LensClickViewModel(application.repository, mobileAuthRepository = application.mobileAuthRepository)
             }
         }
     }
     private val _currentUser = MutableStateFlow<User?>(null)
     val currentUser: StateFlow<User?> = _currentUser.asStateFlow()
+    private val _authentication = MutableStateFlow<AuthenticationState>(AuthenticationState.Loading)
+    val authentication: StateFlow<AuthenticationState> = _authentication.asStateFlow()
     private val _publicSearch = MutableStateFlow<PublicSearchState>(PublicSearchState.Loading)
     val publicSearch: StateFlow<PublicSearchState> = _publicSearch.asStateFlow()
     private var publicSearchJob: kotlinx.coroutines.Job? = null
@@ -68,24 +85,93 @@ class LensClickViewModel(
 
     init {
         viewModelScope.launch { repository.seedDemoData() }
+        viewModelScope.launch { restoreSession() }
     }
 
-    fun login(email: String, password: String, result: (User?) -> Unit) {
+    fun login(email: String, password: String) {
         viewModelScope.launch {
-            val user = repository.authenticate(email, password)
-            _currentUser.value = user
-            result(user)
+            _authentication.value = AuthenticationState.Loading
+            try {
+                val session = requireMobileAuthRepository().login(
+                    email = email,
+                    password = password,
+                    deviceName = "Android",
+                    appVersion = BuildConfig.VERSION_NAME
+                )
+                setAuthenticated(session.user)
+            } catch (error: MobileAuthException) {
+                _currentUser.value = null
+                _authentication.value = AuthenticationState.Error(error.code)
+            }
         }
     }
 
+    fun restoreSession() {
+        viewModelScope.launch {
+            if (mobileAuthRepository == null) {
+                _currentUser.value = null
+                _authentication.value = AuthenticationState.SignedOut
+                return@launch
+            }
+            try {
+                val user = mobileAuthRepository.restore()
+                if (user == null) {
+                    _currentUser.value = null
+                    _authentication.value = AuthenticationState.SignedOut
+                } else {
+                    setAuthenticated(user)
+                }
+            } catch (error: MobileAuthException) {
+                _currentUser.value = null
+                _authentication.value = if (error.code == MobileAuthErrorCode.UNAUTHENTICATED) {
+                    AuthenticationState.SessionExpired
+                } else {
+                    AuthenticationState.Error(error.code)
+                }
+            }
+        }
+    }
+
+    fun logout() {
+        viewModelScope.launch {
+            if (mobileAuthRepository == null) {
+                _currentUser.value = null
+                _authentication.value = AuthenticationState.SignedOut
+                return@launch
+            }
+            _authentication.value = AuthenticationState.Loading
+            try {
+                requireMobileAuthRepository().logout()
+            } catch (error: MobileAuthException) {
+                _currentUser.value = null
+                _authentication.value = AuthenticationState.Error(error.code)
+                return@launch
+            }
+            _currentUser.value = null
+            _authentication.value = AuthenticationState.SignedOut
+        }
+    }
+
+    private fun setAuthenticated(user: MobileUser) {
+        val localUser = User(
+            id = user.id,
+            name = user.name,
+            email = user.email,
+            role = user.role
+        )
+        _currentUser.value = localUser
+        _authentication.value = AuthenticationState.Authenticated(localUser)
+    }
+
+    private fun requireMobileAuthRepository(): MobileAuthRepository =
+        mobileAuthRepository ?: error("Mobile authentication repository is required")
+
+    @Suppress("UNUSED_PARAMETER")
     fun register(name: String, email: String, password: String, result: (Boolean) -> Unit) {
-        viewModelScope.launch {
-            val user = repository.register(name, email, password)
-            _currentUser.value = user
-            result(user != null)
-        }
+        result(false)
     }
 
+    @Suppress("UNUSED_PARAMETER")
     fun registerPhotographer(
         name: String,
         email: String,
@@ -96,15 +182,7 @@ class LensClickViewModel(
         bio: String,
         result: (Boolean) -> Unit
     ) {
-        viewModelScope.launch {
-            val user = repository.registerPhotographer(name, email, password, specialty, city, price, bio)
-            _currentUser.value = user
-            result(user != null)
-        }
-    }
-
-    fun logout() {
-        _currentUser.value = null
+        result(false)
     }
 
     fun createBudget(
