@@ -1,7 +1,7 @@
 # Contrato de autenticação móvel — LensClick
 
-Status: proposta técnica para implementação conjunta Web/API + Android.
-Data: 2026-09-20
+Status: contrato implementado no backend e consumido pela camada de dados Android.
+Data: 2026-10-31
 
 ## 1. Objetivo
 
@@ -38,7 +38,7 @@ O cadastro atual recebe `name`, `email`, `phone`, `password` e opcionalmente `la
 
 O login atual recebe `email` e `password`, retorna `{ user }` e estabelece sessão por cookie.
 
-## 4. Contrato móvel proposto
+## 4. Contrato móvel implementado
 
 ### 4.1 Login
 
@@ -183,20 +183,19 @@ UI/ViewModels não devem conhecer JSON bruto, headers HTTP ou detalhes do armaze
 
 Depois: descoberta, perfis, portfólio, conversas e demais recursos.
 
-## 10. Pendências antes do Retrofit
+## 10. Pendências posteriores à primeira integração
 
-Este documento é uma proposta; **não altera o backend ainda**.
+O backend já confirmou e implementou as rotas móveis, o token opaco com validade de sete dias, hash-only no D1, três sessões móveis por usuário e revogação server-side. As rotas de conta também aceitam explicitamente `Authorization: Bearer <accessToken>` sem criar ou reutilizar cookie web; rotas administrativas continuam web-only.
 
-O backend precisa confirmar e versionar:
-- rotas móveis definitivas;
-- formato e expiração do token;
-- estrutura de sessões móveis;
-- política de revogação;
-- códigos de erro estáveis;
-- limites de rate limiting;
-- compatibilidade entre versão do app e API.
+Permanecem pendentes:
+- códigos de erro semânticos estáveis no corpo das respostas;
+- refresh token rotativo com detecção de replay;
+- auditoria de sessões móveis;
+- persistência ou remoção de `deviceName` e `appVersion`;
+- definição de ambientes e compatibilidade entre versões do app e da API;
+- contratos móveis específicos para cadastro, recuperação e verificação de e-mail.
 
-Após essa confirmação, o contrato deverá ter testes de API antes da implementação de produção no Android.
+A camada Android mapeia os status HTTP de forma determinística e não usa textos do servidor como regras de negócio.
 
 ## 11. Critério de aceite
 

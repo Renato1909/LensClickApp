@@ -29,7 +29,7 @@ interface PublicPhotographersGateway {
 }
 
 class HttpPublicPhotographersGateway(
-    private val baseUrl: String = "https://lensclick.renato-aparecido-business.workers.dev"
+    private val baseUrl: String = ApiEnvironment.baseUrl
 ) : PublicPhotographersGateway {
     override suspend fun list(city: String, specialty: String?, page: Int): PublicPhotographerPage =
         withContext(Dispatchers.IO) {

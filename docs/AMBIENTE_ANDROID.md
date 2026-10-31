@@ -44,3 +44,21 @@ O APK é gerado em `app/build/outputs/apk/debug/app-debug.apk`. Relatórios: `ap
 Erros de build/lint/testes impedem sucesso do job; não há `continue-on-error` nem baseline que esconda erros. Os artefatos são APKs de demonstração e relatórios. A branch main não possuía proteção na consulta inicial: o mantenedor deve configurar estes checks como obrigatórios se desejar imposição pelo GitHub.
 
 O sucesso do CI não substitui validação em aparelho real, TalkBack, tablet, rede, restauração de processo e revisão de release. Os resultados e links de execução efetivamente obtidos devem ser registrados no handoff.
+
+## Ambientes da API
+
+O módulo `:app` gera três variantes controladas:
+
+| Variante | `applicationId` | Base URL | Transporte |
+|---|---|---|---|
+| `debug` | `com.example.lensclickapp.debug` | `http://10.0.2.2:8787` | Worker local no host do emulador; HTTP claro permitido apenas no manifest debug |
+| `staging` | `com.example.lensclickapp.staging` | `LENSCLICK_STAGING_API_BASE_URL` ou propriedade Gradle `lensclick.stagingApiBaseUrl` | HTTPS obrigatório; sem valor real versionado |
+| `release` | `com.example.lensclickapp` | `https://lensclick.renato-aparecido-business.workers.dev` | HTTPS; produção somente na variante release |
+
+O endpoint de staging deve ser fornecido pelo ambiente de CI ou pelo mantenedor, nunca gravado no Git. A ausência de configuração usa `https://staging.invalid`, que não é um endpoint operacional e impede uma publicação acidental; o valor real deve ser informado antes de gerar um APK staging utilizável.
+
+O `applicationId` atual de release é provisório. Antes da primeira publicação, o mantenedor precisa decidir o identificador definitivo e a conta Google Play; depois disso, o pacote não deve ser alterado. O sufixo `.debug` impede a instalação acidental sobre a aplicação de produção, e o sufixo `.staging` mantém a instalação separada.
+
+O debug aponta somente para o Worker local do emulador (`10.0.2.2`). Release não aceita endpoints definidos por `local.properties`, propriedades Gradle ou variáveis de ambiente. Nenhum token, credencial ou URL privada participa da configuração versionada.
+
+O workflow atual continua compilando `debug`, executando testes JVM, lint e testes instrumentados. Para validar staging no CI, fornecer `LENSCLICK_STAGING_API_BASE_URL` como variável não sensível do ambiente apropriado e executar `:app:assembleStaging`; para release, usar `:app:assembleRelease` somente no pipeline de release, com assinatura configurada fora do Git.
