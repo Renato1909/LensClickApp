@@ -67,7 +67,7 @@ class LensClickViewModelTest {
         viewModel.logout()
         advanceUntilIdle()
         assertNull(viewModel.currentUser.value)
-        assertEquals(AuthenticationState.SignedOut, viewModel.authentication.value)
+        assertEquals(AuthenticationState.LogoutCompleted, viewModel.authentication.value)
     }
 
     @Test

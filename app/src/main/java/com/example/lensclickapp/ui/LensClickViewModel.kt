@@ -32,6 +32,7 @@ sealed interface PublicSearchState {
 sealed interface AuthenticationState {
     data object Loading : AuthenticationState
     data object SignedOut : AuthenticationState
+    data object LogoutCompleted : AuthenticationState
     data class Authenticated(val user: User) : AuthenticationState
     data class Error(val code: MobileAuthErrorCode) : AuthenticationState
     data object SessionExpired : AuthenticationState
@@ -148,7 +149,7 @@ class LensClickViewModel(
                 return@launch
             }
             _currentUser.value = null
-            _authentication.value = AuthenticationState.SignedOut
+            _authentication.value = AuthenticationState.LogoutCompleted
         }
     }
 

@@ -31,6 +31,13 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -148,6 +155,7 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
             composable(Screen.Chat.name) { ChatScreen(onBack = { navController.popBackStack() }) }
             composable(Screen.Account.name) { AccountScreen(
                 user = currentUser,
+                authentication = authentication,
                 canUseProfessionalMode = currentUser?.role == "photographer",
                 onNavigate = ::go,
                 onProfessionalMode = { resetTo(Screen.ProDashboard) },
@@ -275,14 +283,21 @@ private fun LoginScreen(
         AuthenticationState.SessionExpired -> "Sua sessão expirou ou foi revogada. Entre novamente."
         else -> null
     }
+    val completedMessage = authentication == AuthenticationState.LogoutCompleted
     AuthFrame("Bem-vindo de volta!", "Entre para continuar") {
         LensField("E-mail", email, { email = it }, KeyboardType.Email)
         Spacer(Modifier.height(14.dp))
         LensField("Senha", password, { password = it }, password = true)
         TextButton(onClick = { recoveryOpen = true }, contentPadding = PaddingValues(0.dp)) { Text("Esqueci minha senha", color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Medium) }
         Spacer(Modifier.height(26.dp))
-        if (errorMessage != null) Text(errorMessage, color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
-        PrimaryButton("Entrar", {
+        if (submitting) {
+            AuthStatusBanner("Conectando à sua conta...", loading = true)
+        } else if (errorMessage != null) {
+            AuthStatusBanner(errorMessage, loading = false, error = true)
+        } else if (completedMessage) {
+            AuthStatusBanner("Você saiu da conta com segurança.", loading = false)
+        }
+        PrimaryButton(if (submitting) "Entrando..." else "Entrar", {
             onLogin(email, password)
         }, enabled = email.isNotBlank() && password.isNotBlank() && !submitting)
         Spacer(Modifier.height(12.dp))
@@ -299,6 +314,39 @@ private fun com.example.lensclickapp.data.auth.MobileAuthErrorCode.loginMessage(
     com.example.lensclickapp.data.auth.MobileAuthErrorCode.NETWORK -> "Não foi possível conectar. Verifique sua internet."
     com.example.lensclickapp.data.auth.MobileAuthErrorCode.SERVER -> "O serviço está indisponível. Tente novamente."
     else -> "Não foi possível entrar. Tente novamente."
+}
+
+@Composable
+private fun AuthStatusBanner(message: String, loading: Boolean, error: Boolean = false) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (error) MaterialTheme.colorScheme.errorContainer else SurfaceHigh)
+            .border(1.dp, if (error) MaterialTheme.colorScheme.error else Line, RoundedCornerShape(12.dp))
+            .semantics {
+                liveRegion = if (error) LiveRegionMode.Assertive else LiveRegionMode.Polite
+                stateDescription = message
+            }
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (loading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(20.dp),
+                strokeWidth = 2.dp,
+                color = Ink
+            )
+            Spacer(Modifier.width(10.dp))
+        }
+        Text(
+            message,
+            color = if (error) MaterialTheme.colorScheme.onErrorContainer else Muted,
+            fontSize = 12.sp,
+            lineHeight = 17.sp
+        )
+    }
+    Spacer(Modifier.height(12.dp))
 }
 
 @Composable
@@ -368,22 +416,29 @@ private fun PhotographerSignUpScreen(
 
 @Composable
 private fun LensField(label: String, value: String, onChange: (String) -> Unit, keyboard: KeyboardType = KeyboardType.Text, password: Boolean = false, singleLine: Boolean = true, minLines: Int = 1) {
-    OutlinedTextField(value, onChange, modifier = Modifier.fillMaxWidth(), label = { Text(label, fontSize = 12.sp) }, singleLine = singleLine, minLines = minLines,
+    OutlinedTextField(value, onChange, modifier = Modifier.fillMaxWidth().semantics { contentDescription = label }, label = { Text(label, fontSize = 12.sp) }, singleLine = singleLine, minLines = minLines,
         visualTransformation = if (password) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
         keyboardOptions = KeyboardOptions(keyboardType = keyboard), shape = RoundedCornerShape(10.dp),
         colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Ink, unfocusedTextColor = Ink, focusedBorderColor = Ink, unfocusedBorderColor = Line, focusedContainerColor = SurfaceHigh, unfocusedContainerColor = SurfaceHigh, focusedLabelColor = Ink, unfocusedLabelColor = Muted, cursorColor = Ink))
 }
 
-@Composable private fun PrimaryButton(text: String, onClick: () -> Unit, enabled: Boolean = true) = Button(onClick, enabled = enabled, modifier = Modifier.fillMaxWidth().height(54.dp).shadow(if (enabled) 7.dp else 0.dp, RoundedCornerShape(18.dp)), shape = RoundedCornerShape(18.dp), colors = ButtonDefaults.buttonColors(containerColor = Ink, contentColor = Color.White, disabledContainerColor = Line, disabledContentColor = Muted)) { Text(text, fontWeight = FontWeight.SemiBold) }
+@Composable private fun PrimaryButton(text: String, onClick: () -> Unit, enabled: Boolean = true) = Button(onClick, enabled = enabled, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp).shadow(if (enabled) 7.dp else 0.dp, RoundedCornerShape(18.dp)).semantics { role = Role.Button }, shape = RoundedCornerShape(18.dp), colors = ButtonDefaults.buttonColors(containerColor = Ink, contentColor = Color.White, disabledContainerColor = Line, disabledContentColor = Muted)) { Text(text, fontWeight = FontWeight.SemiBold) }
 
 @Composable
-private fun LogoutButton(onClick: () -> Unit) = Button(
+private fun LogoutButton(onClick: () -> Unit, enabled: Boolean = true) = Button(
     onClick = onClick,
-    modifier = Modifier.fillMaxWidth().height(54.dp).shadow(4.dp, RoundedCornerShape(17.dp)),
+    enabled = enabled,
+    modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp).shadow(4.dp, RoundedCornerShape(17.dp)).semantics { role = Role.Button },
     shape = RoundedCornerShape(17.dp),
     colors = ButtonDefaults.buttonColors(containerColor = Ink, contentColor = Color.White)
 ) {
-    Text("Sair da conta", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+    if (enabled) {
+        Text("Sair da conta", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+    } else {
+        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+        Spacer(Modifier.width(10.dp))
+        Text("Saindo...", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+    }
 }
 
 @Composable private fun CenterLink(prefix: String, action: String, click: () -> Unit) = Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) { Text(prefix, color = Muted, fontSize = 12.sp); TextButton(click, contentPadding = PaddingValues(5.dp)) { Text(action, color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Bold) } }
@@ -436,7 +491,13 @@ private fun BottomNav(active: Screen, onNavigate: (Screen) -> Unit) {
                         .clip(RoundedCornerShape(22.dp))
                         .background(if (selected) SurfaceHigh else Color.Transparent)
                         .clickable { onNavigate(destination) }
-                        .padding(vertical = 7.dp),
+                        .heightIn(min = 48.dp)
+                        .padding(vertical = 7.dp)
+                        .semantics {
+                            contentDescription = label
+                            role = Role.Button
+                            stateDescription = if (selected) "Selecionado" else "Não selecionado"
+                        },
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(icon, color = if (selected) Ink else Paper.copy(.82f), fontSize = 19.sp, lineHeight = 20.sp)
@@ -833,18 +894,79 @@ private fun PhotographerProfileScreen(
 private fun initialsForDisplay(name: String?): String = name.orEmpty().trim().split(Regex("\\s+")).filter { it.isNotBlank() }.take(2).joinToString("") { it.first().uppercase() }.ifBlank { "LC" }
 
 @Composable
-private fun AccountScreen(user: User?, canUseProfessionalMode: Boolean, onNavigate: (Screen) -> Unit, onProfessionalMode: () -> Unit, onLogout: () -> Unit) = AppPage(Screen.Account, onNavigate) {
+private fun AccountScreen(
+    user: User?,
+    authentication: AuthenticationState,
+    canUseProfessionalMode: Boolean,
+    onNavigate: (Screen) -> Unit,
+    onProfessionalMode: () -> Unit,
+    onLogout: () -> Unit
+) = AppPage(Screen.Account, onNavigate) {
     var selectedAction by rememberSaveable { mutableStateOf<String?>(null) }
     val actions = listOf("♙  Meus dados", "⚙  Configurações", "♢  Segurança", "♧  Notificações", "?  Ajuda e suporte", "ⓘ  Sobre o Lens Click")
+    val loggingOut = authentication is AuthenticationState.Loading
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { Text("⚙", color = Ink, fontSize = 24.sp, modifier = Modifier.clip(CircleShape).clickable { selectedAction = "Configurações" }.padding(8.dp)) }
-        Avatar(initialsForDisplay(user?.name), Modifier.size(86.dp)); Spacer(Modifier.height(10.dp)); Text(user?.name ?: "Minha conta", color = Ink, fontSize = 19.sp, fontWeight = FontWeight.SemiBold); Text(user?.email.orEmpty(), color = Muted, fontSize = 11.sp); Text(if (canUseProfessionalMode) "Modo cliente • conta de fotógrafo" else "Conta de cliente", color = Gold, fontSize = 10.sp, modifier = Modifier.padding(top = 5.dp)); Spacer(Modifier.height(22.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Text(
+                "⚙",
+                color = Ink,
+                fontSize = 24.sp,
+                modifier = Modifier
+                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                    .clip(CircleShape)
+                    .clickable { selectedAction = "Configurações" }
+                    .semantics {
+                        contentDescription = "Configurações"
+                        role = Role.Button
+                    }
+                    .padding(8.dp)
+            )
+        }
+        if (user == null) {
+            AccountEmptyState()
+        } else {
+            Avatar(initialsForDisplay(user.name), Modifier.size(86.dp))
+            Spacer(Modifier.height(10.dp))
+            Text(user.name, color = Ink, fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
+            Text(user.email, color = Muted, fontSize = 11.sp)
+            Text(if (canUseProfessionalMode) "Modo cliente • conta de fotógrafo" else "Conta de cliente", color = Gold, fontSize = 10.sp, modifier = Modifier.padding(top = 5.dp))
+            Spacer(Modifier.height(22.dp))
+        }
         if (canUseProfessionalMode) {
             OutlinedButton(onClick = onProfessionalMode, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Ink)) { Text("Voltar ao modo fotógrafo", color = Ink, fontWeight = FontWeight.SemiBold) }
             Spacer(Modifier.height(14.dp))
         }
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(12.dp))) { actions.forEach { action -> Row(Modifier.fillMaxWidth().clickable { selectedAction = action.substringAfter("  ") }.padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) { Text(action, color = Ink, fontSize = 13.sp); Text("›", color = Muted, fontSize = 19.sp) }; HorizontalDivider(color = Line) } }
-        Spacer(Modifier.height(24.dp)); LogoutButton(onLogout); Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(24.dp))
+        LogoutButton(onLogout, enabled = !loggingOut)
+        Spacer(Modifier.height(8.dp))
     }
+
     selectedAction?.let { action -> ActionDialog(action, "Esta área foi acionada corretamente. A próxima etapa é conectá-la aos dados reais da conta.") { selectedAction = null } }
+}
+
+@Composable
+private fun AccountEmptyState() {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(SurfaceHigh)
+            .border(1.dp, Line, RoundedCornerShape(18.dp))
+            .padding(24.dp)
+            .semantics {
+                stateDescription = "Conta sem dados carregados"
+            },
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("Sua conta", color = Ink, fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Não foi possível carregar seus dados agora. Tente novamente entrando na conta.",
+            color = Muted,
+            fontSize = 12.sp,
+            lineHeight = 18.sp,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+    }
 }

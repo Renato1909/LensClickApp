@@ -3,6 +3,7 @@ package com.example.lensclickapp.ui
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -47,6 +48,8 @@ class LensClickNavigationTest {
         rule.onNodeWithText("Entrar").performClick()
         awaitText("Bem-vindo de volta!")
         rule.onNodeWithText("Bem-vindo de volta!").assertIsDisplayed()
+        rule.onNodeWithContentDescription("E-mail").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Senha").assertIsDisplayed()
         rule.onNodeWithText("Minha conta").assertDoesNotExist()
     }
 }
