@@ -1,7 +1,7 @@
 # Validação da primeira fatia de autenticação móvel
 
-Data da validação: 31/10/2026  
-Android: `0abfa31ff8b70dfee6622de8426b28b3c8109f74`  
+Data da validação: 31/10/2026
+Android: `0abfa31ff8b70dfee6622de8426b28b3c8109f74`
 Backend local: `1a0845baa3d229ead6b6f2b000a4136e6fc03b6b`
 
 ## Resultado executivo
