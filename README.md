@@ -28,7 +28,7 @@ O **Lens Click** é o aplicativo Android da plataforma LensClick — um ponto de
 
 De um lado, o cliente descreve o que precisa (casamento, ensaio, evento, aniversário, corporativo), compara profissionais, pede orçamentos e conversa direto com quem vai clicar. Do outro, o fotógrafo mantém um perfil com especialidade, cidade, bio e preço inicial, acompanha os pedidos que chegam, organiza a agenda e responde em um chat em tempo real.
 
-Esta versão entrega **17 telas navegáveis**, interface 100% em português do Brasil e visual inspirado em fotografia editorial — papel, tinta e toques de dourado. Toda a experiência funciona ponta a ponta no aparelho, com os dados persistidos localmente em **Room**; o backend da plataforma ainda não está conectado.
+Esta versão entrega **17 telas navegáveis**, interface 100% em português do Brasil e visual inspirado em fotografia editorial — papel, tinta e toques de dourado. A primeira fatia de autenticação já usa o backend da plataforma, com sessão móvel protegida pelo Android Keystore. As demais áreas ainda estão em evolução e mantêm dados locais de demonstração em **Room** até que seus contratos remotos sejam concluídos.
 
 ## ✨ Funcionalidades
 
@@ -38,7 +38,7 @@ Esta versão entrega **17 telas navegáveis**, interface 100% em português do B
 |---|---|
 | 🪪 **Onboarding** | Boas-vindas em tela cheia com fotografia, gradiente escuro e a marca aplicada em dourado e off-white |
 | 🧑🤝🧑 **Tipo de conta** | Escolha entre conta de cliente ou de fotógrafo antes do cadastro |
-| 🔐 **Login & Cadastro** | Autenticação de demonstração local, com validação de formulário (senha × confirmação, aceite dos Termos), aviso de e-mail já cadastrado e recuperação de senha demonstrativa |
+| 🔐 **Login & Cadastro** | Login remoto com sessão móvel protegida; cadastro e recuperação de senha aguardam contratos móveis próprios |
 | 🏠 **Início** | Localização, busca rápida, categorias (Casamento, Ensaio, Eventos, Infantil, Corporativo), fotógrafos em destaque e portfólios em alta |
 | 🔎 **Descobrir** | Busca por nome ou estilo, filtros por categoria, favoritos e contador de resultados |
 | 👤 **Perfil do fotógrafo** | Bio, especialidades, estatísticas (experiência, ensaios, satisfação), avaliações, portfólio e preço "a partir de" |
@@ -92,7 +92,7 @@ A navegação usa `Navigation Compose` em uma única `Activity`. Telas de detalh
 ```
 UI (Compose)  ──▶  LensClickViewModel  ──▶  LensClickRepository  ──▶  LensClickDao  ──▶  Room
        ▲                    │                        │
-       └──── StateFlow ─────┘             credencial demo somente em memória
+       └──── StateFlow ─────┘             sessão móvel cifrada com Android Keystore
 ```
 
 - **`ui/`** — as 17 telas, componentes reutilizáveis (`PrimaryButton`, `LensField`, `BottomNav`, `LogoAsset`) e o tema Material 3.
@@ -108,7 +108,7 @@ O app cria uma conta de cliente e um catálogo de fotógrafos na primeira execu�
 | E-mail | `seu@email.com` |
 | Senha | `lensclick` |
 
-A credencial de demonstração não é persistida no Room. O hash fica somente em memória e desaparece quando o processo do aplicativo é encerrado. Isso **não é autenticação de produção** e será substituído pelo contrato de autenticação do backend antes de uma release conectada.
+A credencial de demonstração não é persistida no Room. O hash fica somente em memória e desaparece quando o processo do aplicativo é encerrado. Esta seção permanece apenas como referência histórica do protótipo; o fluxo de login integrado usa o contrato móvel do backend e não essa credencial.
 
 Para conhecer o **modo fotógrafo**, use *Cadastrar como fotógrafo* no fluxo de criação de conta — o painel profissional abre automaticamente para contas com esse papel.
 
@@ -206,12 +206,12 @@ LensClickApp/
 
 ## 📌 Status do projeto
 
-Esta versão é uma **interface completa e navegável** com dados locais: onboarding, autenticação de demonstração, descoberta de fotógrafos, orçamentos, conversas e as telas do modo profissional funcionam localmente no cliente. O Room persiste os dados de aplicação, mas **não persiste credenciais ou hashes de senha**. O backend da plataforma ainda não está conectado.
+Esta versão é uma **interface completa e navegável**. A autenticação móvel usa o backend conectado; descoberta de fotógrafos, orçamentos, conversas e as telas do modo profissional ainda funcionam localmente no cliente. O Room persiste dados de aplicação, mas **não persiste credenciais, tokens ou hashes de senha**.
 
 Próximos passos naturais:
 
-- definir o **contrato de autenticação móvel revogável** com o backend da plataforma LensClick;
-- conectar a UI ao backend somente depois desse contrato, começando por autenticação e conta;
+- concluir os contratos remotos de conta, descoberta, perfis, orçamentos e mensagens;
+- conectar cada fatia ao backend somente após contrato, testes de autorização e tratamento de estados offline;
 - definir rotas com identificadores reais e domínio aprovado antes de adicionar deep links para perfil e conversas;
 - separar explicitamente modelos/cliente HTTP remotos dos modelos locais de Room.
 
