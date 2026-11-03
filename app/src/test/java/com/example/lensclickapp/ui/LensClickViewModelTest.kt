@@ -13,6 +13,7 @@ import com.example.lensclickapp.data.auth.MobileAuthException
 import com.example.lensclickapp.data.auth.MobileAuthErrorCode
 import com.example.lensclickapp.data.auth.MobileAuthRepository
 import com.example.lensclickapp.data.auth.MobileAuthRequest
+import com.example.lensclickapp.data.auth.MobileRegistrationRequest
 import com.example.lensclickapp.data.auth.MobileSession
 import com.example.lensclickapp.data.auth.MobileUser
 import kotlinx.coroutines.Dispatchers
@@ -109,6 +110,9 @@ class LensClickViewModelTest {
         val restoreRelease = CompletableDeferred<Unit>()
         var loginStarted = false
         val api = object : MobileAuthApi {
+            override suspend fun register(request: MobileRegistrationRequest): MobileSession =
+                error("Not used in this test")
+
             override suspend fun login(request: MobileAuthRequest): MobileSession {
                 loginStarted = true
                 return MobileSession(
@@ -186,6 +190,9 @@ class LensClickViewModelTest {
 
     private fun authRepository(store: InMemorySessionStore, status: Int = 200): MobileAuthRepository =
         MobileAuthRepository(object : MobileAuthApi {
+            override suspend fun register(request: MobileRegistrationRequest): MobileSession =
+                error("Not used in this test")
+
             override suspend fun login(request: MobileAuthRequest): MobileSession {
                 if (status != 200) throw MobileAuthException(
                     code = MobileAuthErrorCode.UNAUTHENTICATED,

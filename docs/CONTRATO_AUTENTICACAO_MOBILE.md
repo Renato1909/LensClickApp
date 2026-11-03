@@ -1,7 +1,7 @@
 # Contrato de autenticação móvel — LensClick
 
 Status: contrato implementado no backend e consumido pela camada de dados Android.
-Data: 2026-10-31
+Data: 2026-11-03
 
 ## 1. Objetivo
 
@@ -54,6 +54,45 @@ Request:
   "appVersion": "1.0"
 }
 ```
+
+### 4.1.1 Cadastro
+
+`POST /api/mobile/auth/register`
+
+Request:
+
+```json
+{
+  "name": "Nome",
+  "email": "usuario@example.com",
+  "phone": "(11) 99999-9999",
+  "password": "Senha123",
+  "deviceName": "Android",
+  "appVersion": "1.0"
+}
+```
+
+Resposta 201:
+
+```json
+{
+  "user": {
+    "id": 123,
+    "name": "Nome",
+    "email": "usuario@example.com",
+    "phone": "(11) 99999-9999"
+  },
+  "session": {
+    "accessToken": "<token-opaco>",
+    "expiresAt": "2026-11-03T23:00:00Z"
+  }
+}
+```
+
+O cadastro usa as mesmas validações do backend web: nome, e-mail e telefone
+válidos; senha com pelo menos oito caracteres, uma letra e um número. O
+servidor responde `400` para entrada inválida, `409` para e-mail já cadastrado
+e `429` para excesso de tentativas. O endpoint nunca emite cookie web.
 
 Resposta 200:
 
@@ -173,13 +212,17 @@ UI/ViewModels não devem conhecer JSON bruto, headers HTTP ou detalhes do armaze
 
 ## 9. Primeira fatia de produção
 
-1. login;
-2. restauração da sessão;
-3. chamada `/me`;
-4. logout;
-5. expiração/revogação.
+1. cadastro;
+2. login;
+3. restauração da sessão;
+4. chamada `/me`;
+5. logout;
+6. expiração/revogação.
 
-Cadastro, recuperação de senha e verificação de e-mail permanecem fora desta fatia até que existam contratos móveis próprios. A navegação de cadastro continua preservada, mas não cria contas localmente nem usa credenciais de demonstração.
+Recuperação de senha e verificação de e-mail permanecem fora desta fatia até
+que seus contratos móveis próprios sejam implementados. A confirmação de
+e-mail continua usando o fluxo de verificação do backend; o cadastro móvel não
+deve persistir senha, token ou segredo no Android.
 
 Depois: descoberta, perfis, portfólio, conversas e demais recursos.
 
@@ -194,6 +237,7 @@ Permanecem pendentes:
 - persistência ou remoção de `deviceName` e `appVersion`;
 - definição de ambientes e compatibilidade entre versões do app e da API;
 - contratos móveis específicos para cadastro, recuperação e verificação de e-mail.
+- integração da UI de cadastro após a validação da camada de dados móvel.
 
 A camada Android mapeia os status HTTP de forma determinística e não usa textos do servidor como regras de negócio.
 

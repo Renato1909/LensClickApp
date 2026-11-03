@@ -8,6 +8,20 @@ import org.junit.Test
 
 class MobileAuthRepositoryTest {
     @Test
+    fun registerMapsSuccessStoresTokenAndUsesMobileEndpoint() = runTest {
+        val transport = FakeTransport(HttpResponse(201, body = successBody()))
+        val repository = MobileAuthRepository(HttpMobileAuthApi(transport), InMemorySessionStore())
+
+        val session = repository.register(" Pessoa ", "User@Example.com", "(11) 99999-9999", "Secret123", "Android", "1.0")
+
+        assertEquals(42L, session.user.id)
+        assertEquals("POST", transport.lastRequest?.method)
+        assertEquals("/api/mobile/auth/register", transport.lastRequest?.path)
+        assertTrue(transport.lastRequest?.headers?.get("Cookie") == null)
+        assertTrue(transport.lastRequest?.body?.contains("\"email\":\"user@example.com\"") == true)
+    }
+
+    @Test
     fun loginMapsSuccessStoresTokenAndNeverUsesCookies() = runTest {
         val transport = FakeTransport(HttpResponse(200, body = successBody()))
         val store = InMemorySessionStore()

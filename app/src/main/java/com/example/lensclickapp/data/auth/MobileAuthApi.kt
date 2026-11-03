@@ -8,6 +8,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 interface MobileAuthApi {
+    suspend fun register(request: MobileRegistrationRequest): MobileSession
+
     suspend fun login(request: MobileAuthRequest): MobileSession
 
     suspend fun currentUser(accessToken: String): MobileUser
@@ -52,6 +54,29 @@ class UrlConnectionTransport(
 class HttpMobileAuthApi(
     private val transport: HttpTransport
 ) : MobileAuthApi {
+    override suspend fun register(request: MobileRegistrationRequest): MobileSession {
+        val response = transport.execute(
+            HttpRequest(
+                method = "POST",
+                path = "/api/mobile/auth/register",
+                headers = mapOf(
+                    "Accept" to "application/json",
+                    "Content-Type" to "application/json"
+                ),
+                body = JSONObject()
+                    .put("name", request.name)
+                    .put("email", request.email)
+                    .put("phone", request.phone)
+                    .put("password", request.password)
+                    .put("deviceName", request.deviceName)
+                    .put("appVersion", request.appVersion)
+                    .toString()
+            )
+        )
+        ensureSuccess(response, 201)
+        return parseSession(response)
+    }
+
     override suspend fun login(request: MobileAuthRequest): MobileSession {
         val response = transport.execute(
             HttpRequest(
@@ -70,17 +95,7 @@ class HttpMobileAuthApi(
             )
         )
         ensureSuccess(response, 200)
-        return try {
-            val root = JSONObject(response.body)
-            val session = root.getJSONObject("session")
-            MobileSession(
-                user = parseUser(root.getJSONObject("user")),
-                accessToken = session.getString("accessToken"),
-                expiresAt = session.getString("expiresAt")
-            )
-        } catch (error: Exception) {
-            throw MobileAuthException(MobileAuthErrorCode.MALFORMED_RESPONSE, cause = error)
-        }
+        return parseSession(response)
     }
 
     override suspend fun currentUser(accessToken: String): MobileUser {
@@ -125,6 +140,18 @@ class HttpMobileAuthApi(
         emailVerified = json.optBoolean("emailVerified", false),
         isAdmin = json.optBoolean("isAdmin", false)
     )
+
+    private fun parseSession(response: HttpResponse): MobileSession = try {
+        val root = JSONObject(response.body)
+        val session = root.getJSONObject("session")
+        MobileSession(
+            user = parseUser(root.getJSONObject("user")),
+            accessToken = session.getString("accessToken"),
+            expiresAt = session.getString("expiresAt")
+        )
+    } catch (error: Exception) {
+        throw MobileAuthException(MobileAuthErrorCode.MALFORMED_RESPONSE, cause = error)
+    }
 
     private fun errorCodeFor(statusCode: Int): MobileAuthErrorCode = when (statusCode) {
         400 -> MobileAuthErrorCode.INVALID_INPUT

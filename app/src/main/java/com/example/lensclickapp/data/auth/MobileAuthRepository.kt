@@ -4,6 +4,28 @@ class MobileAuthRepository(
     private val api: MobileAuthApi,
     private val sessionStore: SessionStore
 ) {
+    suspend fun register(
+        name: String,
+        email: String,
+        phone: String,
+        password: String,
+        deviceName: String,
+        appVersion: String
+    ): MobileSession {
+        val session = api.register(
+            MobileRegistrationRequest(
+                name = name.trim(),
+                email = email.trim().lowercase(),
+                phone = phone.trim(),
+                password = password,
+                deviceName = deviceName,
+                appVersion = appVersion
+            )
+        )
+        sessionStore.writeAccessToken(session.accessToken)
+        return session
+    }
+
     suspend fun login(
         email: String,
         password: String,

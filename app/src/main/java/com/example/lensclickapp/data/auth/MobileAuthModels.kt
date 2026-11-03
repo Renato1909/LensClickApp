@@ -23,6 +23,15 @@ data class MobileAuthRequest(
     val appVersion: String
 )
 
+data class MobileRegistrationRequest(
+    val name: String,
+    val email: String,
+    val phone: String,
+    val password: String,
+    val deviceName: String,
+    val appVersion: String
+)
+
 data class HttpRequest(
     val method: String,
     val path: String,
