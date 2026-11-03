@@ -22,6 +22,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 sealed interface PublicSearchState {
     data object Loading : PublicSearchState
@@ -58,6 +60,7 @@ class LensClickViewModel(
     private val _publicSearch = MutableStateFlow<PublicSearchState>(PublicSearchState.Loading)
     val publicSearch: StateFlow<PublicSearchState> = _publicSearch.asStateFlow()
     private var publicSearchJob: kotlinx.coroutines.Job? = null
+    private val authenticationMutex = Mutex()
 
     fun searchPublicPhotographers(city: String, specialty: String?, page: Int) {
         publicSearchJob?.cancel()
@@ -91,43 +94,47 @@ class LensClickViewModel(
 
     fun login(email: String, password: String) {
         viewModelScope.launch {
-            _authentication.value = AuthenticationState.Loading
-            try {
-                val session = requireMobileAuthRepository().login(
-                    email = email,
-                    password = password,
-                    deviceName = "Android",
-                    appVersion = BuildConfig.VERSION_NAME
-                )
-                setAuthenticated(session.user)
-            } catch (error: MobileAuthException) {
-                _currentUser.value = null
-                _authentication.value = AuthenticationState.Error(error.code)
+            authenticationMutex.withLock {
+                _authentication.value = AuthenticationState.Loading
+                try {
+                    val session = requireMobileAuthRepository().login(
+                        email = email,
+                        password = password,
+                        deviceName = "Android",
+                        appVersion = BuildConfig.VERSION_NAME
+                    )
+                    setAuthenticated(session.user)
+                } catch (error: MobileAuthException) {
+                    _currentUser.value = null
+                    _authentication.value = AuthenticationState.Error(error.code)
+                }
             }
         }
     }
 
     fun restoreSession() {
         viewModelScope.launch {
-            if (mobileAuthRepository == null) {
-                _currentUser.value = null
-                _authentication.value = AuthenticationState.SignedOut
-                return@launch
-            }
-            try {
-                val user = mobileAuthRepository.restore()
-                if (user == null) {
+            authenticationMutex.withLock {
+                if (mobileAuthRepository == null) {
                     _currentUser.value = null
                     _authentication.value = AuthenticationState.SignedOut
-                } else {
-                    setAuthenticated(user)
+                    return@withLock
                 }
-            } catch (error: MobileAuthException) {
-                _currentUser.value = null
-                _authentication.value = if (error.code == MobileAuthErrorCode.UNAUTHENTICATED) {
-                    AuthenticationState.SessionExpired
-                } else {
-                    AuthenticationState.Error(error.code)
+                try {
+                    val user = mobileAuthRepository.restore()
+                    if (user == null) {
+                        _currentUser.value = null
+                        _authentication.value = AuthenticationState.SignedOut
+                    } else {
+                        setAuthenticated(user)
+                    }
+                } catch (error: MobileAuthException) {
+                    _currentUser.value = null
+                    _authentication.value = if (error.code == MobileAuthErrorCode.UNAUTHENTICATED) {
+                        AuthenticationState.SessionExpired
+                    } else {
+                        AuthenticationState.Error(error.code)
+                    }
                 }
             }
         }
@@ -135,21 +142,23 @@ class LensClickViewModel(
 
     fun logout() {
         viewModelScope.launch {
-            if (mobileAuthRepository == null) {
+            authenticationMutex.withLock {
+                if (mobileAuthRepository == null) {
+                    _currentUser.value = null
+                    _authentication.value = AuthenticationState.SignedOut
+                    return@withLock
+                }
+                _authentication.value = AuthenticationState.Loading
+                try {
+                    requireMobileAuthRepository().logout()
+                } catch (error: MobileAuthException) {
+                    _currentUser.value = null
+                    _authentication.value = AuthenticationState.Error(error.code)
+                    return@withLock
+                }
                 _currentUser.value = null
-                _authentication.value = AuthenticationState.SignedOut
-                return@launch
+                _authentication.value = AuthenticationState.LogoutCompleted
             }
-            _authentication.value = AuthenticationState.Loading
-            try {
-                requireMobileAuthRepository().logout()
-            } catch (error: MobileAuthException) {
-                _currentUser.value = null
-                _authentication.value = AuthenticationState.Error(error.code)
-                return@launch
-            }
-            _currentUser.value = null
-            _authentication.value = AuthenticationState.LogoutCompleted
         }
     }
 

@@ -17,6 +17,7 @@ import com.example.lensclickapp.data.auth.MobileSession
 import com.example.lensclickapp.data.auth.MobileUser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -100,6 +101,44 @@ class LensClickViewModelTest {
         assertEquals(AuthenticationState.Loading, viewModel.authentication.value)
         advanceUntilIdle()
         assertTrue(viewModel.authentication.value is AuthenticationState.Authenticated)
+    }
+
+    @Test
+    fun loginWaitsForRestoreBeforeReplacingTheSession() = runTest(dispatcher) {
+        val store = InMemorySessionStore().apply { writeAccessToken("restore-token") }
+        val restoreRelease = CompletableDeferred<Unit>()
+        var loginStarted = false
+        val api = object : MobileAuthApi {
+            override suspend fun login(request: MobileAuthRequest): MobileSession {
+                loginStarted = true
+                return MobileSession(
+                    user = MobileUser(2, "Conta B", "b@example.com", null, "client", true, false),
+                    accessToken = "account-b-token",
+                    expiresAt = "2099-01-01T00:00:00Z"
+                )
+            }
+
+            override suspend fun currentUser(accessToken: String): MobileUser {
+                restoreRelease.await()
+                return MobileUser(1, "Conta A", "a@example.com", null, "client", true, false)
+            }
+
+            override suspend fun logout(accessToken: String) = Unit
+        }
+        viewModel = LensClickViewModel(
+            LensClickRepository(dao),
+            mobileAuthRepository = MobileAuthRepository(api, store)
+        )
+
+        advanceUntilIdle()
+        viewModel.login("b@example.com", "Secret123")
+        advanceUntilIdle()
+        assertFalse(loginStarted)
+
+        restoreRelease.complete(Unit)
+        advanceUntilIdle()
+        assertTrue(loginStarted)
+        assertEquals("b@example.com", viewModel.currentUser.value?.email)
     }
 
     @Test
