@@ -1,7 +1,7 @@
 # Validação da primeira fatia de autenticação móvel
 
-Data da validação: 31/10/2026
-Android: `0abfa31ff8b70dfee6622de8426b28b3c8109f74`
+Data da validação: 03/11/2026
+Android: `fb397038ffbfa619d4bd93b0b8c14d1430936a26`
 Backend local: `1a0845baa3d229ead6b6f2b000a4136e6fc03b6b`
 
 ## Resultado executivo
@@ -91,7 +91,7 @@ não estava disponível no ambiente (`'wrangler' is not recognized`).
 ## Testes executados no CI
 
 O workflow Android do PR [#8](https://github.com/Renato1909/LensClickApp/pull/8)
-executou o commit `0abfa31`:
+executou a revisão que culminou no commit `fb39703`:
 
 - Build, lint e testes JVM: aprovado;
 - instrumentados API 24: aprovado;

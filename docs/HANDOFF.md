@@ -16,15 +16,17 @@
 - navegação por `Navigation Compose` nas 17 telas; identificadores/deep links externos ainda pendentes;
 - dados locais em Room para usuários, fotógrafos e orçamentos (schema v3, exportado em `app/schemas/`);
 - **Room não persiste mais senhas**: a migração 2→3 removeu a coluna `passwordHash`; os hashes SHA-256 de demonstração vivem apenas em memória (`ConcurrentHashMap` no repositório) e desaparecem ao reiniciar o processo;
-- backend real ainda não conectado;
-- conta de demonstração (`seu@email.com` / `lensclick`) segue sendo protótipo e não pode chegar à release pública como autenticação real.
+- backend real conectado na primeira fatia de autenticação móvel: login, restauração via `/me`, logout, expiração e revogação;
+- conta de demonstração não é mais usada pelo fluxo de autenticação conectado e não pode voltar à release pública;
+- as telas de cadastro, orçamentos, mensagens e perfil profissional ainda não possuem contratos móveis implementados.
 
 ## Fundação entregue (integrada em `main` via PR #4, commit `fbbd934`)
 
 - **CI Android** em `.github/workflows/android.yml`: job de build/lint/testes JVM (Ubuntu, JDK 21, SDK 36.1) e jobs instrumentados em emuladores API 24 e 36, actions fixadas por SHA, sem segredos.
 - **Testes úteis**: `LensClickRepositoryTest` (7 casos), `LensClickViewModelTest` (5 casos) com `FakeLensClickDao` em memória; `LensClickMigrationTest` instrumentado valida que a migração 2→3 descarta `passwordHash` e preserva usuários.
 - **Documentos novos**: `docs/AMBIENTE_ANDROID.md` (diagnóstico do ambiente e requisitos exatos) e `docs/MATRIZ_PARIDADE.md` (paridade app × web/API no commit `c3358c2` da plataforma, com classificação O/N/W/A).
-- **Preparação arquitetural mínima**: `LensClickViewModel` agora recebe o repositório por injeção via `Factory` (testável em JVM), e o Room exporta schema para versionamento.
+- **Preparação arquitetural mínima**: `LensClickViewModel` recebe o repositório por injeção via `Factory` (testável em JVM), e o Room exporta schema para versionamento.
+- **Primeira fatia integrada**: cliente HTTP móvel, DTOs, mapeamento de erros, armazenamento com Android Keystore, estados de autenticação e Navigation Compose foram mergeados no PR #8.
 - **Segurança local e navegação (entrega seguinte)**: senhas de formulário usam `remember`, sem estado restaurável; backup e transferência do protótipo são excluídos; NavHost substitui o estado de tela anterior, com testes instrumentados de retorno e logout. Confirmar o PR e checks desta entrega antes de considerá-la integrada.
 
 ## Limitação do ambiente local
@@ -40,12 +42,12 @@ O aplicativo deve consumir a API da plataforma LensClick e compartilhar usuário
 1. ~~Validar build, lint, testes~~ — validado via CI; validação **local** segue bloqueada pela ausência de SDK (ver `docs/AMBIENTE_ANDROID.md`).
 2. ~~Criar CI Android~~ — concluído (`.github/workflows/android.yml`); o mantenedor deve marcar os checks como obrigatórios na proteção da `main`.
 3. ~~Produzir `docs/MATRIZ_PARIDADE.md`~~ — primeira versão entregue; atualizar a cada fatia.
-4. **Definir com o repositório da plataforma o contrato móvel de autenticação revogável** — Gate C, bloqueio principal antes de qualquer conexão.
-5. Decidir com o mantenedor: `applicationId` definitivo, flavors/ambientes, política de papéis (fotógrafo contratando) e destino da UX de orçamentos/propostas que não existe na API.
-6. Definir IDs reais, domínio e políticas de link profundo; separar dados locais/remotos (cliente HTTP, serialização) após o contrato.
-7. Integrar por fatias, começando por autenticação e conta.
-8. Projetar 2FA para web e Android após threat model.
-9. Concluir domínio, revisão jurídica, validação integral e publicação por faixas.
+4. **Atualizar esta matriz de paridade** a cada nova fatia e registrar contratos, testes e limitações.
+5. Decidir com o mantenedor: `applicationId` definitivo, endpoint staging, política de papéis e destino da UX de orçamentos/propostas que não existe na API.
+6. Definir IDs reais, domínio e políticas de link profundo; integrar descoberta e perfis públicos somente após contrato.
+7. Fechar os contratos de recuperação de senha, verificação de e-mail e dados da conta.
+8. Aprovar o threat model e o ADR 002 antes de implementar 2FA.
+9. Concluir validação integral em staging/dispositivo real, revisão jurídica e publicação por faixas.
 
 ## Restrições
 
@@ -70,5 +72,4 @@ O aplicativo deve consumir a API da plataforma LensClick e compartilhar usuário
 - revisão jurídica formal;
 - aparelhos reais para validação final.
 
-**Atualizado em:** 19 de setembro de 2026.
-
+**Atualizado em:** 3 de novembro de 2026.

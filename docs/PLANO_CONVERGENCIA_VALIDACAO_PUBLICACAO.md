@@ -3,16 +3,17 @@
 > Plano operacional do aplicativo LensClick nativo em Kotlin, desenvolvido no Android Studio.
 > A plataforma web e a API permanecem no repositório `Renato1909/LensClick`.
 
-## 1. Estado confirmado
+## 1. Estado confirmado (3 de novembro de 2026)
 
 - projeto Android versionado em `Renato1909/LensClickApp`;
 - Kotlin 2.2.10, Jetpack Compose, Material 3 e Room;
 - módulo único `:app`, `minSdk 24`, `targetSdk 36` e `compileSdk 36`;
 - 17 telas navegáveis para clientes e fotógrafos;
-- autenticação, perfis, orçamentos e demais dados ainda são locais;
+- a primeira fatia de autenticação móvel está integrada, com login, restauração via `/me`, logout, expiração, revogação e armazenamento protegido;
+- perfis, orçamentos e demais dados funcionais ainda são locais;
 - pacote atual `com.example.lensclickapp`, provisório para publicação;
-- backend da plataforma ainda não está conectado;
-- testes existentes são apenas os exemplos iniciais do projeto.
+- o backend está conectado apenas à fatia de autenticação aprovada no PR Android #8;
+- os testes JVM, lint e instrumentados API 24/36 dessa fatia foram aprovados no CI;
 
 O objetivo é transformar a interface local em um cliente seguro da mesma plataforma LensClick, sem duplicar usuários, regras de negócio ou banco de produção.
 
@@ -122,13 +123,13 @@ Referências: [publicação Android](https://developer.android.com/studio/publis
 
 ## 4. Ordem executiva
 
-1. Gate A — linha de base e CI.
-2. Gate B — matriz real de paridade.
-3. Gate C — contrato móvel em conjunto com o backend.
+1. Gate A — linha de base e CI — concluído.
+2. Gate B — matriz real de paridade — em atualização contínua.
+3. Gate C — contrato móvel da primeira fatia — concluído; extensões permanecem pendentes.
 4. Gate G — domínio e revisão jurídica em paralelo.
-5. Gate D — integração por fatias.
-6. Gate E — 2FA multicliente.
-7. Gate F — validação integral.
+5. Gate D — próxima fatia: descoberta e perfis públicos.
+6. Gate E — 2FA multicliente, somente após aprovação do ADR 002.
+7. Gate F — validação integral e release controlada.
 8. Gate H — faixas de teste e lançamento gradual.
 
 ## 5. Decisões pendentes do mantenedor
@@ -140,4 +141,3 @@ Referências: [publicação Android](https://developer.android.com/studio/publis
 - presença ou não de funções administrativas no aplicativo;
 - política final de 2FA e recuperação;
 - responsável jurídico e identidade pública do controlador.
-
