@@ -6,8 +6,18 @@ import com.example.lensclickapp.data.LensClickRepository
 import com.example.lensclickapp.data.PublicPhotographerPage
 import com.example.lensclickapp.data.PublicPhotographersGateway
 import com.example.lensclickapp.data.User
+import com.example.lensclickapp.data.auth.HttpResponse
+import com.example.lensclickapp.data.auth.InMemorySessionStore
+import com.example.lensclickapp.data.auth.MobileAuthApi
+import com.example.lensclickapp.data.auth.MobileAuthException
+import com.example.lensclickapp.data.auth.MobileAuthErrorCode
+import com.example.lensclickapp.data.auth.MobileAuthRepository
+import com.example.lensclickapp.data.auth.MobileAuthRequest
+import com.example.lensclickapp.data.auth.MobileSession
+import com.example.lensclickapp.data.auth.MobileUser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -48,60 +58,87 @@ class LensClickViewModelTest {
     @Test
     fun successfulLoginExposesUserAndLogoutClearsSession() = runTest(dispatcher) {
         advanceUntilIdle()
-        var callbackUser: User? = null
-        viewModel.login("seu@email.com", "lensclick") { callbackUser = it }
+        val store = InMemorySessionStore()
+        viewModel = LensClickViewModel(LensClickRepository(dao), mobileAuthRepository = authRepository(store))
+        viewModel.login("user@example.com", "Secret123")
         advanceUntilIdle()
 
-        assertNotNull(callbackUser)
-        assertEquals(callbackUser, viewModel.currentUser.value)
+        assertNotNull(viewModel.currentUser.value)
+        assertTrue(viewModel.authentication.value is AuthenticationState.Authenticated)
         viewModel.logout()
+        advanceUntilIdle()
+        assertNull(viewModel.currentUser.value)
+        assertEquals(AuthenticationState.LogoutCompleted, viewModel.authentication.value)
+    }
+
+    @Test
+    fun failedLoginExposesDeterministicError() = runTest(dispatcher) {
+        val store = InMemorySessionStore()
+        viewModel = LensClickViewModel(LensClickRepository(dao), mobileAuthRepository = authRepository(store, 401))
+        advanceUntilIdle()
+        viewModel.login("user@example.com", "incorrect")
+        advanceUntilIdle()
+
+        assertEquals(AuthenticationState.Error(MobileAuthErrorCode.UNAUTHENTICATED), viewModel.authentication.value)
         assertNull(viewModel.currentUser.value)
     }
 
     @Test
-    fun failedLoginCannotLeaveAPreviousUserAuthenticated() = runTest(dispatcher) {
+    fun revokedSessionBecomesExpiredAndClearsToken() = runTest(dispatcher) {
+        val store = InMemorySessionStore().apply { writeAccessToken("revoked") }
+        viewModel = LensClickViewModel(LensClickRepository(dao), mobileAuthRepository = authRepository(store, 401))
         advanceUntilIdle()
-        viewModel.login("seu@email.com", "lensclick") {}
+        assertEquals(AuthenticationState.SessionExpired, viewModel.authentication.value)
+        assertNull(viewModel.currentUser.value)
+        assertNull(store.readAccessToken())
+    }
+
+    @Test
+    fun loadingIsExposedDuringRemoteAuthentication() = runTest(dispatcher) {
+        val store = InMemorySessionStore()
+        viewModel = LensClickViewModel(LensClickRepository(dao), mobileAuthRepository = authRepository(store))
+        viewModel.login("user@example.com", "Secret123")
+        assertEquals(AuthenticationState.Loading, viewModel.authentication.value)
         advanceUntilIdle()
-        var callbackInvoked = false
-        viewModel.login("seu@email.com", "incorrect-demo") {
-            callbackInvoked = true
-            assertNull(it)
+        assertTrue(viewModel.authentication.value is AuthenticationState.Authenticated)
+    }
+
+    @Test
+    fun loginWaitsForRestoreBeforeReplacingTheSession() = runTest(dispatcher) {
+        val store = InMemorySessionStore().apply { writeAccessToken("restore-token") }
+        val restoreRelease = CompletableDeferred<Unit>()
+        var loginStarted = false
+        val api = object : MobileAuthApi {
+            override suspend fun login(request: MobileAuthRequest): MobileSession {
+                loginStarted = true
+                return MobileSession(
+                    user = MobileUser(2, "Conta B", "b@example.com", null, "client", true, false),
+                    accessToken = "account-b-token",
+                    expiresAt = "2099-01-01T00:00:00Z"
+                )
+            }
+
+            override suspend fun currentUser(accessToken: String): MobileUser {
+                restoreRelease.await()
+                return MobileUser(1, "Conta A", "a@example.com", null, "client", true, false)
+            }
+
+            override suspend fun logout(accessToken: String) = Unit
         }
-        advanceUntilIdle()
+        viewModel = LensClickViewModel(
+            LensClickRepository(dao),
+            mobileAuthRepository = MobileAuthRepository(api, store)
+        )
 
-        assertTrue(callbackInvoked)
-        assertNull(viewModel.currentUser.value)
-    }
+        advanceUntilIdle()
+        viewModel.login("b@example.com", "Secret123")
+        advanceUntilIdle()
+        assertFalse(loginStarted)
 
-    @Test
-    fun registrationReportsSuccessAndDuplicateFailure() = runTest(dispatcher) {
+        restoreRelease.complete(Unit)
         advanceUntilIdle()
-        var success: Boolean? = null
-        viewModel.register("Ana", "ana@example.test", "fictional-demo") { success = it }
-        advanceUntilIdle()
-        assertEquals(true, success)
-        assertEquals("ana@example.test", viewModel.currentUser.value?.email)
-
-        viewModel.register("Outra", "ANA@EXAMPLE.TEST", "other-demo") { success = it }
-        advanceUntilIdle()
-        assertEquals(false, success)
-        assertNull(viewModel.currentUser.value)
-    }
-
-    @Test
-    fun photographerRegistrationSelectsProfessionalAccount() = runTest(dispatcher) {
-        advanceUntilIdle()
-        var success = false
-        viewModel.registerPhotographer(
-            "Ana", "ana@example.test", "fictional-demo", "Eventos", "Recife", "R$ 800", "Bio"
-        ) { success = it }
-        advanceUntilIdle()
-
-        assertTrue(success)
-        val user = viewModel.currentUser.value!!
-        assertEquals("photographer", user.role)
-        assertEquals(user.id, dao.photographerRows.value.last().userId)
+        assertTrue(loginStarted)
+        assertEquals("b@example.com", viewModel.currentUser.value?.email)
     }
 
     @Test
@@ -146,4 +183,29 @@ class LensClickViewModelTest {
         assertEquals(Triple("Recife", "wedding", 2), requested)
         assertEquals(PublicSearchState.Ready(PublicPhotographerPage(emptyList(), 2, 0, 0)), viewModel.publicSearch.value)
     }
+
+    private fun authRepository(store: InMemorySessionStore, status: Int = 200): MobileAuthRepository =
+        MobileAuthRepository(object : MobileAuthApi {
+            override suspend fun login(request: MobileAuthRequest): MobileSession {
+                if (status != 200) throw MobileAuthException(
+                    code = MobileAuthErrorCode.UNAUTHENTICATED,
+                    statusCode = status
+                )
+                return MobileSession(
+                    user = MobileUser(42, "Pessoa", "user@example.com", null, "client", true, false),
+                    accessToken = "access-token",
+                    expiresAt = "2099-01-01T00:00:00Z"
+                )
+            }
+
+            override suspend fun currentUser(accessToken: String): MobileUser {
+                if (status != 200) throw MobileAuthException(
+                    code = MobileAuthErrorCode.UNAUTHENTICATED,
+                    statusCode = status
+                )
+                return MobileUser(42, "Pessoa", "user@example.com", null, "client", true, false)
+            }
+
+            override suspend fun logout(accessToken: String) = Unit
+        }, store)
 }

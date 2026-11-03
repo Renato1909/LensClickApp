@@ -4,6 +4,16 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+val stagingApiBaseUrl = providers.gradleProperty("lensclick.stagingApiBaseUrl")
+    .orElse(providers.environmentVariable("LENSCLICK_STAGING_API_BASE_URL"))
+    .orElse("https://staging.invalid")
+    .get()
+    .trim()
+
+require(stagingApiBaseUrl.startsWith("https://")) {
+    "The staging API base URL must use HTTPS."
+}
+
 android {
     namespace = "com.example.lensclickapp"
 
@@ -27,9 +37,33 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    buildFeatures {
+        buildConfig = true
+        compose = true
+    }
+
     buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+            buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8787\"")
+            buildConfigField("String", "API_ENVIRONMENT", "\"debug\"")
+        }
+        create("staging") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".staging"
+            versionNameSuffix = "-staging"
+            buildConfigField("String", "API_BASE_URL", "\"$stagingApiBaseUrl\"")
+            buildConfigField("String", "API_ENVIRONMENT", "\"staging\"")
+        }
         release {
             isMinifyEnabled = false
+            buildConfigField(
+                "String",
+                "API_BASE_URL",
+                "\"https://lensclick.renato-aparecido-business.workers.dev\""
+            )
+            buildConfigField("String", "API_ENVIRONMENT", "\"release\"")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -39,9 +73,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
-    }
-    buildFeatures {
-        compose = true
     }
 }
 
