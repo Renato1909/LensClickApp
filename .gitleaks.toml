@@ -1,0 +1,57 @@
+title = "Guarda de segredos dos repositorios do Renato"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "supabase-secret-key"
+description = "Chave secreta ou de servico do Supabase"
+regex = '''sb_(secret|preselect|user)_[A-Za-z0-9_\-]{16,}|sbp_[a-f0-9]{32,}|eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{10,}'''
+keywords = ["sb_secret", "sbp_", "eyJhbGciOiJIUzI1NiI"]
+
+[[rules]]
+id = "cloudflare-api-token"
+description = "API token do Cloudflare"
+regex = '''v1\.[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{24,}\.[A-Za-z0-9_\-]{24,}'''
+keywords = ["v1."]
+
+[[rules]]
+id = "expo-eas-token"
+description = "Token do Expo/EAS"
+regex = '''(expo:[A-Za-z0-9_\-]{24,}|EAS_ACCESS_KEY\s*[:=]\s*['"]?[A-Za-z0-9_\-]{20,})'''
+keywords = ["expo:", "EAS_ACCESS_KEY"]
+
+[[rules]]
+id = "brevo-sendinblue-key"
+description = "Chave de API da Brevo"
+regex = '''xkeysib-[a-f0-9]{28}\-[A-Za-z0-9]{16,}'''
+keywords = ["xkeysib-"]
+
+[[rules]]
+id = "generic-credential-assignment"
+description = "Atribuicao literal de credencial com valor verossimilho"
+regex = '''(?i)(secret|api[_-]?key|access[_-]?token|password|passwd)\s*[:=]\s*['"][^'"\s]{12,}['"]'''
+keywords = ["secret", "api_key", "apikey", "access_token", "password", "passwd"]
+
+[allowlist]
+description = "Fixtures de teste, exemplos e artefatos que nao sao credenciais reais"
+paths = [
+  '''package-lock\.json$''',
+  '''\.min\.js$''',
+  '''\.pdf$''',
+  '''\.docx$''',
+  '''\.env\.example$''',
+  '''\.dev\.vars\.example$''',
+  '''\.example$''',
+  '''\.gitleaks\.toml$''',
+  '''tools/secret-scan\.mjs$''',
+  '''hooks/pre-push$''',
+]
+regexes = [
+  '''Segura123|Errada123|SenhaNova2|SenhaAntiga1|SenhaErrada1|OutraSenha3|OutraNova3|Excluir123|Password123|Portfolio123''',
+  '''CANARY|AKIAIOSFODNN7EXAMPLE''',
+  '''brevo_test_only|substitua_pela_chave|ExponentPushToken\[test\]''',
+  '''(access|refresh)-token|['"]token['"]\s*:\s*['"][Aa]?['"]''',
+  '''images\.unsplash\.com''',
+  '''example\.(com|test)''',
+]
