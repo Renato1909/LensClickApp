@@ -8,10 +8,13 @@ const HIGH_RISK = [
   { id: 'stripe-key', re: /sk_(?:live|test)_[A-Za-z0-9]{16,}/g },
   { id: 'google-api-key', re: /AIza[0-9A-Za-z_\-]{30,}/g },
   { id: 'openai-anthropic-key', re: /sk-(?:ant-|proj-)?[A-Za-z0-9_\-]{24,}/g },
-  { id: 'supabase-or-jwt-secret', re: /sb_(?:secret|preselect)_[A-Za-z0-9_\-]{16,}|eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{10,}/g },
-  { id: 'cloudflare-api-token', re: /v1\.[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{24,}\.[A-Za-z0-9_\-]{24,}/g },
-  { id: 'brevo-key', re: /xkeysib-[a-f0-9]{28}\-[A-Za-z0-9]{16,}/g },
+  { id: 'supabase-or-jwt-secret', re: /sb_(?:secret|preselect)_[A-Za-z0-9_\-]{16,}|sbp_[a-f0-9]{32,}|eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{10,}/g },
+  { id: 'cloudflare-api-token', re: /v1\.[A-Za-z0-9_\-]{16,}\.[A-Za-z0-9_\-]{16,}\.[A-Za-z0-9_\-]{16,}/g },
+  { id: 'brevo-key', re: /xkeysib-[a-f0-9]{20,40}\-[A-Za-z0-9]{12,}/g },
   { id: 'url-with-credentials', re: /[a-z][a-z0-9+.-]*:\/\/[^/\s:@'"]{2,}:[^/\s@'"&]{6,}@[a-z0-9.\-_]{3,}/gi },
+  // Forma de credencial: 16+ caracteres com maiuscula, minuscula e digito.
+  // Slugs de fixture como "change-password" e "Portfolio123" ficam fora por construcao.
+  { id: 'credential-assignment-shape', re: /(secret|api[_-]?key|apikey|access[_-]?token|auth[_-]?token|client[_-]?secret|private[_-]?key|password|passwd)\s*[:=]\s*['"](?=[^'"\s]{16,})(?=[^'"\s]*[a-z])(?=[^'"\s]*[A-Z])(?=[^'"\s]*[0-9])[^'"\s]{16,}['"]/gi },
 ];
 
 const ENTROPY_EXCLUDE = /(node_modules|package-lock|go\.sum|\.lock$|\.lock\/|composer\.lock|Cargo\.lock|poetry\.lock|Pipfile\.lock|\.min\.|\.map$|\.pdf$|\.docx$|\.svg$|\.snap$|__snapshots__|dist\/|build\/)/;
