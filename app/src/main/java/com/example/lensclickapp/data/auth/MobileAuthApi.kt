@@ -10,6 +10,10 @@ import java.net.URL
 interface MobileAuthApi {
     suspend fun login(request: MobileAuthRequest): MobileSession
 
+    suspend fun register(request: MobileRegisterRequest): MobileSession
+
+    suspend fun registerPhotographer(request: MobilePhotographerRegisterRequest): MobileSession
+
     suspend fun currentUser(accessToken: String): MobileUser
 
     suspend fun logout(accessToken: String)
@@ -83,6 +87,56 @@ class HttpMobileAuthApi(
         }
     }
 
+    override suspend fun register(request: MobileRegisterRequest): MobileSession {
+        val response = transport.execute(
+            HttpRequest(
+                method = "POST",
+                path = "/api/mobile/auth/register",
+                headers = mapOf(
+                    "Accept" to "application/json",
+                    "Content-Type" to "application/json"
+                ),
+                body = JSONObject()
+                    .put("name", request.name)
+                    .put("email", request.email)
+                    .put("password", request.password)
+                    .put("role", request.role)
+                    .put("deviceName", request.deviceName)
+                    .put("appVersion", request.appVersion)
+                    .toString()
+            )
+        )
+        ensureSuccess(response, 200, 201)
+        return parseSessionResponse(response)
+    }
+
+    override suspend fun registerPhotographer(request: MobilePhotographerRegisterRequest): MobileSession {
+        val response = transport.execute(
+            HttpRequest(
+                method = "POST",
+                path = "/api/mobile/auth/register",
+                headers = mapOf(
+                    "Accept" to "application/json",
+                    "Content-Type" to "application/json"
+                ),
+                body = JSONObject()
+                    .put("name", request.name)
+                    .put("email", request.email)
+                    .put("password", request.password)
+                    .put("role", request.role)
+                    .put("specialty", request.specialty)
+                    .put("city", request.city)
+                    .put("price", request.price)
+                    .put("bio", request.bio)
+                    .put("deviceName", request.deviceName)
+                    .put("appVersion", request.appVersion)
+                    .toString()
+            )
+        )
+        ensureSuccess(response, 200, 201)
+        return parseSessionResponse(response)
+    }
+
     override suspend fun currentUser(accessToken: String): MobileUser {
         val response = transport.execute(authenticatedRequest("GET", "/api/mobile/auth/me", accessToken))
         ensureSuccess(response, 200)
@@ -98,6 +152,20 @@ class HttpMobileAuthApi(
         ensureSuccess(response, 200)
     }
 
+    private fun parseSessionResponse(response: HttpResponse): MobileSession {
+        return try {
+            val root = JSONObject(response.body)
+            val session = root.getJSONObject("session")
+            MobileSession(
+                user = parseUser(root.getJSONObject("user")),
+                accessToken = session.getString("accessToken"),
+                expiresAt = session.getString("expiresAt")
+            )
+        } catch (error: Exception) {
+            throw MobileAuthException(MobileAuthErrorCode.MALFORMED_RESPONSE, cause = error)
+        }
+    }
+
     private fun authenticatedRequest(method: String, path: String, accessToken: String): HttpRequest =
         HttpRequest(
             method = method,
@@ -108,8 +176,8 @@ class HttpMobileAuthApi(
             )
         )
 
-    private fun ensureSuccess(response: HttpResponse, expectedStatus: Int) {
-        if (response.statusCode == expectedStatus) return
+    private fun ensureSuccess(response: HttpResponse, vararg expectedStatuses: Int) {
+        if (response.statusCode in expectedStatuses) return
         throw MobileAuthException(
             code = errorCodeFor(response.statusCode),
             statusCode = response.statusCode

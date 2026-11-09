@@ -26,6 +26,64 @@ class MobileAuthRepository(
         return session
     }
 
+    suspend fun register(
+        name: String,
+        email: String,
+        password: String,
+        deviceName: String,
+        appVersion: String
+    ): MobileSession {
+        val session = api.register(
+            MobileRegisterRequest(
+                name = name.trim(),
+                email = email.trim().lowercase(),
+                password = password,
+                role = "client",
+                deviceName = deviceName,
+                appVersion = appVersion
+            )
+        )
+        try {
+            sessionStore.writeAccessToken(session.accessToken)
+        } catch (error: MobileAuthException) {
+            throw error
+        }
+        return session
+    }
+
+    suspend fun registerPhotographer(
+        name: String,
+        email: String,
+        password: String,
+        specialty: String,
+        city: String,
+        price: String,
+        bio: String,
+        deviceName: String,
+        appVersion: String
+    ): MobileSession {
+        val session = api.registerPhotographer(
+            MobilePhotographerRegisterRequest(
+                name = name.trim(),
+                email = email.trim().lowercase(),
+                password = password,
+                specialty = specialty.trim(),
+                city = city.trim(),
+                price = price.trim(),
+                bio = bio.trim(),
+                role = "photographer",
+                deviceName = deviceName,
+                appVersion = appVersion
+            )
+        )
+        try {
+            sessionStore.writeAccessToken(session.accessToken)
+        } catch (error: MobileAuthException) {
+            throw error
+        }
+        return session
+    }
+
     suspend fun restore(): MobileUser? {
         val accessToken = sessionStore.readAccessToken() ?: return null
         return try {
