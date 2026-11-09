@@ -13,6 +13,8 @@ import com.example.lensclickapp.data.auth.MobileAuthException
 import com.example.lensclickapp.data.auth.MobileAuthErrorCode
 import com.example.lensclickapp.data.auth.MobileAuthRepository
 import com.example.lensclickapp.data.auth.MobileAuthRequest
+import com.example.lensclickapp.data.auth.MobilePhotographerRegisterRequest
+import com.example.lensclickapp.data.auth.MobileRegisterRequest
 import com.example.lensclickapp.data.auth.MobileSession
 import com.example.lensclickapp.data.auth.MobileUser
 import kotlinx.coroutines.Dispatchers
@@ -123,6 +125,10 @@ class LensClickViewModelTest {
                 return MobileUser(1, "Conta A", "a@example.com", null, "client", true, false)
             }
 
+            override suspend fun register(request: MobileRegisterRequest): MobileSession = error("Unused")
+
+            override suspend fun registerPhotographer(request: MobilePhotographerRegisterRequest): MobileSession = error("Unused")
+
             override suspend fun logout(accessToken: String) = Unit
         }
         viewModel = LensClickViewModel(
@@ -184,6 +190,68 @@ class LensClickViewModelTest {
         assertEquals(PublicSearchState.Ready(PublicPhotographerPage(emptyList(), 2, 0, 0)), viewModel.publicSearch.value)
     }
 
+    @Test
+    fun successfulRegisterUpdatesUserAndInvokesCallback() = runTest(dispatcher) {
+        val store = InMemorySessionStore()
+        viewModel = LensClickViewModel(LensClickRepository(dao), mobileAuthRepository = authRepository(store))
+        advanceUntilIdle()
+
+        var doneCalled = false
+        var success = false
+        viewModel.register("Novo Usuario", "novo@example.com", "Secret123") { result ->
+            doneCalled = true
+            success = result
+        }
+        advanceUntilIdle()
+
+        assertTrue(doneCalled)
+        assertTrue(success)
+        assertNotNull(viewModel.currentUser.value)
+        assertEquals("novo@example.com", viewModel.currentUser.value?.email)
+        assertTrue(viewModel.authentication.value is AuthenticationState.Authenticated)
+    }
+
+    @Test
+    fun successfulPhotographerRegisterUpdatesUserWithRole() = runTest(dispatcher) {
+        val store = InMemorySessionStore()
+        viewModel = LensClickViewModel(LensClickRepository(dao), mobileAuthRepository = authRepository(store))
+        advanceUntilIdle()
+
+        var doneCalled = false
+        var success = false
+        viewModel.registerPhotographer("Pro Foto", "pro@example.com", "Secret123", "Casamento", "Recife", "1000", "Bio") { result ->
+            doneCalled = true
+            success = result
+        }
+        advanceUntilIdle()
+
+        assertTrue(doneCalled)
+        assertTrue(success)
+        assertNotNull(viewModel.currentUser.value)
+        assertEquals("photographer", viewModel.currentUser.value?.role)
+        assertTrue(viewModel.authentication.value is AuthenticationState.Authenticated)
+    }
+
+    @Test
+    fun failedRegisterExposesErrorAndReturnsFalseInCallback() = runTest(dispatcher) {
+        val store = InMemorySessionStore()
+        viewModel = LensClickViewModel(LensClickRepository(dao), mobileAuthRepository = authRepository(store, status = 409))
+        advanceUntilIdle()
+
+        var doneCalled = false
+        var success = true
+        viewModel.register("Existente", "existente@example.com", "Secret123") { result ->
+            doneCalled = true
+            success = result
+        }
+        advanceUntilIdle()
+
+        assertTrue(doneCalled)
+        assertFalse(success)
+        assertNull(viewModel.currentUser.value)
+        assertEquals(AuthenticationState.Error(MobileAuthErrorCode.CONFLICT), viewModel.authentication.value)
+    }
+
     private fun authRepository(store: InMemorySessionStore, status: Int = 200): MobileAuthRepository =
         MobileAuthRepository(object : MobileAuthApi {
             override suspend fun login(request: MobileAuthRequest): MobileSession {
@@ -194,6 +262,30 @@ class LensClickViewModelTest {
                 return MobileSession(
                     user = MobileUser(42, "Pessoa", "user@example.com", null, "client", true, false),
                     accessToken = "access-token",
+                    expiresAt = "2099-01-01T00:00:00Z"
+                )
+            }
+
+            override suspend fun register(request: MobileRegisterRequest): MobileSession {
+                if (status != 200) throw MobileAuthException(
+                    code = if (status == 409) MobileAuthErrorCode.CONFLICT else MobileAuthErrorCode.INVALID_INPUT,
+                    statusCode = status
+                )
+                return MobileSession(
+                    user = MobileUser(42, request.name, request.email, null, request.role, true, false),
+                    accessToken = "access-token",
+                    expiresAt = "2099-01-01T00:00:00Z"
+                )
+            }
+
+            override suspend fun registerPhotographer(request: MobilePhotographerRegisterRequest): MobileSession {
+                if (status != 200) throw MobileAuthException(
+                    code = if (status == 409) MobileAuthErrorCode.CONFLICT else MobileAuthErrorCode.INVALID_INPUT,
+                    statusCode = status
+                )
+                return MobileSession(
+                    user = MobileUser(99, request.name, request.email, null, request.role, true, false),
+                    accessToken = "pro-access-token",
                     expiresAt = "2099-01-01T00:00:00Z"
                 )
             }

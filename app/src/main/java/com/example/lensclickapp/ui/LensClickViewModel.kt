@@ -176,12 +176,32 @@ class LensClickViewModel(
     private fun requireMobileAuthRepository(): MobileAuthRepository =
         mobileAuthRepository ?: error("Mobile authentication repository is required")
 
-    @Suppress("UNUSED_PARAMETER")
     fun register(name: String, email: String, password: String, result: (Boolean) -> Unit) {
-        result(false)
+        viewModelScope.launch {
+            authenticationMutex.withLock {
+                if (mobileAuthRepository == null) {
+                    result(false)
+                    return@withLock
+                }
+                _authentication.value = AuthenticationState.Loading
+                try {
+                    val session = requireMobileAuthRepository().register(
+                        name = name,
+                        email = email,
+                        password = password,
+                        deviceName = "Android",
+                        appVersion = BuildConfig.VERSION_NAME
+                    )
+                    setAuthenticated(session.user)
+                    result(true)
+                } catch (error: MobileAuthException) {
+                    _authentication.value = AuthenticationState.Error(error.code)
+                    result(false)
+                }
+            }
+        }
     }
 
-    @Suppress("UNUSED_PARAMETER")
     fun registerPhotographer(
         name: String,
         email: String,
@@ -192,7 +212,33 @@ class LensClickViewModel(
         bio: String,
         result: (Boolean) -> Unit
     ) {
-        result(false)
+        viewModelScope.launch {
+            authenticationMutex.withLock {
+                if (mobileAuthRepository == null) {
+                    result(false)
+                    return@withLock
+                }
+                _authentication.value = AuthenticationState.Loading
+                try {
+                    val session = requireMobileAuthRepository().registerPhotographer(
+                        name = name,
+                        email = email,
+                        password = password,
+                        specialty = specialty,
+                        city = city,
+                        price = price,
+                        bio = bio,
+                        deviceName = "Android",
+                        appVersion = BuildConfig.VERSION_NAME
+                    )
+                    setAuthenticated(session.user)
+                    result(true)
+                } catch (error: MobileAuthException) {
+                    _authentication.value = AuthenticationState.Error(error.code)
+                    result(false)
+                }
+            }
+        }
     }
 
     fun createBudget(
