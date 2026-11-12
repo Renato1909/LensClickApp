@@ -15,7 +15,7 @@ require(stagingApiBaseUrl.startsWith("https://")) {
 }
 
 android {
-    namespace = "com.example.lensclickapp"
+    namespace = "com.lensclick.app"
 
     ksp {
         arg("room.schemaLocation", "$projectDir/schemas")
@@ -28,7 +28,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.lensclickapp"
+        applicationId = "com.lensclick.app"
         minSdk = 24
         targetSdk = 36
         versionCode = 1

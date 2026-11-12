@@ -11,7 +11,7 @@
 - Android Studio, módulo único `:app`;
 - Kotlin 2.2.10, AGP 9.1.1 e Gradle 9.3.1;
 - `compileSdk`/`targetSdk` 36 e `minSdk` 24;
-- `applicationId` atual: `com.example.lensclickapp`;
+- `applicationId` atual: `com.lensclick.app`;
 - 17 telas navegáveis em uma única Activity;
 - navegação por `Navigation Compose` nas 17 telas; identificadores/deep links externos ainda pendentes;
 - dados locais em Room para usuários, fotógrafos e orçamentos (schema v3, exportado em `app/schemas/`);
@@ -43,7 +43,7 @@ O aplicativo deve consumir a API da plataforma LensClick e compartilhar usuário
 2. ~~Criar CI Android~~ — concluído (`.github/workflows/android.yml`); o mantenedor deve marcar os checks como obrigatórios na proteção da `main`.
 3. ~~Produzir `docs/MATRIZ_PARIDADE.md`~~ — primeira versão entregue; atualizar a cada fatia.
 4. **Atualizar esta matriz de paridade** a cada nova fatia e registrar contratos, testes e limitações.
-5. Decidir com o mantenedor: `applicationId` definitivo, endpoint staging, política de papéis e destino da UX de orçamentos/propostas que não existe na API.
+5. Confirmar com o mantenedor o pacote `com.lensclick.app` na conta Google Play, além do endpoint staging, política de papéis e destino da UX de orçamentos/propostas que não existe na API.
 6. Definir IDs reais, domínio e políticas de link profundo; integrar descoberta e perfis públicos somente após contrato.
 7. Fechar os contratos de recuperação de senha, verificação de e-mail e dados da conta.
 8. Aprovar o threat model e o ADR 002 antes de implementar 2FA.
@@ -66,7 +66,7 @@ O aplicativo deve consumir a API da plataforma LensClick e compartilhar usuário
 
 ## Dependências externas reais
 
-- decisão do pacote definitivo e da conta Google Play;
+- confirmação do pacote `com.lensclick.app` e da conta Google Play;
 - contrato móvel implementado no backend `LensClick`;
 - domínio próprio e e-mail autenticado;
 - revisão jurídica formal;

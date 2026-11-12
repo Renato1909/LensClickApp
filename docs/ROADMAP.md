@@ -15,7 +15,7 @@ modo profissional ainda são protótipos locais e não representam a fonte de ve
 - [x] Criar CI para build, lint e testes (`.github/workflows/android.yml`: build debug, testes JVM, lint, instrumentados em emuladores API 24/36).
 - [x] Remover credencial do Room (migração 2→3 descarta `passwordHash`; hashes de demonstração vivem apenas em memória no processo).
 - [ ] Validar build limpo, lint, testes e instalação em emulador **local** (bloqueado: esta máquina não tem Android SDK; ver `docs/AMBIENTE_ANDROID.md`). A validação ocorre no CI.
-- [ ] Definir pacote definitivo, flavors/ambientes e versionamento (depende do mantenedor).
+- [x] Definir pacote base `com.lensclick.app`, variantes `com.lensclick.app.debug`/`.staging` e separação de ambientes; versionamento permanece pendente.
 - [ ] Separar melhor domínio, dados locais e dados remotos.
 - [x] Adotar Navigation Compose para as 17 telas, com pilha de retorno e testes de navegação.
 - [ ] Definir identificadores de destino e domínio antes de adicionar deep links.
@@ -68,7 +68,7 @@ modo profissional ainda são protótipos locais e não representam a fonte de ve
 
 ## Fase 7 — Google Play
 
-- [ ] Conta de desenvolvedor e pacote definitivo.
+- [ ] Conta de desenvolvedor e confirmação do pacote `com.lensclick.app` no Play Console.
 - [ ] Upload key protegida e Play App Signing.
 - [ ] AAB de release e materiais PT-BR/EN-US.
 - [ ] Faixa interna.

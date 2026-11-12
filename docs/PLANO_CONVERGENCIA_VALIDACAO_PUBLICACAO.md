@@ -11,7 +11,7 @@
 - 17 telas navegáveis para clientes e fotógrafos;
 - a primeira fatia de autenticação móvel está integrada, com login, restauração via `/me`, logout, expiração, revogação e armazenamento protegido;
 - perfis, orçamentos e demais dados funcionais ainda são locais;
-- pacote atual `com.example.lensclickapp`, provisório para publicação;
+- pacote base definido como `com.lensclick.app`, com variantes isoladas `com.lensclick.app.debug` e `com.lensclick.app.staging`;
 - o backend está conectado apenas à fatia de autenticação aprovada no PR Android #8;
 - os testes JVM, lint e instrumentados API 24/36 dessa fatia foram aprovados no CI;
 
@@ -32,7 +32,7 @@ O objetivo é transformar a interface local em um cliente seguro da mesma plataf
 
 - confirmar build limpo, testes e instalação de debug;
 - inventariar arquitetura, entidades, telas, recursos e débitos;
-- definir o `applicationId` definitivo antes do primeiro envio à Google Play;
+- manter o `applicationId` base `com.lensclick.app` e suas variantes separados antes do primeiro envio à Google Play;
 - decidir ambientes de API, configuração de debug/release e política de versões;
 - adicionar CI para build, lint e testes Android.
 
@@ -111,7 +111,7 @@ O aplicativo não deve inventar domínio, identidade legal ou respostas de priva
 
 ### Gate H — Google Play
 
-1. definir conta de desenvolvedor, responsáveis e pacote definitivo;
+1. definir conta de desenvolvedor, responsáveis e confirmar o pacote base `com.lensclick.app`;
 2. proteger a upload key e ativar Play App Signing;
 3. gerar AAB de release e materiais da loja;
 4. preencher App content e Data safety a partir da auditoria real;
@@ -134,7 +134,7 @@ Referências: [publicação Android](https://developer.android.com/studio/publis
 
 ## 5. Decisões pendentes do mantenedor
 
-- `applicationId` definitivo;
+- conta Google Play e confirmação do pacote base `com.lensclick.app`;
 - domínio e titularidade;
 - conta Google Play pessoal ou de organização;
 - escopo obrigatório do primeiro lançamento;

@@ -51,13 +51,13 @@ O módulo `:app` gera três variantes controladas:
 
 | Variante | `applicationId` | Base URL | Transporte |
 |---|---|---|---|
-| `debug` | `com.example.lensclickapp.debug` | `http://10.0.2.2:8787` | Worker local no host do emulador; HTTP claro permitido apenas no manifest debug |
-| `staging` | `com.example.lensclickapp.staging` | `LENSCLICK_STAGING_API_BASE_URL` ou propriedade Gradle `lensclick.stagingApiBaseUrl` | HTTPS obrigatório; sem valor real versionado |
-| `release` | `com.example.lensclickapp` | `https://lensclick.renato-aparecido-business.workers.dev` | HTTPS; produção somente na variante release |
+| `debug` | `com.lensclick.app.debug` | `http://10.0.2.2:8787` | Worker local no host do emulador; HTTP claro permitido apenas no manifest debug |
+| `staging` | `com.lensclick.app.staging` | `LENSCLICK_STAGING_API_BASE_URL` ou propriedade Gradle `lensclick.stagingApiBaseUrl` | HTTPS obrigatório; sem valor real versionado |
+| `release` | `com.lensclick.app` | `https://lensclick.renato-aparecido-business.workers.dev` | HTTPS; produção somente na variante release |
 
 O endpoint de staging deve ser fornecido pelo ambiente de CI ou pelo mantenedor, nunca gravado no Git. A ausência de configuração usa `https://staging.invalid`, que não é um endpoint operacional e impede uma publicação acidental; o valor real deve ser informado antes de gerar um APK staging utilizável.
 
-O `applicationId` atual de release é provisório. Antes da primeira publicação, o mantenedor precisa decidir o identificador definitivo e a conta Google Play; depois disso, o pacote não deve ser alterado. O sufixo `.debug` impede a instalação acidental sobre a aplicação de produção, e o sufixo `.staging` mantém a instalação separada.
+O identificador base definido para release é `com.lensclick.app`; falta apenas confirmá-lo na conta Google Play antes da primeira publicação. Depois disso, o pacote não deve ser alterado. Os sufixos `.debug` e `.staging` impedem instalação acidental sobre a aplicação de produção e mantêm os ambientes separados.
 
 O debug aponta somente para o Worker local do emulador (`10.0.2.2`). Release não aceita endpoints definidos por `local.properties`, propriedades Gradle ou variáveis de ambiente. Nenhum token, credencial ou URL privada participa da configuração versionada.
 

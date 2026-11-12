@@ -14,7 +14,7 @@ Este documento separa trabalho integrado, trabalho documentado e dependências e
 | E — Autenticação em duas etapas | Não iniciado | 20% | ADR 002 proposto; faltam contrato 200/202, desafio, verificação móvel, migração, auditoria, rollback e aprovação formal. |
 | F — Validação integral e publicação | Em andamento | 60% | CI JVM/lint/instrumentados aprovado; faltam staging operacional, dispositivo físico, validação manual de acessibilidade, AAB assinado e smoke de release. |
 | G — Domínio, e-mail e jurídico | Não iniciado | 10% | Dependências identificadas no plano; faltam domínio, identidade legal, textos aprovados e Data safety baseada em auditoria final. |
-| H — Google Play | Não iniciado | 5% | Ainda faltam pacote definitivo, conta, Play App Signing, materiais da loja e faixas de teste. |
+| H — Google Play | Não iniciado | 5% | Ainda faltam conta, confirmação do pacote `com.lensclick.app` no Play Console, Play App Signing, materiais da loja e faixas de teste. |
 
 ## O que pode ser feito agora
 
@@ -29,7 +29,7 @@ Este documento separa trabalho integrado, trabalho documentado e dependências e
 
 ### Dependente de aprovação ou ambiente
 
-- definir o `applicationId` definitivo;
+- confirmar o pacote `com.lensclick.app` na conta Google Play;
 - fornecer endpoint staging operacional;
 - aprovar contratos de cadastro, recuperação, verificação de e-mail e conta;
 - decidir se orçamentos, propostas, agenda e favoritos entram no primeiro lançamento;

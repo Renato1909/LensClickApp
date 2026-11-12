@@ -1,0 +1,105 @@
+package com.lensclick.app.data.auth
+
+class MobileAuthRepository(
+    private val api: MobileAuthApi,
+    private val sessionStore: SessionStore
+) {
+    suspend fun login(
+        email: String,
+        password: String,
+        deviceName: String,
+        appVersion: String
+    ): MobileSession {
+        val session = api.login(
+            MobileAuthRequest(
+                email = email.trim().lowercase(),
+                password = password,
+                deviceName = deviceName,
+                appVersion = appVersion
+            )
+        )
+        try {
+            sessionStore.writeAccessToken(session.accessToken)
+        } catch (error: MobileAuthException) {
+            throw error
+        }
+        return session
+    }
+
+    suspend fun register(
+        name: String,
+        email: String,
+        password: String,
+        deviceName: String,
+        appVersion: String
+    ): MobileSession {
+        val session = api.register(
+            MobileRegisterRequest(
+                name = name.trim(),
+                email = email.trim().lowercase(),
+                password = password,
+                role = "client",
+                deviceName = deviceName,
+                appVersion = appVersion
+            )
+        )
+        try {
+            sessionStore.writeAccessToken(session.accessToken)
+        } catch (error: MobileAuthException) {
+            throw error
+        }
+        return session
+    }
+
+    suspend fun registerPhotographer(
+        name: String,
+        email: String,
+        password: String,
+        specialty: String,
+        city: String,
+        price: String,
+        bio: String,
+        deviceName: String,
+        appVersion: String
+    ): MobileSession {
+        val session = api.registerPhotographer(
+            MobilePhotographerRegisterRequest(
+                name = name.trim(),
+                email = email.trim().lowercase(),
+                password = password,
+                specialty = specialty.trim(),
+                city = city.trim(),
+                price = price.trim(),
+                bio = bio.trim(),
+                role = "photographer",
+                deviceName = deviceName,
+                appVersion = appVersion
+            )
+        )
+        try {
+            sessionStore.writeAccessToken(session.accessToken)
+        } catch (error: MobileAuthException) {
+            throw error
+        }
+        return session
+    }
+
+    suspend fun restore(): MobileUser? {
+        val accessToken = sessionStore.readAccessToken() ?: return null
+        return try {
+            api.currentUser(accessToken)
+        } catch (error: MobileAuthException) {
+            if (error.code == MobileAuthErrorCode.UNAUTHENTICATED) sessionStore.clear()
+            throw error
+        }
+    }
+
+    suspend fun logout() {
+        val accessToken = sessionStore.readAccessToken()
+        try {
+            if (accessToken != null) api.logout(accessToken)
+        } finally {
+            sessionStore.clear()
+        }
+    }
+}

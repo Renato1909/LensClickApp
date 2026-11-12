@@ -87,7 +87,7 @@ A navegação usa `Navigation Compose` em uma única `Activity`. Telas de detalh
 | JVM | Toolchain 21 (provisionado via Foojay) |
 | Dados | [Room](https://developer.android.com/training/data-storage/room) 2.8.5 (`photographers`, `budgets`, `users`) + `Flow` |
 | Arquitetura | `:app` único, camadas `ui/` → `ViewModel` → `Repository` → `DAO` |
-| Empacotamento | `com.example.lensclickapp` · versão 1.0 |
+| Empacotamento | `com.lensclick.app` · versão 1.0 |
 
 ```
 UI (Compose)  ──▶  LensClickViewModel  ──▶  LensClickRepository  ──▶  LensClickDao  ──▶  Room
@@ -144,7 +144,7 @@ LensClickApp/
 │   └── src/
 │       ├── main/
 │       │   ├── AndroidManifest.xml
-│       │   ├── java/com/example/lensclickapp/
+│       │   ├── java/com/lensclick/app/
 │       │   │   ├── LensClickApplication.kt   # Application + repositório
 │       │   │   ├── MainActivity.kt           # Activity única (edge-to-edge + tema)
 │       │   │   ├── data/
