@@ -4,7 +4,10 @@
 
 ## Estado atual
 
-O aplicativo possui 17 telas em Jetpack Compose e persiste dados locais com Room. A experiência é navegável, mas ainda não consome o backend real. Autenticação, usuários, fotógrafos e orçamentos locais servem como protótipo e não representam a fonte de verdade de produção.
+O aplicativo possui 17 telas em Jetpack Compose e persiste dados locais com Room. A autenticação
+móvel e a descoberta/perfil público de fotógrafos já consomem a API da plataforma; usuários,
+sessões e perfis públicos remotos não são duplicados no Room. Orçamentos, conversas e partes do
+modo profissional ainda são protótipos locais e não representam a fonte de verdade de produção.
 
 ## Fase 1 — fundação Android
 
@@ -22,20 +25,20 @@ O aplicativo possui 17 telas em Jetpack Compose e persiste dados locais com Room
 
 - [x] Criar `docs/MATRIZ_PARIDADE.md` comparando app, web e API (primeira versão, baseada no commit `c3358c2` da plataforma).
 - [ ] Aprovar o escopo do primeiro lançamento.
-- [ ] Definir autenticação móvel revogável com o backend.
-- [ ] Definir cliente HTTP, serialização, erros e compatibilidade da API.
+- [x] Definir autenticação móvel revogável com o backend (primeira fatia integrada).
+- [x] Definir cliente HTTP, serialização, erros e compatibilidade da API para autenticação e descoberta/perfil público.
 - [ ] Definir cache/offline sem duplicar regras de negócio.
 
 ## Fase 3 — integração funcional
 
-- [ ] Autenticação, sessão, verificação de e-mail e conta.
-- [ ] Descoberta e perfis públicos.
-- [ ] Perfil profissional e portfólio.
+- [x] Autenticação, sessão e cadastro móvel (verificação de e-mail e conta ainda pendentes).
+- [x] Descoberta, perfil público e leitura do portfólio público.
+- [ ] Perfil profissional e edição/envio de portfólio.
 - [ ] Orçamentos e propostas.
 - [ ] Avaliações.
 - [ ] Conversas, mensagens e notificações.
 - [ ] Exportação e exclusão LGPD.
-- [ ] Remover credenciais e autenticação locais de demonstração da release.
+- [x] Remover credenciais e autenticação locais de demonstração da release; a referência histórica foi retirada do README.
 
 ## Fase 4 — segurança e 2FA
 
@@ -75,4 +78,3 @@ O aplicativo possui 17 telas em Jetpack Compose e persiste dados locais com Room
 ## Próxima entrega
 
 Revisar o contrato móvel proposto com a plataforma, definir pacote e ambientes e separar interfaces de dados locais/remotos. Nenhuma conexão com produção deve começar antes da aprovação e implementação do contrato móvel.
-

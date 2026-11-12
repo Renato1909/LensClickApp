@@ -10,6 +10,8 @@ import com.example.lensclickapp.LensClickApplication
 import com.example.lensclickapp.data.LensClickRepository
 import com.example.lensclickapp.data.HttpPublicPhotographersGateway
 import com.example.lensclickapp.data.PublicPhotographerPage
+import com.example.lensclickapp.data.PublicPhotographerProfile
+import com.example.lensclickapp.data.PublicPhotographerNotFoundException
 import com.example.lensclickapp.data.PublicPhotographersGateway
 import com.example.lensclickapp.data.User
 import com.example.lensclickapp.data.auth.MobileAuthErrorCode
@@ -28,7 +30,15 @@ import kotlinx.coroutines.sync.withLock
 sealed interface PublicSearchState {
     data object Loading : PublicSearchState
     data object Error : PublicSearchState
+    data class Empty(val page: PublicPhotographerPage) : PublicSearchState
     data class Ready(val page: PublicPhotographerPage) : PublicSearchState
+}
+
+sealed interface PublicProfileState {
+    data object Loading : PublicProfileState
+    data object Error : PublicProfileState
+    data object NotFoundOrUnpublished : PublicProfileState
+    data class Ready(val profile: PublicPhotographerProfile) : PublicProfileState
 }
 
 sealed interface AuthenticationState {
@@ -59,7 +69,10 @@ class LensClickViewModel(
     val authentication: StateFlow<AuthenticationState> = _authentication.asStateFlow()
     private val _publicSearch = MutableStateFlow<PublicSearchState>(PublicSearchState.Loading)
     val publicSearch: StateFlow<PublicSearchState> = _publicSearch.asStateFlow()
+    private val _publicProfile = MutableStateFlow<PublicProfileState>(PublicProfileState.Loading)
+    val publicProfile: StateFlow<PublicProfileState> = _publicProfile.asStateFlow()
     private var publicSearchJob: kotlinx.coroutines.Job? = null
+    private var publicProfileJob: kotlinx.coroutines.Job? = null
     private val authenticationMutex = Mutex()
 
     fun searchPublicPhotographers(city: String, specialty: String?, page: Int) {
@@ -67,11 +80,35 @@ class LensClickViewModel(
         publicSearchJob = viewModelScope.launch {
             _publicSearch.value = PublicSearchState.Loading
             _publicSearch.value = try {
-                PublicSearchState.Ready(publicPhotographers.list(city, specialty, page))
+                publicPhotographers.list(city, specialty, page).let {
+                    if (it.photographers.isEmpty()) PublicSearchState.Empty(it) else PublicSearchState.Ready(it)
+                }
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
                 PublicSearchState.Error
+            }
+        }
+    }
+
+    fun loadPublicPhotographer(slug: String) {
+        publicProfileJob?.cancel()
+        publicProfileJob = viewModelScope.launch {
+            _publicProfile.value = PublicProfileState.Loading
+            _publicProfile.value = try {
+                publicPhotographers.get(slug).let { profile ->
+                    if (profile.isPublished) {
+                        PublicProfileState.Ready(profile)
+                    } else {
+                        PublicProfileState.NotFoundOrUnpublished
+                    }
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: PublicPhotographerNotFoundException) {
+                PublicProfileState.NotFoundOrUnpublished
+            } catch (_: Exception) {
+                PublicProfileState.Error
             }
         }
     }

@@ -8,9 +8,9 @@ Este documento separa trabalho integrado, trabalho documentado e dependências e
 | Gate | Estado | Estimativa | Evidência principal |
 |---|---|---:|---|
 | A — Fundação Android | Fechado | 100% | Gradle, JDK 21, SDK 36, CI, lint e testes base integrados. |
-| B — Matriz de paridade | Em andamento | 85% | [`MATRIZ_PARIDADE.md`](./MATRIZ_PARIDADE.md) atualizado após a autenticação móvel; faltam decisões de escopo e contratos das próximas fatias. |
+| B — Matriz de paridade | Em andamento | 90% | [`MATRIZ_PARIDADE.md`](./MATRIZ_PARIDADE.md) atualizado após autenticação móvel e descoberta/perfil público; faltam decisões de escopo e contratos das próximas fatias. |
 | C — Contrato móvel seguro | Fechado para a primeira fatia | 100% | PR backend [#148](https://github.com/Renato1909/LensClick/pull/148), contrato e testes de login, `/me`, logout e revogação. Refresh rotativo e `expiresAt` em `/me` continuam pendências do ADR 001. |
-| D — Primeira fatia vertical | Fechado para autenticação | 100% | PR Android [#8](https://github.com/Renato1909/LensClickApp/pull/8), login, restauração, conta, logout, expiração, revogação, Keystore, Compose e acessibilidade básica. |
+| D — Primeira fatia vertical | Fechado para autenticação e descoberta pública | 100% | Login, cadastro, restauração, logout, descoberta por filtros/paginação, perfil por slug, portfólio público, estados de vazio/erro/404 e testes JVM. |
 | E — Autenticação em duas etapas | Não iniciado | 20% | ADR 002 proposto; faltam contrato 200/202, desafio, verificação móvel, migração, auditoria, rollback e aprovação formal. |
 | F — Validação integral e publicação | Em andamento | 60% | CI JVM/lint/instrumentados aprovado; faltam staging operacional, dispositivo físico, validação manual de acessibilidade, AAB assinado e smoke de release. |
 | G — Domínio, e-mail e jurídico | Não iniciado | 10% | Dependências identificadas no plano; faltam domínio, identidade legal, textos aprovados e Data safety baseada em auditoria final. |
@@ -23,8 +23,8 @@ Este documento separa trabalho integrado, trabalho documentado e dependências e
 - manter a matriz de paridade atualizada;
 - concluir testes JVM de mapeamento, sessão e ViewModel;
 - adicionar testes instrumentados de restauração, logout, troca de conta e estados de rede;
-- preparar telas e repositórios para descoberta e perfil público sem inventar endpoints;
-- revisar textos do README, handoff e validação para não descrever a autenticação como local;
+- preparar telas e repositórios para perfil profissional e portfólio autenticados sem inventar endpoints;
+- revisar textos do README, handoff e validação para não descrever a autenticação ou a descoberta pública como locais;
 - manter builds de debug, staging e release separados e sem segredos.
 
 ### Dependente de aprovação ou ambiente
