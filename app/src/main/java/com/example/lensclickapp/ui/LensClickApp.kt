@@ -68,6 +68,7 @@ private val Muted = Color(0xFF716D64)
 private val Gold = Color(0xFF9A6A24)
 
 private enum class Screen { Onboarding, AccountType, Login, SignUp, PhotographerSignUp, Home, Search, Photographer, Quote, Budgets, Conversations, Chat, Account, ProDashboard, ProRequests, ProAgenda, ProProfile }
+private const val PhotographerRoute = "Photographer/{slug}"
 
 @Composable
 fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickViewModel.Factory)) {
@@ -142,8 +143,11 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
                 onLogin = { go(Screen.Login) }
             ) }
             composable(Screen.Home.name) { HomeScreen(photographers, onNavigate = ::go) }
-            composable(Screen.Search.name) { SearchScreen(viewModel, guest = currentUser == null, onNavigate = ::go) }
-            composable(Screen.Photographer.name) { PhotographerScreen(onBack = { navController.popBackStack() }, onQuote = { go(Screen.Quote) }) }
+            composable(Screen.Search.name) { SearchScreen(viewModel, guest = currentUser == null, onNavigate = ::go, onPhotographer = { slug -> navController.navigate("Photographer/$slug") }) }
+            composable(PhotographerRoute) { entry ->
+                val slug = entry.arguments?.getString("slug").orEmpty()
+                PhotographerScreen(viewModel, slug, onBack = { navController.popBackStack() }, onQuote = { go(Screen.Quote) })
+            }
             composable(Screen.Quote.name) { QuoteScreen(
                 onBack = { navController.popBackStack() },
                 onSent = { type, date, place, duration, description, details ->
@@ -518,7 +522,7 @@ private fun HomeScreen(photographers: List<Photographer>, onNavigate: (Screen) -
         item { SectionTitle("Categorias") { onNavigate(Screen.Search) } }
         item { CategoryRow() }
         item { SectionTitle("Em destaque") { onNavigate(Screen.Search) } }
-        item { PhotographerCards(photographers, onOpen = { onNavigate(Screen.Photographer) }) }
+        item { PhotographerCards(photographers, onOpen = { onNavigate(Screen.Search) }) }
         item { SectionTitle("Portfólios em alta") { onNavigate(Screen.Search) } }
         item { PortfolioStrip() }
     }
@@ -558,7 +562,7 @@ private fun photographerImage(photographer: Photographer): Int = when {
 }
 
 @Composable
-private fun SearchScreen(viewModel: LensClickViewModel, guest: Boolean, onNavigate: (Screen) -> Unit) = AppPage(Screen.Search, onNavigate, guest) {
+private fun SearchScreen(viewModel: LensClickViewModel, guest: Boolean, onNavigate: (Screen) -> Unit, onPhotographer: (String) -> Unit) = AppPage(Screen.Search, onNavigate, guest) {
     var city by rememberSaveable { mutableStateOf("") }
     var selectedFilter by rememberSaveable { mutableStateOf(0) }
     var page by rememberSaveable { mutableIntStateOf(1) }
@@ -581,11 +585,17 @@ private fun SearchScreen(viewModel: LensClickViewModel, guest: Boolean, onNaviga
                 Text("Não foi possível carregar os fotógrafos.", color = Ink)
                 TextButton(onClick = { retry++ }) { Text("Tentar novamente", color = Ink) }
             }
+            is PublicSearchState.Empty -> {
+                Text("0 profissionais", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp))
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Nenhum fotógrafo publicado encontrado. Tente outra cidade ou especialidade.", color = Muted, modifier = Modifier.padding(24.dp))
+                }
+            }
             is PublicSearchState.Ready -> {
                 Text("${result.page.total} ${if (result.page.total == 1) "profissional" else "profissionais"}", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp))
                 LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 20.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (result.page.photographers.isEmpty()) item { Text("Nenhum fotógrafo publicado encontrado. Tente outra cidade ou especialidade.", color = Muted, modifier = Modifier.padding(vertical = 40.dp)) }
-                    items(result.page.photographers, key = { it.slug }) { photographer -> PublicPhotographerRow(photographer) }
+                    items(result.page.photographers, key = { it.slug }) { photographer -> PublicPhotographerRow(photographer, onClick = { onPhotographer(photographer.slug) }) }
                 }
                 if (result.page.totalPages > 1) Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = { page-- }, enabled = page > 1) { Text("Anterior") }
@@ -598,12 +608,12 @@ private fun SearchScreen(viewModel: LensClickViewModel, guest: Boolean, onNaviga
 }
 
 @Composable
-private fun PublicPhotographerRow(photographer: PublicPhotographer) {
+private fun PublicPhotographerRow(photographer: PublicPhotographer, onClick: () -> Unit) {
     val location = listOf(photographer.city, photographer.state).filter { it.isNotBlank() }.joinToString(", ")
     val price = photographer.startingPriceCents?.let {
         NumberFormat.getCurrencyInstance(Locale.forLanguageTag("pt-BR")).format(it / 100.0)
     }
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(16.dp)).padding(14.dp)) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(16.dp)).clickable(onClick = onClick).padding(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Avatar(initialsForDisplay(photographer.name), Modifier.size(52.dp))
             Spacer(Modifier.width(12.dp))
@@ -638,9 +648,17 @@ private fun specialtyLabel(value: String): String = when (value) {
 @Composable private fun Avatar(initials: String, modifier: Modifier = Modifier) = Box(modifier.clip(CircleShape).background(Brush.linearGradient(listOf(Color(0xFF6E5948), SurfaceHigh))).border(1.dp, Ink.copy(.5f), CircleShape), contentAlignment = Alignment.Center) { Text(initials, color = Paper, fontSize = 15.sp, fontWeight = FontWeight.Bold) }
 
 @Composable
-private fun PhotographerScreen(onBack: () -> Unit, onQuote: () -> Unit) {
+private fun PhotographerScreen(viewModel: LensClickViewModel, slug: String, onBack: () -> Unit, onQuote: () -> Unit) {
     var favorite by rememberSaveable { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+    val state by viewModel.publicProfile.collectAsStateWithLifecycle()
+    LaunchedEffect(slug) { viewModel.loadPublicPhotographer(slug) }
+    when (val result = state) {
+        PublicProfileState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Ink) }
+        PublicProfileState.Error -> ProfileStatus("Não foi possível carregar este perfil.", "Tentar novamente") { viewModel.loadPublicPhotographer(slug) }
+        PublicProfileState.NotFoundOrUnpublished -> ProfileStatus("Este perfil não está disponível ou ainda não foi publicado.", "Voltar", onBack)
+        is PublicProfileState.Ready -> {
+            val profile = result.profile
+            Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
         Box(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             Column {
                 Box {
@@ -649,16 +667,19 @@ private fun PhotographerScreen(onBack: () -> Unit, onQuote: () -> Unit) {
                     Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.TopEnd) { CompactLogo(42) }
                 }
                 Column(Modifier.padding(20.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) { Avatar("LA", Modifier.size(92.dp)); Spacer(Modifier.width(14.dp)); Column { Text("Lucas Almeida", color = Ink, fontSize = 23.sp, fontWeight = FontWeight.SemiBold); Text("Fotógrafo de Ensaios", color = Muted, fontSize = 12.sp) } }
-                    Spacer(Modifier.height(14.dp)); Text("⌖ São Paulo, SP     ◉ Atende todo o Brasil", color = Muted, fontSize = 11.sp); Text("★ 4,9 (88 avaliações)", color = Gold, fontSize = 12.sp, modifier = Modifier.padding(vertical = 10.dp))
-                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) { listOf("Ensaios", "Casual", "Feminino", "Masculino").forEach { FilterChip(it) } }
-                    Spacer(Modifier.height(22.dp)); Text("Sobre mim", color = Ink, fontWeight = FontWeight.SemiBold); Text("Fotógrafo especializado em ensaios externos, com foco em luz natural e fotografia autêntica e leve.", color = Muted, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 8.dp))
-                    Row(Modifier.fillMaxWidth().padding(vertical = 20.dp), horizontalArrangement = Arrangement.SpaceBetween) { Stat("8+", "Anos de experiência"); Stat("320+", "Ensaios realizados"); Stat("98%", "Clientes satisfeitos") }
-                    SectionTitle("Portfólio"); Spacer(Modifier.height(10.dp)); PortfolioStrip()
+                    Row(verticalAlignment = Alignment.CenterVertically) { Avatar(initialsForDisplay(profile.profile.name), Modifier.size(92.dp)); Spacer(Modifier.width(14.dp)); Column { Text(profile.profile.name, color = Ink, fontSize = 23.sp, fontWeight = FontWeight.SemiBold); Text(profile.profile.specialties.joinToString(" · ") { specialtyLabel(it) }, color = Muted, fontSize = 12.sp) } }
+                    Spacer(Modifier.height(14.dp)); Text("⌖ ${listOf(profile.profile.city, profile.profile.state).filter { it.isNotBlank() }.joinToString(", ")}", color = Muted, fontSize = 11.sp); profile.profile.ratingAverage?.let { Text("★ $it (${profile.profile.reviewCount} avaliações)", color = Gold, fontSize = 12.sp, modifier = Modifier.padding(vertical = 10.dp)) }
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) { profile.profile.specialties.forEach { FilterChip(specialtyLabel(it)) } }
+                    Spacer(Modifier.height(22.dp)); Text("Sobre mim", color = Ink, fontWeight = FontWeight.SemiBold); Text(profile.bio.ifBlank { "Este fotógrafo ainda não adicionou uma apresentação." }, color = Muted, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 8.dp))
+                    SectionTitle("Portfólio"); Spacer(Modifier.height(10.dp))
+                    if (profile.portfolio.isEmpty()) Text("Este fotógrafo ainda não publicou imagens.", color = Muted, fontSize = 12.sp)
+                    else LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(profile.portfolio, key = { it.id }) { item -> Column(Modifier.width(150.dp)) { Photo(Modifier.fillMaxWidth().height(100.dp)); Text(item.caption.ifBlank { item.altText }, color = Muted, fontSize = 10.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 5.dp)) } } }
                 }
             }
         }
         Row(Modifier.background(SurfaceHigh).padding(20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) { Button(onQuote, Modifier.weight(1f).height(52.dp), shape = RoundedCornerShape(17.dp), colors = ButtonDefaults.buttonColors(Ink, Color.White)) { Text("Solicitar orçamento", fontWeight = FontWeight.SemiBold) }; OutlinedButton({ favorite = !favorite }, Modifier.size(52.dp), contentPadding = PaddingValues(0.dp), shape = CircleShape, border = androidx.compose.foundation.BorderStroke(1.dp, Ink)) { Text(if (favorite) "♥" else "♡", color = Ink, fontSize = 23.sp) } }
+    }
+}
     }
 }
 
@@ -714,6 +735,14 @@ private fun ConversationsScreen(photographers: List<Photographer>, onNavigate: (
             if (results.isEmpty()) item { Text("Nenhuma conversa encontrada.", color = Muted, fontSize = 12.sp, modifier = Modifier.fillParentMaxWidth().padding(32.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
             items(results) { p -> Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).clickable { onNavigate(Screen.Chat) }.padding(horizontal = 10.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) { Avatar(p.initials, Modifier.size(52.dp)); Spacer(Modifier.width(12.dp)); Column(Modifier.weight(1f)) { Text(p.name, color = Ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold); Text(if (p.name == "Lucas Almeida") "Perfeito! Vou te enviar algumas..." else "Obrigado! Ficou incrível 🙏", color = Muted, fontSize = 11.sp, maxLines = 1) }; Column(horizontalAlignment = Alignment.End) { Text("Ontem", color = Muted, fontSize = 9.sp); if (p.name == "Lucas Almeida") Box(Modifier.padding(top = 7.dp).size(8.dp).clip(CircleShape).background(Ink)) } } }
         }
+            }
+        }
+
+@Composable
+private fun ProfileStatus(message: String, action: String, onAction: () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+        Text(message, color = Ink, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        TextButton(onClick = onAction) { Text(action, color = Ink) }
     }
 }
 

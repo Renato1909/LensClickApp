@@ -18,7 +18,7 @@
 - **Room não persiste mais senhas**: a migração 2→3 removeu a coluna `passwordHash`; os hashes SHA-256 de demonstração vivem apenas em memória (`ConcurrentHashMap` no repositório) e desaparecem ao reiniciar o processo;
 - backend real conectado na primeira fatia de autenticação móvel: login, restauração via `/me`, logout, expiração e revogação;
 - conta de demonstração não é mais usada pelo fluxo de autenticação conectado e não pode voltar à release pública;
-- as telas de cadastro, orçamentos, mensagens e perfil profissional ainda não possuem contratos móveis implementados.
+- cadastro móvel já usa o contrato remoto; orçamentos, mensagens e perfil profissional ainda não possuem contratos móveis implementados.
 
 ## Fundação entregue (integrada em `main` via PR #4, commit `fbbd934`)
 
@@ -26,7 +26,7 @@
 - **Testes úteis**: `LensClickRepositoryTest` (7 casos), `LensClickViewModelTest` (5 casos) com `FakeLensClickDao` em memória; `LensClickMigrationTest` instrumentado valida que a migração 2→3 descarta `passwordHash` e preserva usuários.
 - **Documentos novos**: `docs/AMBIENTE_ANDROID.md` (diagnóstico do ambiente e requisitos exatos) e `docs/MATRIZ_PARIDADE.md` (paridade app × web/API no commit `c3358c2` da plataforma, com classificação O/N/W/A).
 - **Preparação arquitetural mínima**: `LensClickViewModel` recebe o repositório por injeção via `Factory` (testável em JVM), e o Room exporta schema para versionamento.
-- **Primeira fatia integrada**: cliente HTTP móvel, DTOs, mapeamento de erros, armazenamento com Android Keystore, estados de autenticação e Navigation Compose foram mergeados no PR #8.
+- **Primeira fatia integrada**: cliente HTTP móvel, DTOs, mapeamento de erros, armazenamento com Android Keystore, estados de autenticação e Navigation Compose foram mergeados no PR #8. A fatia seguinte integrou descoberta e perfil público por slug, portfólio e estados de publicação.
 - **Segurança local e navegação (entrega seguinte)**: senhas de formulário usam `remember`, sem estado restaurável; backup e transferência do protótipo são excluídos; NavHost substitui o estado de tela anterior, com testes instrumentados de retorno e logout. Confirmar o PR e checks desta entrega antes de considerá-la integrada.
 
 ## Limitação do ambiente local

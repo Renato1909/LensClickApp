@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModelStore
 import com.example.lensclickapp.data.FakeLensClickDao
 import com.example.lensclickapp.data.LensClickRepository
 import com.example.lensclickapp.data.PublicPhotographerPage
+import com.example.lensclickapp.data.PublicPhotographerProfile
+import com.example.lensclickapp.data.PublicPhotographerNotFoundException
 import com.example.lensclickapp.data.PublicPhotographersGateway
 import com.example.lensclickapp.data.User
 import com.example.lensclickapp.data.auth.HttpResponse
@@ -179,6 +181,8 @@ class LensClickViewModelTest {
                 requested = Triple(city, specialty, page)
                 return PublicPhotographerPage(emptyList(), page, 0, 0)
             }
+
+            override suspend fun get(slug: String): PublicPhotographerProfile = error("Unused")
         }
         viewModel = LensClickViewModel(LensClickRepository(dao), gateway)
         store.put("test", viewModel)
@@ -187,7 +191,75 @@ class LensClickViewModelTest {
         advanceUntilIdle()
 
         assertEquals(Triple("Recife", "wedding", 2), requested)
-        assertEquals(PublicSearchState.Ready(PublicPhotographerPage(emptyList(), 2, 0, 0)), viewModel.publicSearch.value)
+        assertEquals(PublicSearchState.Empty(PublicPhotographerPage(emptyList(), 2, 0, 0)), viewModel.publicSearch.value)
+    }
+
+    @Test
+    fun publicProfileDistinguishesNotFoundOrUnpublished() = runTest(dispatcher) {
+        val gateway = object : PublicPhotographersGateway {
+            override suspend fun list(city: String, specialty: String?, page: Int) =
+                PublicPhotographerPage(emptyList(), page, 0, 0)
+
+            override suspend fun get(slug: String): PublicPhotographerProfile =
+                throw PublicPhotographerNotFoundException(slug)
+        }
+        viewModel = LensClickViewModel(LensClickRepository(dao), gateway)
+        viewModel.loadPublicPhotographer("missing-1")
+        advanceUntilIdle()
+
+        assertEquals(PublicProfileState.NotFoundOrUnpublished, viewModel.publicProfile.value)
+    }
+
+    @Test
+    fun publicProfileExposesUnexpectedGatewayErrors() = runTest(dispatcher) {
+        val gateway = object : PublicPhotographersGateway {
+            override suspend fun list(city: String, specialty: String?, page: Int) =
+                PublicPhotographerPage(emptyList(), page, 0, 0)
+
+            override suspend fun get(slug: String): PublicPhotographerProfile =
+                throw java.io.IOException("network unavailable")
+        }
+        viewModel = LensClickViewModel(LensClickRepository(dao), gateway)
+        viewModel.loadPublicPhotographer("ana-12")
+        advanceUntilIdle()
+
+        assertEquals(PublicProfileState.Error, viewModel.publicProfile.value)
+    }
+
+    @Test
+    fun publicProfileTreatsUnpublishedResponseAsUnavailable() = runTest(dispatcher) {
+        val gateway = object : PublicPhotographersGateway {
+            override suspend fun list(city: String, specialty: String?, page: Int) =
+                PublicPhotographerPage(emptyList(), page, 0, 0)
+
+            override suspend fun get(slug: String): PublicPhotographerProfile =
+                PublicPhotographerProfile(
+                    profile = com.example.lensclickapp.data.PublicPhotographer(
+                        slug = slug,
+                        name = "Rascunho",
+                        city = "",
+                        state = "",
+                        specialties = emptyList(),
+                        startingPriceCents = null,
+                        ratingAverage = null,
+                        reviewCount = 0
+                    ),
+                    bio = "",
+                    serviceRadiusKm = null,
+                    availability = "unavailable",
+                    instagram = "",
+                    website = "",
+                    profilePic = "",
+                    contacts = com.example.lensclickapp.data.PublicPhotographerContacts("", ""),
+                    portfolio = emptyList(),
+                    isPublished = false
+                )
+        }
+        viewModel = LensClickViewModel(LensClickRepository(dao), gateway)
+        viewModel.loadPublicPhotographer("draft-1")
+        advanceUntilIdle()
+
+        assertEquals(PublicProfileState.NotFoundOrUnpublished, viewModel.publicProfile.value)
     }
 
     @Test

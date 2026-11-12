@@ -38,7 +38,7 @@ Esta versão entrega **17 telas navegáveis**, interface 100% em português do B
 |---|---|
 | 🪪 **Onboarding** | Boas-vindas em tela cheia com fotografia, gradiente escuro e a marca aplicada em dourado e off-white |
 | 🧑🤝🧑 **Tipo de conta** | Escolha entre conta de cliente ou de fotógrafo antes do cadastro |
-| 🔐 **Login & Cadastro** | Login remoto com sessão móvel protegida; cadastro e recuperação de senha aguardam contratos móveis próprios |
+| 🔐 **Login & Cadastro** | Login, restauração de sessão, cadastro e logout usam o contrato móvel remoto; recuperação de senha ainda aguarda contrato |
 | 🏠 **Início** | Localização, busca rápida, categorias (Casamento, Ensaio, Eventos, Infantil, Corporativo), fotógrafos em destaque e portfólios em alta |
 | 🔎 **Descobrir** | Busca por nome ou estilo, filtros por categoria, favoritos e contador de resultados |
 | 👤 **Perfil do fotógrafo** | Bio, especialidades, estatísticas (experiência, ensaios, satisfação), avaliações, portfólio e preço "a partir de" |
@@ -99,18 +99,15 @@ UI (Compose)  ──▶  LensClickViewModel  ──▶  LensClickRepository  ─
 - **`ui/LensClickViewModel`** — estado observável (`photographers`, `budgets`, `currentUser`) e as ações de login, cadastro, orçamento e logout.
 - **`data/`** — entidades `Photographer`, `Budget` e `User`; o `Repository` semeia dados de exemplo na primeira execução. **O Room armazena perfis, fotógrafos e orçamentos, mas não armazena senhas nem hashes de senha.** Os hashes usados pela autenticação de demonstração ficam apenas em memória durante o processo.
 
-## 🔑 Conta de demonstração
+## 🔑 Conta e sessão
 
-O app cria uma conta de cliente e um catálogo de fotógrafos na primeira execução. A autenticação abaixo é **somente para demonstração local**:
+O fluxo de login e cadastro usa a API móvel da plataforma LensClick. O token de sessão é
+armazenado com Android Keystore e removido no logout, na expiração ou na revogação. O Room
+não é fonte de verdade de usuários e não armazena senhas, tokens ou hashes.
 
-| Campo | Valor |
-|---|---|
-| E-mail | `seu@email.com` |
-| Senha | `lensclick` |
-
-A credencial de demonstração não é persistida no Room. O hash fica somente em memória e desaparece quando o processo do aplicativo é encerrado. Esta seção permanece apenas como referência histórica do protótipo; o fluxo de login integrado usa o contrato móvel do backend e não essa credencial.
-
-Para conhecer o **modo fotógrafo**, use *Cadastrar como fotógrafo* no fluxo de criação de conta — o painel profissional abre automaticamente para contas com esse papel.
+Para conhecer o **modo fotógrafo**, use *Cadastrar como fotógrafo* no fluxo de criação de
+conta — o painel profissional abre automaticamente para contas com esse papel. Não existe
+credencial de demonstração válida para o fluxo remoto.
 
 ## 🎨 Identidade visual
 
@@ -206,11 +203,14 @@ LensClickApp/
 
 ## 📌 Status do projeto
 
-Esta versão é uma **interface completa e navegável**. A autenticação móvel usa o backend conectado; descoberta de fotógrafos, orçamentos, conversas e as telas do modo profissional ainda funcionam localmente no cliente. O Room persiste dados de aplicação, mas **não persiste credenciais, tokens ou hashes de senha**.
+Esta versão é uma **interface completa e navegável**. A autenticação móvel e a descoberta/perfil
+públicos usam o backend conectado. Orçamentos, conversas e as telas do modo profissional ainda
+funcionam localmente no cliente até que seus contratos remotos sejam integrados. O Room persiste
+somente dados de demonstração e aplicação, mas **não persiste credenciais, tokens ou hashes de senha**.
 
 Próximos passos naturais:
 
-- concluir os contratos remotos de conta, descoberta, perfis, orçamentos e mensagens;
+- concluir os contratos remotos de conta, orçamentos e mensagens;
 - conectar cada fatia ao backend somente após contrato, testes de autorização e tratamento de estados offline;
 - definir rotas com identificadores reais e domínio aprovado antes de adicionar deep links para perfil e conversas;
 - separar explicitamente modelos/cliente HTTP remotos dos modelos locais de Room.
