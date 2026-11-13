@@ -1,4 +1,4 @@
-package com.lensclick.app.data
+package com.lensclick.app.data.local
 
 import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.sqlite.db.SupportSQLiteOpenHelper

@@ -1,4 +1,4 @@
-package com.lensclick.app.data
+package com.lensclick.app.data.local
 
 import androidx.room.Entity
 import androidx.room.Index

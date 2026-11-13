@@ -1,4 +1,4 @@
-package com.lensclick.app.data
+package com.lensclick.app.data.remote
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

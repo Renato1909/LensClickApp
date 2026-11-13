@@ -1,5 +1,6 @@
-package com.lensclick.app.data
+package com.lensclick.app.data.remote
 
+import com.lensclick.app.domain.PublicPhotographer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test

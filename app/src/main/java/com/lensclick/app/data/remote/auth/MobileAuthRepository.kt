@@ -1,4 +1,7 @@
-package com.lensclick.app.data.auth
+package com.lensclick.app.data.remote.auth
+
+import com.lensclick.app.domain.MobileSession
+import com.lensclick.app.domain.MobileUser
 
 class MobileAuthRepository(
     private val api: MobileAuthApi,

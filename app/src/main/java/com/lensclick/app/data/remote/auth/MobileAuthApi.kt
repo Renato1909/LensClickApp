@@ -1,5 +1,7 @@
-package com.lensclick.app.data.auth
+package com.lensclick.app.data.remote.auth
 
+import com.lensclick.app.domain.MobileSession
+import com.lensclick.app.domain.MobileUser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject

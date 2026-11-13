@@ -1,4 +1,4 @@
-package com.lensclick.app.data.auth
+package com.lensclick.app.data.remote.auth
 
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec

@@ -1,4 +1,4 @@
-package com.lensclick.app.data
+package com.lensclick.app.data.local
 
 class LensClickRepository(private val dao: LensClickDao) {
     val photographers = dao.observePhotographers()

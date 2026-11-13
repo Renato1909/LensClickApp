@@ -1,24 +1,24 @@
 package com.lensclick.app.ui
 
 import androidx.lifecycle.ViewModelStore
-import com.lensclick.app.data.FakeLensClickDao
-import com.lensclick.app.data.LensClickRepository
-import com.lensclick.app.data.PublicPhotographerPage
-import com.lensclick.app.data.PublicPhotographerProfile
-import com.lensclick.app.data.PublicPhotographerNotFoundException
-import com.lensclick.app.data.PublicPhotographersGateway
-import com.lensclick.app.data.User
-import com.lensclick.app.data.auth.HttpResponse
-import com.lensclick.app.data.auth.InMemorySessionStore
-import com.lensclick.app.data.auth.MobileAuthApi
-import com.lensclick.app.data.auth.MobileAuthException
-import com.lensclick.app.data.auth.MobileAuthErrorCode
-import com.lensclick.app.data.auth.MobileAuthRepository
-import com.lensclick.app.data.auth.MobileAuthRequest
-import com.lensclick.app.data.auth.MobilePhotographerRegisterRequest
-import com.lensclick.app.data.auth.MobileRegisterRequest
-import com.lensclick.app.data.auth.MobileSession
-import com.lensclick.app.data.auth.MobileUser
+import com.lensclick.app.data.local.FakeLensClickDao
+import com.lensclick.app.data.local.LensClickRepository
+import com.lensclick.app.domain.PublicPhotographerPage
+import com.lensclick.app.domain.PublicPhotographerProfile
+import com.lensclick.app.domain.PublicPhotographerNotFoundException
+import com.lensclick.app.domain.PublicPhotographersGateway
+import com.lensclick.app.data.local.User
+import com.lensclick.app.data.remote.auth.HttpResponse
+import com.lensclick.app.data.remote.auth.InMemorySessionStore
+import com.lensclick.app.data.remote.auth.MobileAuthApi
+import com.lensclick.app.data.remote.auth.MobileAuthException
+import com.lensclick.app.data.remote.auth.MobileAuthErrorCode
+import com.lensclick.app.data.remote.auth.MobileAuthRepository
+import com.lensclick.app.data.remote.auth.MobileAuthRequest
+import com.lensclick.app.data.remote.auth.MobilePhotographerRegisterRequest
+import com.lensclick.app.data.remote.auth.MobileRegisterRequest
+import com.lensclick.app.domain.MobileSession
+import com.lensclick.app.domain.MobileUser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CompletableDeferred
@@ -234,7 +234,7 @@ class LensClickViewModelTest {
 
             override suspend fun get(slug: String): PublicPhotographerProfile =
                 PublicPhotographerProfile(
-                    profile = com.lensclick.app.data.PublicPhotographer(
+                    profile = com.lensclick.app.domain.PublicPhotographer(
                         slug = slug,
                         name = "Rascunho",
                         city = "",
@@ -250,7 +250,7 @@ class LensClickViewModelTest {
                     instagram = "",
                     website = "",
                     profilePic = "",
-                    contacts = com.lensclick.app.data.PublicPhotographerContacts("", ""),
+                    contacts = com.lensclick.app.domain.PublicPhotographerContacts("", ""),
                     portfolio = emptyList(),
                     isPublished = false
                 )

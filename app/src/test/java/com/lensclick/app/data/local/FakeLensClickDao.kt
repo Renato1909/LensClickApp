@@ -1,4 +1,4 @@
-package com.lensclick.app.data
+package com.lensclick.app.data.local
 
 import kotlinx.coroutines.flow.MutableStateFlow
 

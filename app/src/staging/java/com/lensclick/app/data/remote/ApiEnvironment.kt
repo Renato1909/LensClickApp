@@ -1,4 +1,4 @@
-package com.lensclick.app.data
+package com.lensclick.app.data.remote
 
 object ApiEnvironment {
     const val name = "staging"

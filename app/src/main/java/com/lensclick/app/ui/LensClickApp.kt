@@ -51,10 +51,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.lensclick.app.R
-import com.lensclick.app.data.Budget
-import com.lensclick.app.data.Photographer
-import com.lensclick.app.data.PublicPhotographer
-import com.lensclick.app.data.User
+import com.lensclick.app.data.local.Budget
+import com.lensclick.app.data.local.Photographer
+import com.lensclick.app.domain.PublicPhotographer
+import com.lensclick.app.data.local.User
 import java.text.NumberFormat
 import java.util.Locale
 import kotlinx.coroutines.delay
@@ -311,12 +311,12 @@ private fun LoginScreen(
     if (recoveryOpen) ActionDialog("Recuperar senha", "Enviaremos as instruções de recuperação para $email.") { recoveryOpen = false }
 }
 
-private fun com.lensclick.app.data.auth.MobileAuthErrorCode.loginMessage(): String = when (this) {
-    com.lensclick.app.data.auth.MobileAuthErrorCode.INVALID_INPUT,
-    com.lensclick.app.data.auth.MobileAuthErrorCode.UNAUTHENTICATED -> "E-mail ou senha inválidos."
-    com.lensclick.app.data.auth.MobileAuthErrorCode.RATE_LIMITED -> "Muitas tentativas. Aguarde antes de tentar novamente."
-    com.lensclick.app.data.auth.MobileAuthErrorCode.NETWORK -> "Não foi possível conectar. Verifique sua internet."
-    com.lensclick.app.data.auth.MobileAuthErrorCode.SERVER -> "O serviço está indisponível. Tente novamente."
+private fun com.lensclick.app.data.remote.auth.MobileAuthErrorCode.loginMessage(): String = when (this) {
+    com.lensclick.app.data.remote.auth.MobileAuthErrorCode.INVALID_INPUT,
+    com.lensclick.app.data.remote.auth.MobileAuthErrorCode.UNAUTHENTICATED -> "E-mail ou senha inválidos."
+    com.lensclick.app.data.remote.auth.MobileAuthErrorCode.RATE_LIMITED -> "Muitas tentativas. Aguarde antes de tentar novamente."
+    com.lensclick.app.data.remote.auth.MobileAuthErrorCode.NETWORK -> "Não foi possível conectar. Verifique sua internet."
+    com.lensclick.app.data.remote.auth.MobileAuthErrorCode.SERVER -> "O serviço está indisponível. Tente novamente."
     else -> "Não foi possível entrar. Tente novamente."
 }
 

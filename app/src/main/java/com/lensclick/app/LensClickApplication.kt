@@ -1,13 +1,13 @@
 package com.lensclick.app
 
 import android.app.Application
-import com.lensclick.app.data.LensClickDatabase
-import com.lensclick.app.data.LensClickRepository
-import com.lensclick.app.data.ApiEnvironment
-import com.lensclick.app.data.auth.AndroidKeystoreSessionStore
-import com.lensclick.app.data.auth.HttpMobileAuthApi
-import com.lensclick.app.data.auth.MobileAuthRepository
-import com.lensclick.app.data.auth.UrlConnectionTransport
+import com.lensclick.app.data.local.LensClickDatabase
+import com.lensclick.app.data.local.LensClickRepository
+import com.lensclick.app.data.remote.ApiEnvironment
+import com.lensclick.app.data.remote.auth.AndroidKeystoreSessionStore
+import com.lensclick.app.data.remote.auth.HttpMobileAuthApi
+import com.lensclick.app.data.remote.auth.MobileAuthRepository
+import com.lensclick.app.data.remote.auth.UrlConnectionTransport
 
 class LensClickApplication : Application() {
     val repository: LensClickRepository by lazy {

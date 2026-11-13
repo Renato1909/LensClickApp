@@ -1,4 +1,4 @@
-package com.lensclick.app.data.auth
+package com.lensclick.app.data.remote.auth
 
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
