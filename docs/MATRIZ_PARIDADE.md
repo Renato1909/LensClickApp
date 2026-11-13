@@ -1,13 +1,13 @@
 # Matriz de paridade — web, API e Android
 
-**Auditoria:** 3 de novembro de 2026, fuso America/Sao_Paulo.
+**Auditoria:** 13 de novembro de 2026, fuso America/Sao_Paulo.
 
-**Estado:** matriz atualizada após a fatia de autenticação móvel e a integração de descoberta/perfil público. Ela registra paridade implementada, paridade pendente e decisões de produto; não é aprovação de lançamento. As classificações de escopo continuam dependendo do aceite do mantenedor.
+**Estado:** matriz atualizada após a fatia de autenticação móvel, a integração de descoberta/perfil público e a separação da camada de dados em `data.local`/`data.remote`/`domain` (commit `9d3d4e6`, sem mudança funcional). Ela registra paridade implementada, paridade pendente e decisões de produto; não é aprovação de lançamento. As classificações de escopo continuam dependendo do aceite do mantenedor. A baseline da plataforma (`c3358c2`/`1a0845b`) não foi reauditada nesta fatia.
 
 ## Fontes e limites da evidência
 
 - Plataforma: `Renato1909/LensClick`, branch de trabalho no commit [`1a0845baa3d229ead6b6f2b000a4136e6fc03b6b`](https://github.com/Renato1909/LensClick/commit/1a0845baa3d229ead6b6f2b000a4136e6fc03b6b), com o PR #148 mergeado em `main`. Foram consultados roteador, handlers, esquema/migrações, UI web e testes de contratos.
-- Android: branch mergeada no commit [`fb397038ffbfa619d4bd93b0b8c14d1430936a26`](https://github.com/Renato1909/LensClickApp/commit/fb397038ffbfa619d4bd93b0b8c14d1430936a26), com a primeira fatia móvel integrada pelo PR #8. A matriz distingue a autenticação remota já integrada das demais capacidades ainda locais ou demonstrativas.
+- Android: `main` no commit [`9d3d4e6c8f5df0afe2fb1c86220474e2eb5cd76c`](https://github.com/Renato1909/LensClickApp/commit/9d3d4e6c8f5df0afe2fb1c86220474e2eb5cd76c), com autenticação (PR #8), cadastro remoto (PR #11), descoberta/perfil público (PR #12) e a separação da camada de dados em `data.local`/`data.remote`/`domain`. A matriz distingue a autenticação remota já integrada das demais capacidades ainda locais ou demonstrativas.
 - A validação disponível não acessou D1/R2 de produção, contas reais ou segredos. Os testes automatizados do backend e do Android foram executados nos respectivos repositórios/CI; isso não substitui staging operacional, dispositivo físico ou aprovação de publicação.
 - A documentação de evidências está em `docs/VALIDACAO_AUTENTICACAO_MOVEL.md`. Os testes de contrato existentes cobrem a fatia de autenticação; as demais capacidades continuam sem contrato Android/API.
 - O roteador e `test-support/api-contracts.mjs` têm **45 operações HTTP**. Documentos anteriores da plataforma mencionam 40 rotas; o catálogo executável é a referência desta matriz.
@@ -24,8 +24,8 @@ Fontes fixadas no commit auditado:
 | W6 | [Administração](https://github.com/Renato1909/LensClick/blob/c3358c2bb7e263095e9dea590f2b7f00add43ef0/src/admin.mjs), [entradas públicas](https://github.com/Renato1909/LensClick/blob/c3358c2bb7e263095e9dea590f2b7f00add43ef0/src/public-input.mjs) e [esquema D1](https://github.com/Renato1909/LensClick/blob/c3358c2bb7e263095e9dea590f2b7f00add43ef0/db/schema.ts) |
 | W7 | [UI web](https://github.com/Renato1909/LensClick/tree/c3358c2bb7e263095e9dea590f2b7f00add43ef0/public), [mensagens web](https://github.com/Renato1909/LensClick/blob/c3358c2bb7e263095e9dea590f2b7f00add43ef0/public/messaging.js) e [catálogos PT/EN](https://github.com/Renato1909/LensClick/tree/c3358c2bb7e263095e9dea590f2b7f00add43ef0/public/locales) |
 | W8 | [Testes da plataforma](https://github.com/Renato1909/LensClick/tree/c3358c2bb7e263095e9dea590f2b7f00add43ef0/test) e [plano multicliente](https://github.com/Renato1909/LensClick/blob/c3358c2bb7e263095e9dea590f2b7f00add43ef0/docs/PLANO_ANDROID_VALIDACAO_PUBLICACAO.md) |
-| A1 | [Telas e navegação Android](https://github.com/Renato1909/LensClickApp/blob/bd3c1408886b0279a1f8867805bd93785939bf21/app/src/main/java/com/lensclick/app/ui/LensClickApp.kt) e [ViewModel](https://github.com/Renato1909/LensClickApp/blob/bd3c1408886b0279a1f8867805bd93785939bf21/app/src/main/java/com/lensclick/app/ui/LensClickViewModel.kt) |
-| A2 | [Entidades e dados de exemplo](https://github.com/Renato1909/LensClickApp/blob/bd3c1408886b0279a1f8867805bd93785939bf21/app/src/main/java/com/lensclick/app/data/LensClickData.kt) e [repositório local](https://github.com/Renato1909/LensClickApp/blob/bd3c1408886b0279a1f8867805bd93785939bf21/app/src/main/java/com/lensclick/app/data/LensClickRepository.kt) |
+| A1 | [Telas e navegação Android](https://github.com/Renato1909/LensClickApp/blob/9d3d4e6c8f5df0afe2fb1c86220474e2eb5cd76c/app/src/main/java/com/lensclick/app/ui/LensClickApp.kt) e [ViewModel](https://github.com/Renato1909/LensClickApp/blob/9d3d4e6c8f5df0afe2fb1c86220474e2eb5cd76c/app/src/main/java/com/lensclick/app/ui/LensClickViewModel.kt) |
+| A2 | [Entidades e dados de exemplo](https://github.com/Renato1909/LensClickApp/blob/9d3d4e6c8f5df0afe2fb1c86220474e2eb5cd76c/app/src/main/java/com/lensclick/app/data/local/LensClickData.kt) e [repositório local](https://github.com/Renato1909/LensClickApp/blob/9d3d4e6c8f5df0afe2fb1c86220474e2eb5cd76c/app/src/main/java/com/lensclick/app/data/local/LensClickRepository.kt) |
 
 ## Critérios de decisão
 

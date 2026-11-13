@@ -9,6 +9,10 @@ móvel e a descoberta/perfil público de fotógrafos já consomem a API da plata
 sessões e perfis públicos remotos não são duplicados no Room. Orçamentos, conversas e partes do
 modo profissional ainda são protótipos locais e não representam a fonte de verdade de produção.
 
+A camada de dados está separada em `data.local` (Room), `data.remote` (descoberta e `ApiEnvironment`),
+`data.remote.auth` (autenticação) e `domain` (tipos puros e portas), com dependência `ui → data → domain`
+(commit `9d3d4e6`).
+
 ## Fase 1 — fundação Android
 
 - [x] Substituir testes de exemplo por uma linha de base útil (testes JVM de repositório/ViewModel + instrumentado de migração Room 2→3).
@@ -16,7 +20,7 @@ modo profissional ainda são protótipos locais e não representam a fonte de ve
 - [x] Remover credencial do Room (migração 2→3 descarta `passwordHash`; hashes de demonstração vivem apenas em memória no processo).
 - [ ] Validar build limpo, lint, testes e instalação em emulador **local** (bloqueado: esta máquina não tem Android SDK; ver `docs/AMBIENTE_ANDROID.md`). A validação ocorre no CI.
 - [x] Definir pacote base `com.lensclick.app`, variantes `com.lensclick.app.debug`/`.staging` e separação de ambientes; versionamento permanece pendente.
-- [ ] Separar melhor domínio, dados locais e dados remotos.
+- [x] Separar melhor domínio, dados locais e dados remotos (`data.local`, `data.remote`, `data.remote.auth`, `domain`; commit `9d3d4e6`).
 - [x] Adotar Navigation Compose para as 17 telas, com pilha de retorno e testes de navegação.
 - [ ] Definir identificadores de destino e domínio antes de adicionar deep links.
 - [x] Impedir persistência de senhas em estado salvo e desabilitar backup/transferência do protótipo local.
@@ -77,4 +81,4 @@ modo profissional ainda são protótipos locais e não representam a fonte de ve
 
 ## Próxima entrega
 
-Revisar o contrato móvel proposto com a plataforma, definir pacote e ambientes e separar interfaces de dados locais/remotos. Nenhuma conexão com produção deve começar antes da aprovação e implementação do contrato móvel.
+Pacote/ambientes (`ca1fa77`) e separação de dados locais/remotos/domínio (`9d3d4e6`) concluídos. Próximos passos: revisar o contrato móvel com a plataforma (recuperação de senha, verificação de e-mail e dados da conta), definir cache/offline sem duplicar regras de negócio e preparar perfil profissional/portfólio autenticados sem inventar endpoints. Nenhuma conexão com produção deve começar antes da aprovação e implementação do contrato móvel.

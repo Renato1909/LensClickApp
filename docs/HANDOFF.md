@@ -14,7 +14,8 @@
 - `applicationId` atual: `com.lensclick.app`;
 - 17 telas navegáveis em uma única Activity;
 - navegação por `Navigation Compose` nas 17 telas; identificadores/deep links externos ainda pendentes;
-- dados locais em Room para usuários, fotógrafos e orçamentos (schema v3, exportado em `app/schemas/`);
+- dados locais em Room para usuários, fotógrafos e orçamentos (schema v3, exportado em `app/schemas/com.lensclick.app.data.local.LensClickDatabase/`);
+- camada de dados separada em `data.local` (Room), `data.remote` (descoberta/`ApiEnvironment`), `data.remote.auth` (autenticação) e `domain` (tipos puros/portas), com dependência `ui → data → domain` (commit `9d3d4e6`);
 - **Room não persiste mais senhas**: a migração 2→3 removeu a coluna `passwordHash`; os hashes SHA-256 de demonstração vivem apenas em memória (`ConcurrentHashMap` no repositório) e desaparecem ao reiniciar o processo;
 - backend real conectado na primeira fatia de autenticação móvel: login, restauração via `/me`, logout, expiração e revogação;
 - conta de demonstração não é mais usada pelo fluxo de autenticação conectado e não pode voltar à release pública;
@@ -72,4 +73,4 @@ O aplicativo deve consumir a API da plataforma LensClick e compartilhar usuário
 - revisão jurídica formal;
 - aparelhos reais para validação final.
 
-**Atualizado em:** 3 de novembro de 2026.
+**Atualizado em:** 13 de novembro de 2026.

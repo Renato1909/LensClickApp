@@ -1,13 +1,13 @@
 # Status dos Gates — LensClickApp
 
-**Atualização:** 3 de novembro de 2026  
+**Atualização:** 13 de novembro de 2026  
 **Repositórios:** `Renato1909/LensClickApp` e `Renato1909/LensClick`
 
 Este documento separa trabalho integrado, trabalho documentado e dependências externas. Percentuais são estimativas de conclusão do escopo de cada Gate, não uma medição de cobertura de código nem aprovação de publicação.
 
 | Gate | Estado | Estimativa | Evidência principal |
 |---|---|---:|---|
-| A — Fundação Android | Fechado | 100% | Gradle, JDK 21, SDK 36, CI, lint e testes base integrados. |
+| A — Fundação Android | Fechado | 100% | Gradle, JDK 21, SDK 36, CI, lint e testes base integrados; dados separados em `data.local`/`data.remote`/`domain` (`9d3d4e6`). |
 | B — Matriz de paridade | Em andamento | 90% | [`MATRIZ_PARIDADE.md`](./MATRIZ_PARIDADE.md) atualizado após autenticação móvel e descoberta/perfil público; faltam decisões de escopo e contratos das próximas fatias. |
 | C — Contrato móvel seguro | Fechado para a primeira fatia | 100% | PR backend [#148](https://github.com/Renato1909/LensClick/pull/148), contrato e testes de login, `/me`, logout e revogação. Refresh rotativo e `expiresAt` em `/me` continuam pendências do ADR 001. |
 | D — Primeira fatia vertical | Fechado para autenticação e descoberta pública | 100% | Login, cadastro, restauração, logout, descoberta por filtros/paginação, perfil por slug, portfólio público, estados de vazio/erro/404 e testes JVM. |
