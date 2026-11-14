@@ -18,16 +18,6 @@ data class PublicPhotographerPage(
     val totalPages: Int
 )
 
-data class PublicPortfolioItem(
-    val id: Long,
-    val caption: String,
-    val altText: String,
-    val position: Int,
-    val isCover: Boolean,
-    val category: String,
-    val imageUrl: String
-)
-
 data class PublicPhotographerProfile(
     val profile: PublicPhotographer,
     val bio: String,
@@ -37,7 +27,7 @@ data class PublicPhotographerProfile(
     val website: String,
     val profilePic: String,
     val contacts: PublicPhotographerContacts,
-    val portfolio: List<PublicPortfolioItem>,
+    val portfolio: List<PortfolioItem>,
     val isPublished: Boolean
 )
 

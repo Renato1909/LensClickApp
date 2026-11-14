@@ -6,7 +6,7 @@ import com.lensclick.app.domain.PublicPhotographerNotFoundException
 import com.lensclick.app.domain.PublicPhotographerPage
 import com.lensclick.app.domain.PublicPhotographerProfile
 import com.lensclick.app.domain.PublicPhotographersGateway
-import com.lensclick.app.domain.PublicPortfolioItem
+import com.lensclick.app.domain.PortfolioItem
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
@@ -121,7 +121,7 @@ fun parsePublicPhotographerProfile(json: String): PublicPhotographerProfile {
         ),
         portfolio = if (portfolio == null) emptyList() else (0 until portfolio.length()).map { index ->
             val item = portfolio.getJSONObject(index)
-            PublicPortfolioItem(
+            PortfolioItem(
                 id = item.getLong("id"),
                 caption = item.optString("caption"),
                 altText = item.optString("altText"),
