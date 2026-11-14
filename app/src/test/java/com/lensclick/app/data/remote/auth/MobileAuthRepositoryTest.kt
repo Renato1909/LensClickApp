@@ -2,6 +2,7 @@ package com.lensclick.app.data.remote.auth
 
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -173,6 +174,78 @@ class MobileAuthRepositoryTest {
         }
     }
 
+    @Test
+    fun restoreReturnsNullWhenNoTokenIsStored() = runTest {
+        val store = InMemorySessionStore()
+        val repository = MobileAuthRepository(
+            HttpMobileAuthApi(FakeTransport(HttpResponse(200, body = userBody()))),
+            store
+        )
+
+        assertNull(repository.restore())
+    }
+
+    @Test
+    fun restoreReturnsUserWhenTokenIsValid() = runTest {
+        val transport = FakeTransport(HttpResponse(200, body = userBody()))
+        val store = InMemorySessionStore().apply { writeAccessToken("access-token") }
+        val repository = MobileAuthRepository(HttpMobileAuthApi(transport), store)
+
+        val user = repository.restore()
+
+        assertNotNull(user)
+        assertEquals("mobile@example.com", user?.email)
+        assertEquals("Bearer access-token", transport.lastRequest?.headers?.get("Authorization"))
+    }
+
+    @Test
+    fun malformedLoginResponseMapsToMalformedResponse() = runTest {
+        val store = InMemorySessionStore()
+        val repository = MobileAuthRepository(
+            HttpMobileAuthApi(FakeTransport(HttpResponse(200, body = "{not-valid-json"))),
+            store
+        )
+
+        try {
+            repository.login("user@example.com", "Secret123", "Android", "1.0")
+            throw AssertionError("Expected MALFORMED_RESPONSE")
+        } catch (error: MobileAuthException) {
+            assertEquals(MobileAuthErrorCode.MALFORMED_RESPONSE, error.code)
+        }
+
+        assertNull(store.readAccessToken())
+    }
+
+    @Test
+    fun networkFailureOnRestorePropagatesWithoutClearingToken() = runTest {
+        val store = InMemorySessionStore().apply { writeAccessToken("access-token") }
+        val repository = MobileAuthRepository(HttpMobileAuthApi(NetworkFailingTransport()), store)
+
+        try {
+            repository.restore()
+            throw AssertionError("Expected NETWORK")
+        } catch (error: MobileAuthException) {
+            assertEquals(MobileAuthErrorCode.NETWORK, error.code)
+        }
+
+        assertEquals("access-token", store.readAccessToken())
+    }
+
+    @Test
+    fun logoutClearsTokenEvenOnNetworkFailure() = runTest {
+        val store = InMemorySessionStore().apply { writeAccessToken("access-token") }
+        val repository = MobileAuthRepository(HttpMobileAuthApi(NetworkFailingTransport()), store)
+
+        try {
+            repository.logout()
+            throw AssertionError("Expected NETWORK")
+        } catch (error: MobileAuthException) {
+            assertEquals(MobileAuthErrorCode.NETWORK, error.code)
+        }
+
+        assertNull(store.readAccessToken())
+    }
+
     private fun successBody() = """
         {
           "user": {
@@ -202,5 +275,11 @@ private class FakeTransport(
     override suspend fun execute(request: HttpRequest): HttpResponse {
         lastRequest = request
         return response
+    }
+}
+
+private class NetworkFailingTransport : HttpTransport {
+    override suspend fun execute(request: HttpRequest): HttpResponse {
+        throw MobileAuthException(MobileAuthErrorCode.NETWORK)
     }
 }

@@ -324,6 +324,63 @@ class LensClickViewModelTest {
         assertEquals(AuthenticationState.Error(MobileAuthErrorCode.CONFLICT), viewModel.authentication.value)
     }
 
+    @Test
+    fun publicSearchExposesErrorWhenGatewayFails() = runTest(dispatcher) {
+        val gateway = object : PublicPhotographersGateway {
+            override suspend fun list(city: String, specialty: String?, page: Int): PublicPhotographerPage =
+                throw java.io.IOException("network unavailable")
+
+            override suspend fun get(slug: String): PublicPhotographerProfile = error("Unused")
+        }
+        viewModel = LensClickViewModel(LensClickRepository(dao), gateway)
+        store.put("test", viewModel)
+
+        viewModel.searchPublicPhotographers("Recife", null, 1)
+        advanceUntilIdle()
+
+        assertEquals(PublicSearchState.Error, viewModel.publicSearch.value)
+    }
+
+    @Test
+    fun accountSwitchReplacesCurrentUserAfterLogout() = runTest(dispatcher) {
+        val sessionStore = InMemorySessionStore()
+        val api = object : MobileAuthApi {
+            override suspend fun login(request: MobileAuthRequest): MobileSession {
+                val id = if (request.email == "a@example.com") 1L else 2L
+                return MobileSession(
+                    user = MobileUser(id, "Conta", request.email, null, "client", true, false),
+                    accessToken = "token-${request.email}",
+                    expiresAt = "2099-01-01T00:00:00Z"
+                )
+            }
+
+            override suspend fun currentUser(accessToken: String): MobileUser = error("Unused")
+            override suspend fun register(request: MobileRegisterRequest): MobileSession = error("Unused")
+            override suspend fun registerPhotographer(request: MobilePhotographerRegisterRequest): MobileSession = error("Unused")
+            override suspend fun logout(accessToken: String) = Unit
+        }
+        viewModel = LensClickViewModel(
+            LensClickRepository(dao),
+            mobileAuthRepository = MobileAuthRepository(api, sessionStore)
+        )
+        advanceUntilIdle()
+
+        viewModel.login("a@example.com", "Secret123")
+        advanceUntilIdle()
+        assertEquals("a@example.com", viewModel.currentUser.value?.email)
+
+        viewModel.logout()
+        advanceUntilIdle()
+        assertNull(viewModel.currentUser.value)
+        assertEquals(AuthenticationState.LogoutCompleted, viewModel.authentication.value)
+
+        viewModel.login("b@example.com", "Secret123")
+        advanceUntilIdle()
+        assertEquals("b@example.com", viewModel.currentUser.value?.email)
+        assertEquals(2L, viewModel.currentUser.value?.id)
+        assertTrue(viewModel.authentication.value is AuthenticationState.Authenticated)
+    }
+
     private fun authRepository(store: InMemorySessionStore, status: Int = 200): MobileAuthRepository =
         MobileAuthRepository(object : MobileAuthApi {
             override suspend fun login(request: MobileAuthRequest): MobileSession {
