@@ -54,6 +54,8 @@ A camada de dados está separada em `data.local` (Room), `data.remote` (descober
 
 ## Fase 5 — validação
 
+> Progresso (`af6e1f4`): testes JVM de mapeamento/sessão/ViewModel e instrumentados de Keystore e fluxos de autenticação (restauração, logout, troca de conta, rede) integrados e verdes no CI; os demais itens da fase permanecem pendentes.
+
 - [ ] Testes JVM de regras, ViewModels e integrações.
 - [ ] Testes instrumentados dos fluxos críticos.
 - [ ] Testes de contrato com a API.
