@@ -35,6 +35,8 @@ A camada de dados está separada em `data.local` (Room), `data.remote` (descober
 
 ## Fase 3 — integração funcional
 
+> Preparação (`434af51`): modelos de domínio e ports de perfil profissional e portfólio prontos (contrato web documentado), com testes JVM; implementação remota e telas aguardam aprovação do contrato móvel.
+
 - [x] Autenticação, sessão e cadastro móvel (verificação de e-mail e conta ainda pendentes).
 - [x] Descoberta, perfil público e leitura do portfólio público.
 - [ ] Perfil profissional e edição/envio de portfólio.

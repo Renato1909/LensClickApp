@@ -23,7 +23,7 @@ Este documento separa trabalho integrado, trabalho documentado e dependências e
 - manter a matriz de paridade atualizada;
 - ~~concluir testes JVM de mapeamento, sessão e ViewModel~~ — concluído (`af6e1f4`);
 - ~~adicionar testes instrumentados de restauração, logout, troca de conta e estados de rede~~ — concluído (`af6e1f4`, Keystore real + fluxos de auth);
-- preparar telas e repositórios para perfil profissional e portfólio autenticados sem inventar endpoints;
+- preparar telas e repositórios para perfil profissional e portfólio autenticados sem inventar endpoints — domínio e ports preparados (`434af51`); telas e integração remota aguardam contrato móvel;
 - revisar textos do README, handoff e validação para não descrever a autenticação ou a descoberta pública como locais;
 - manter builds de debug, staging e release separados e sem segredos.
 

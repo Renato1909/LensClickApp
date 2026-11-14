@@ -19,7 +19,8 @@
 - **Room não persiste mais senhas**: a migração 2→3 removeu a coluna `passwordHash`; os hashes SHA-256 de demonstração vivem apenas em memória (`ConcurrentHashMap` no repositório) e desaparecem ao reiniciar o processo;
 - backend real conectado na primeira fatia de autenticação móvel: login, restauração via `/me`, logout, expiração e revogação;
 - conta de demonstração não é mais usada pelo fluxo de autenticação conectado e não pode voltar à release pública;
-- cadastro móvel já usa o contrato remoto; orçamentos, mensagens e perfil profissional ainda não possuem contratos móveis implementados.
+- cadastro móvel já usa o contrato remoto; orçamentos, mensagens e perfil profissional ainda não possuem contratos móveis implementados;
+- domínio de perfil profissional e portfólio preparado (`ProfessionalProfile`/`PortfolioItem` + ports, commit `434af51`), sem implementação HTTP: a integração remota aguarda o contrato móvel aprovado.
 
 ## Fundação entregue (integrada em `main` via PR #4, commit `fbbd934`)
 
