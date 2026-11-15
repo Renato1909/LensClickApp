@@ -132,12 +132,12 @@ Referências: [publicação Android](https://developer.android.com/studio/publis
 7. Gate F — validação integral e release controlada.
 8. Gate H — faixas de teste e lançamento gradual.
 
-## 5. Decisões pendentes do mantenedor
+## 5. Decisões do mantenedor (registradas em 2026-11-14)
 
-- conta Google Play e confirmação do pacote base `com.lensclick.app`;
-- domínio e titularidade;
-- conta Google Play pessoal ou de organização;
-- escopo obrigatório do primeiro lançamento;
-- presença ou não de funções administrativas no aplicativo;
-- política final de 2FA e recuperação;
-- responsável jurídico e identidade pública do controlador.
+Resolvidas em [`DECISOES.md`](./DECISOES.md); 2FA em [`ADR_002_2FA.md`](./ADR_002_2FA.md):
+
+- distribuição: APK sideload para a Feira Tecnológica; Google Play adiada (não se aplica à demo);
+- domínio e titularidade: adiados (manter `workers.dev`);
+- escopo: cliente + fotógrafo; orçamentos/propostas/agenda/favoritos via contrato no backend; admin web-only;
+- política de 2FA: TOTP + códigos de recuperação (ADR 002 aprovado);
+- responsável jurídico e controlador: adiados (demo não é publicação pública); reativar em publicação futura.

@@ -5,16 +5,18 @@
 
 Este documento separa trabalho integrado, trabalho documentado e dependências externas. Percentuais são estimativas de conclusão do escopo de cada Gate, não uma medição de cobertura de código nem aprovação de publicação.
 
+**Contexto (2026-11-14):** o app será apresentado na Feira Tecnológica como demo via APK sideload, sem Google Play; domínio e jurídico adiados. Escopo completo (cliente + fotógrafo, orçamentos via backend, 2FA TOTP). Ver [`DECISOES.md`](./DECISOES.md).
+
 | Gate | Estado | Estimativa | Evidência principal |
 |---|---|---:|---|
 | A — Fundação Android | Fechado | 100% | Gradle, JDK 21, SDK 36, CI, lint e testes base integrados; dados separados em `data.local`/`data.remote`/`domain` (`9d3d4e6`). |
 | B — Matriz de paridade | Em andamento | 90% | [`MATRIZ_PARIDADE.md`](./MATRIZ_PARIDADE.md) atualizado após autenticação móvel e descoberta/perfil público; faltam decisões de escopo e contratos das próximas fatias. |
 | C — Contrato móvel seguro | Fechado para a primeira fatia | 100% | PR backend [#148](https://github.com/Renato1909/LensClick/pull/148), contrato e testes de login, `/me`, logout e revogação. Refresh rotativo e `expiresAt` em `/me` continuam pendências do ADR 001. |
 | D — Primeira fatia vertical | Fechado para autenticação e descoberta pública | 100% | Login, cadastro, restauração, logout, descoberta por filtros/paginação, perfil por slug, portfólio público, estados de vazio/erro/404 e testes JVM. |
-| E — Autenticação em duas etapas | Não iniciado | 20% | ADR 002 proposto; faltam contrato 200/202, desafio, verificação móvel, migração, auditoria, rollback e aprovação formal. |
+| E — Autenticação em duas etapas | Abordagem aprovada | 25% | ADR 002 aprovado (TOTP + códigos de recuperação; ver `ADR_002_2FA.md`); faltam implementação backend/Android, contrato de desafio, testes e threat model completo. |
 | F — Validação integral e publicação | Em andamento | 60% | CI JVM/lint/instrumentados aprovado; cobertura ampliada com JVM de mapeamento/sessão/ViewModel e instrumentados de Keystore e fluxos de auth (`af6e1f4`); faltam staging operacional, dispositivo físico, validação manual de acessibilidade, AAB assinado e smoke de release. |
-| G — Domínio, e-mail e jurídico | Não iniciado | 10% | Dependências identificadas no plano; faltam domínio, identidade legal, textos aprovados e Data safety baseada em auditoria final. |
-| H — Google Play | Não iniciado | 5% | Ainda faltam conta, confirmação do pacote `com.lensclick.app` no Play Console, Play App Signing, materiais da loja e faixas de teste. |
+| G — Domínio, e-mail e jurídico | Adiado (demo da feira) | 10% | Adiado para a demo via APK sideload (ver `DECISOES.md`); reativar em publicação pública: domínio, identidade legal, textos aprovados e Data safety. |
+| H — Google Play | Não se aplica à demo | 0% | Demo da feira via APK sideload, sem Play (ver `DECISOES.md`); reativar em publicação pública: conta, pacote, Play App Signing, materiais e faixas. |
 
 ## O que pode ser feito agora
 
