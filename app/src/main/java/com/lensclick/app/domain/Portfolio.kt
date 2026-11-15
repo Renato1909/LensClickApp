@@ -17,11 +17,11 @@ object PortfolioLimits {
     const val MAX_COVERS = 1
 }
 
-// Implementação remota aguarda contrato móvel aprovado; limites e autorização são do servidor.
+// Consome /api/account/portfolio* com Bearer; limites e autorização são do servidor.
 interface PortfolioGateway {
     suspend fun list(): List<PortfolioItem>
 
-    suspend fun add(image: ByteArray, altText: String, caption: String, category: String): PortfolioItem
+    suspend fun add(image: ByteArray, imageContentType: String, altText: String, caption: String, category: String): PortfolioItem
 
     suspend fun update(items: List<PortfolioItem>): List<PortfolioItem>
 

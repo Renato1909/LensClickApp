@@ -36,9 +36,10 @@ class UrlConnectionTransport(
             connection.connectTimeout = 10_000
             connection.readTimeout = 10_000
             request.headers.forEach { (name, value) -> connection.setRequestProperty(name, value) }
-            if (request.body != null) {
+            val payload = request.bodyBytes ?: request.body?.toByteArray(Charsets.UTF_8)
+            if (payload != null) {
                 connection.doOutput = true
-                connection.outputStream.bufferedWriter(Charsets.UTF_8).use { it.write(request.body) }
+                connection.outputStream.use { it.write(payload) }
             }
             val statusCode = connection.responseCode
             val stream = if (statusCode >= 400) connection.errorStream else connection.inputStream

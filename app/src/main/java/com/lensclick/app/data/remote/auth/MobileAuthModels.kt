@@ -33,7 +33,8 @@ data class HttpRequest(
     val method: String,
     val path: String,
     val headers: Map<String, String> = emptyMap(),
-    val body: String? = null
+    val body: String? = null,
+    val bodyBytes: ByteArray? = null
 )
 
 data class HttpResponse(
@@ -60,3 +61,19 @@ class MobileAuthException(
     val statusCode: Int? = null,
     cause: Throwable? = null
 ) : Exception(code.name, cause)
+
+internal fun httpErrorCodeFor(statusCode: Int): MobileAuthErrorCode = when (statusCode) {
+    400, 413, 415 -> MobileAuthErrorCode.INVALID_INPUT
+    401 -> MobileAuthErrorCode.UNAUTHENTICATED
+    403 -> MobileAuthErrorCode.FORBIDDEN
+    404 -> MobileAuthErrorCode.NOT_FOUND
+    409 -> MobileAuthErrorCode.CONFLICT
+    429 -> MobileAuthErrorCode.RATE_LIMITED
+    in 500..599 -> MobileAuthErrorCode.SERVER
+    else -> MobileAuthErrorCode.SERVER
+}
+
+internal fun ensureHttpSuccess(response: HttpResponse, vararg expectedStatuses: Int) {
+    if (response.statusCode in expectedStatuses) return
+    throw MobileAuthException(code = httpErrorCodeFor(response.statusCode), statusCode = response.statusCode)
+}

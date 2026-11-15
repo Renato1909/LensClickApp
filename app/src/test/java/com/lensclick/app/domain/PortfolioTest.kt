@@ -35,8 +35,8 @@ class PortfolioTest {
         val gateway = FakePortfolioGateway()
         assertTrue(gateway.list().isEmpty())
 
-        val first = gateway.add(ByteArray(1), altText = "Alt", caption = "Cap", category = "portrait")
-        val second = gateway.add(ByteArray(1), altText = "Alt2", caption = "Cap2", category = "wedding")
+        val first = gateway.add(ByteArray(1), imageContentType = "image/jpeg", altText = "Alt", caption = "Cap", category = "portrait")
+        val second = gateway.add(ByteArray(1), imageContentType = "image/jpeg", altText = "Alt2", caption = "Cap2", category = "wedding")
         assertEquals(listOf(first, second), gateway.list())
 
         gateway.remove(first.id)
@@ -46,7 +46,7 @@ class PortfolioTest {
     @Test
     fun gatewayUpdateReplacesItemsAndOrder() = runTest {
         val gateway = FakePortfolioGateway()
-        val first = gateway.add(ByteArray(1), "Alt", "Cap", "portrait")
+        val first = gateway.add(ByteArray(1), "image/jpeg", "Alt", "Cap", "portrait")
         val reordered = listOf(first.copy(position = 0, isCover = true))
 
         assertEquals(reordered, gateway.update(reordered))
@@ -61,7 +61,7 @@ private class FakePortfolioGateway : PortfolioGateway {
 
     override suspend fun list(): List<PortfolioItem> = items.toList()
 
-    override suspend fun add(image: ByteArray, altText: String, caption: String, category: String): PortfolioItem {
+    override suspend fun add(image: ByteArray, imageContentType: String, altText: String, caption: String, category: String): PortfolioItem {
         val id = nextId++
         val item = PortfolioItem(id, caption, altText, items.size, false, category, "memory://$id")
         items += item
