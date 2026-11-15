@@ -4,6 +4,8 @@ import android.app.Application
 import com.lensclick.app.data.local.LensClickDatabase
 import com.lensclick.app.data.local.LensClickRepository
 import com.lensclick.app.data.remote.ApiEnvironment
+import com.lensclick.app.data.remote.HttpBudgetRequestsGateway
+import com.lensclick.app.data.remote.HttpFavoritesGateway
 import com.lensclick.app.data.remote.HttpPortfolioGateway
 import com.lensclick.app.data.remote.HttpProfessionalProfileGateway
 import com.lensclick.app.data.remote.auth.AndroidKeystoreSessionStore
@@ -14,6 +16,8 @@ import com.lensclick.app.data.remote.auth.SessionStore
 import com.lensclick.app.data.remote.auth.UrlConnectionTransport
 import com.lensclick.app.domain.PortfolioGateway
 import com.lensclick.app.domain.ProfessionalProfileGateway
+import com.lensclick.app.domain.BudgetRequestsGateway
+import com.lensclick.app.domain.FavoritesGateway
 
 class LensClickApplication : Application() {
     val repository: LensClickRepository by lazy {
@@ -34,5 +38,13 @@ class LensClickApplication : Application() {
 
     val portfolioGateway: PortfolioGateway by lazy {
         HttpPortfolioGateway(httpTransport, sessionStore)
+    }
+
+    val budgetRequestsGateway: BudgetRequestsGateway by lazy {
+        HttpBudgetRequestsGateway(httpTransport, sessionStore)
+    }
+
+    val favoritesGateway: FavoritesGateway by lazy {
+        HttpFavoritesGateway(httpTransport, sessionStore)
     }
 }
