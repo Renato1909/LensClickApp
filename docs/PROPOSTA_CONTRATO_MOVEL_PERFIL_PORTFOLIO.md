@@ -1,10 +1,10 @@
 # Proposta de contrato móvel — perfil profissional e portfólio
 
-Status: **PROPOSTA pendente de aprovação do mantenedor.** As rotas de conta já existem no backend e aceitam `Authorization: Bearer`; esta proposta formaliza o consumo Android, documenta o contrato observado e lista os ajustes e aceites necessários antes da implementação remota.
+Status: **APROVADO pelo mantenedor.** Camada de dados remota implementada em `a88f1ca` (gateways `HttpProfessionalProfileGateway`/`HttpPortfolioGateway`, parsers DTO, upload multipart, mapeamento de erros e testes JVM), consumindo as rotas de conta existentes com `Authorization: Bearer`. Telas de perfil profissional e portfólio pendentes (próxima fatia).
 Data: 2026-11-14
 
 - Backend auditado: `Renato1909/LensClick` @ `6659948` (`src/router.mjs`, `src/photographers.mjs`, `src/portfolio.mjs`, `src/account.mjs`, `src/worker.mjs`).
-- Android: domínio preparado em `Renato1909/LensClickApp` @ `434af51` (`ProfessionalProfile`/`PortfolioItem` + ports `ProfessionalProfileGateway`/`PortfolioGateway`).
+- Android: `Renato1909/LensClickApp` @ `a88f1ca` — domínio preparado (`434af51`) e gateways remotos implementados (`a88f1ca`): `HttpProfessionalProfileGateway`/`HttpPortfolioGateway` + parsers + testes JVM.
 - Contrato base: [`CONTRATO_AUTENTICACAO_MOBILE.md`](./CONTRATO_AUTENTICACAO_MOBILE.md).
 
 ## 1. Objetivo
@@ -150,7 +150,7 @@ Bearer; item do dono (`404`). Remove do R2 e do banco. `200` `{ "message": "..."
 | 429 | rate limit | aguardar, sem retry agressivo |
 | 5xx | falha do servidor | erro transitório / retry controlado |
 
-Formato atual do corpo: `{ "error": "texto" }`. **Pendência:** códigos de erro semânticos estáveis. O Android mapeia por status de forma determinística (não usa texto como regra de negócio); o mapeamento atual (`MobileAuthErrorCode`) cobre 400/401/403/404/409/429/5xx e deve ser estendido para 413/415 (hoje caem em `SERVER`).
+Formato atual do corpo: `{ "error": "texto" }`. **Pendência:** códigos de erro semânticos estáveis. O Android mapeia por status de forma determinística (não usa texto como regra de negócio); o mapeamento compartilhado (`httpErrorCodeFor`) cobre 400/401/403/404/409/429/5xx e 413/415 (`INVALID_INPUT`), implementado em `a88f1ca`.
 
 ## 7. Mapeamento ao domínio Android preparado
 
@@ -159,11 +159,11 @@ Formato atual do corpo: `{ "error": "texto" }`. **Pendência:** códigos de erro
 | `ProfessionalProfileGateway.load()` | `GET /api/account/professional-profile` |
 | `ProfessionalProfileGateway.save(profile)` | `PUT /api/account/professional-profile` |
 | `PortfolioGateway.list()` | `GET /api/account/portfolio` |
-| `PortfolioGateway.add(image, altText, caption, category)` | `POST /api/account/portfolio` (multipart) |
+| `PortfolioGateway.add(image, imageContentType, altText, caption, category)` | `POST /api/account/portfolio` (multipart) |
 | `PortfolioGateway.update(items)` | `PUT /api/account/portfolio` |
 | `PortfolioGateway.remove(id)` | `DELETE /api/account/portfolio/:id` |
 
-Ajustes necessários no modelo `ProfessionalProfile` (preparado como subconjunto do contrato web): adicionar `slug`, `instagram`, `website`, `ratingAverage`, `reviewCount`; substituir `contacts { email, phone }` por `publicEmail`/`publicPhone` (alinhar ao `ownerView`). `PortfolioItem` já coincide com o DTO. A implementação remota (`HttpProfessionalProfileGateway`/`HttpPortfolioGateway`) e as telas vêm **após a aprovação**, reutilizando o transporte e o mapeamento de erros da fatia de autenticação.
+Modelo `ProfessionalProfile` alinhado ao `ownerView` (`slug`, `instagram`, `website`, `ratingAverage`, `reviewCount`, `publicEmail`/`publicPhone`) e `PortfolioGateway.add` refinado com o tipo MIME da imagem. Implementação remota concluída em `a88f1ca` (`HttpProfessionalProfileGateway`/`HttpPortfolioGateway`, parsers DTO, upload multipart, transporte binário, mapeamento de erros compartilhado), com testes JVM. As telas vêm na próxima fatia.
 
 ## 8. Segurança e privacidade
 
@@ -175,12 +175,14 @@ Ajustes necessários no modelo `ProfessionalProfile` (preparado como subconjunto
 
 ## 9. Pendências e critérios de aceite
 
-Pendências antes da implementação remota:
+Pendências:
 
-- aprovação formal do mantenedor;
-- códigos de erro semânticos estáveis no corpo;
-- testes de contrato móveis (sucesso, 400/401/403/404/409/413/415/429, ownership, capa única, limite de 12, critérios de publicação);
-- alinhamento do modelo de domínio ao `ownerView`;
+- ~~aprovação formal do mantenedor~~ — aprovada;
+- ~~alinhamento do modelo de domínio ao `ownerView`~~ — concluído (`a88f1ca`);
+- ~~camada de dados remota + testes JVM~~ — concluído (`a88f1ca`);
+- códigos de erro semânticos estáveis no corpo (backend);
+- testes de contrato móveis em ambiente controlado (ownership, capa única, limite de 12, critérios de publicação);
+- telas de perfil profissional e portfólio (próxima fatia);
 - decisão de escopo (fotógrafo no primeiro lançamento);
 - staging operacional para validação.
 
