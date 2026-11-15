@@ -20,6 +20,8 @@ import com.lensclick.app.data.remote.auth.MobileAuthRepository
 import com.lensclick.app.domain.MobileUser
 import com.lensclick.app.domain.ProfessionalProfile
 import com.lensclick.app.domain.ProfessionalProfileGateway
+import com.lensclick.app.domain.PortfolioItem
+import com.lensclick.app.domain.PortfolioGateway
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -63,11 +65,23 @@ sealed interface ProfessionalProfileState {
     ) : ProfessionalProfileState
 }
 
+sealed interface PortfolioState {
+    data object Loading : PortfolioState
+    data object Error : PortfolioState
+    data class Ready(
+        val items: List<PortfolioItem>,
+        val busy: Boolean = false,
+        val error: MobileAuthErrorCode? = null,
+        val message: String? = null
+    ) : PortfolioState
+}
+
 class LensClickViewModel(
     private val repository: LensClickRepository,
     private val publicPhotographers: PublicPhotographersGateway = HttpPublicPhotographersGateway(),
     private val mobileAuthRepository: MobileAuthRepository? = null,
-    private val professionalProfileGateway: ProfessionalProfileGateway? = null
+    private val professionalProfileGateway: ProfessionalProfileGateway? = null,
+    private val portfolioGateway: PortfolioGateway? = null
 ) : ViewModel() {
     companion object {
         val Factory = viewModelFactory {
@@ -76,7 +90,8 @@ class LensClickViewModel(
                 LensClickViewModel(
                     application.repository,
                     mobileAuthRepository = application.mobileAuthRepository,
-                    professionalProfileGateway = application.professionalProfileGateway
+                    professionalProfileGateway = application.professionalProfileGateway,
+                    portfolioGateway = application.portfolioGateway
                 )
             }
         }
@@ -347,6 +362,79 @@ class LensClickViewModel(
                 ProfessionalProfileState.Ready(profile, saving = false, error = error.code)
             } catch (_: Exception) {
                 ProfessionalProfileState.Ready(profile, saving = false, error = MobileAuthErrorCode.SERVER)
+            }
+        }
+    }
+
+    private val _portfolio = MutableStateFlow<PortfolioState>(PortfolioState.Loading)
+    val portfolio: StateFlow<PortfolioState> = _portfolio.asStateFlow()
+
+    private fun portfolioReady(): PortfolioState.Ready? = _portfolio.value as? PortfolioState.Ready
+
+    fun loadPortfolio() {
+        val gateway = portfolioGateway
+        if (gateway == null) {
+            _portfolio.value = PortfolioState.Error
+            return
+        }
+        viewModelScope.launch {
+            _portfolio.value = PortfolioState.Loading
+            _portfolio.value = try {
+                PortfolioState.Ready(gateway.list())
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                PortfolioState.Error
+            }
+        }
+    }
+
+    fun addPortfolioImage(image: ByteArray, imageContentType: String, altText: String, caption: String, category: String) {
+        val gateway = portfolioGateway ?: return
+        viewModelScope.launch {
+            portfolioReady()?.let { _portfolio.value = it.copy(busy = true, error = null, message = null) }
+            try {
+                gateway.add(image, imageContentType, altText, caption, category)
+                _portfolio.value = PortfolioState.Ready(gateway.list(), message = "Imagem adicionada.")
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: MobileAuthException) {
+                portfolioReady()?.let { _portfolio.value = it.copy(busy = false, error = error.code) }
+            } catch (_: Exception) {
+                portfolioReady()?.let { _portfolio.value = it.copy(busy = false, error = MobileAuthErrorCode.SERVER) }
+            }
+        }
+    }
+
+    fun updatePortfolio(items: List<PortfolioItem>) {
+        val gateway = portfolioGateway ?: return
+        viewModelScope.launch {
+            portfolioReady()?.let { _portfolio.value = it.copy(busy = true, error = null, message = null) }
+            try {
+                _portfolio.value = PortfolioState.Ready(gateway.update(items), message = "Portfólio atualizado.")
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: MobileAuthException) {
+                portfolioReady()?.let { _portfolio.value = it.copy(busy = false, error = error.code) }
+            } catch (_: Exception) {
+                portfolioReady()?.let { _portfolio.value = it.copy(busy = false, error = MobileAuthErrorCode.SERVER) }
+            }
+        }
+    }
+
+    fun removePortfolioItem(id: Long) {
+        val gateway = portfolioGateway ?: return
+        viewModelScope.launch {
+            portfolioReady()?.let { _portfolio.value = it.copy(busy = true, error = null, message = null) }
+            try {
+                gateway.remove(id)
+                _portfolio.value = PortfolioState.Ready(gateway.list(), message = "Imagem removida.")
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: MobileAuthException) {
+                portfolioReady()?.let { _portfolio.value = it.copy(busy = false, error = error.code) }
+            } catch (_: Exception) {
+                portfolioReady()?.let { _portfolio.value = it.copy(busy = false, error = MobileAuthErrorCode.SERVER) }
             }
         }
     }

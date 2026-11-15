@@ -1,5 +1,8 @@
 package com.lensclick.app.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -29,7 +32,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -56,6 +61,7 @@ import com.lensclick.app.data.local.Photographer
 import com.lensclick.app.domain.PublicPhotographer
 import com.lensclick.app.data.local.User
 import com.lensclick.app.data.remote.auth.MobileAuthErrorCode
+import com.lensclick.app.domain.PortfolioItem
 import com.lensclick.app.domain.ProfessionalProfile
 import java.text.NumberFormat
 import java.util.Locale
@@ -69,7 +75,7 @@ private val Paper = Color(0xFFF6F3EB)
 private val Muted = Color(0xFF716D64)
 private val Gold = Color(0xFF9A6A24)
 
-private enum class Screen { Onboarding, AccountType, Login, SignUp, PhotographerSignUp, Home, Search, Photographer, Quote, Budgets, Conversations, Chat, Account, ProDashboard, ProRequests, ProAgenda, ProProfile }
+private enum class Screen { Onboarding, AccountType, Login, SignUp, PhotographerSignUp, Home, Search, Photographer, Quote, Budgets, Conversations, Chat, Account, ProDashboard, ProRequests, ProAgenda, ProProfile, ProPortfolio }
 private const val PhotographerRoute = "Photographer/{slug}"
 
 @Composable
@@ -93,7 +99,7 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
     }
     fun go(target: Screen) {
         if (target in setOf(Screen.Home, Screen.Search, Screen.Budgets, Screen.Conversations, Screen.Account,
-                Screen.ProDashboard, Screen.ProRequests, Screen.ProAgenda, Screen.ProProfile) &&
+                Screen.ProDashboard, Screen.ProRequests, Screen.ProAgenda, Screen.ProProfile, Screen.ProPortfolio) &&
                 !(target == Screen.Search && currentUser == null)) {
             resetTo(target)
         } else {
@@ -171,6 +177,7 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
             composable(Screen.ProRequests.name) { PhotographerRequestsScreen(budgets, ::go) }
             composable(Screen.ProAgenda.name) { PhotographerAgendaScreen(budgets, ::go) }
             composable(Screen.ProProfile.name) { ProfessionalProfileScreen(viewModel, ::go, onClientMode = { resetTo(Screen.Home) }, onLogout = { viewModel.logout() }) }
+            composable(Screen.ProPortfolio.name) { PortfolioScreen(viewModel, ::go) }
         }
     }
 }
@@ -846,6 +853,12 @@ private fun PhotographerDashboardScreen(
                 ProAction("Abrir agenda", "Organize seus trabalhos", Modifier.weight(1f)) { onNavigate(Screen.ProAgenda) }
             }
         }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ProAction("Portfólio", "Gerencie suas imagens", Modifier.weight(1f)) { onNavigate(Screen.ProPortfolio) }
+                ProAction("Perfil", "Edite e publique", Modifier.weight(1f)) { onNavigate(Screen.ProProfile) }
+            }
+        }
         item { SectionTitle("Pedidos recentes") { onNavigate(Screen.ProRequests) } }
         items(budgets.take(3), key = { it.id }) { BudgetCard(it) }
     }
@@ -1005,6 +1018,169 @@ private fun profileErrorMessage(code: MobileAuthErrorCode): String = when (code)
     MobileAuthErrorCode.UNAUTHENTICATED -> "Sua sessão expirou. Entre novamente."
     MobileAuthErrorCode.RATE_LIMITED -> "Muitas alterações. Aguarde antes de tentar novamente."
     else -> "Não foi possível salvar. Tente novamente."
+}
+
+@Composable
+private fun PortfolioScreen(viewModel: LensClickViewModel, onNavigate: (Screen) -> Unit) = PhotographerPage(Screen.ProPortfolio, onNavigate) {
+    val state by viewModel.portfolio.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    LaunchedEffect(Unit) { viewModel.loadPortfolio() }
+    var pendingUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> pendingUri = uri }
+
+    Column(Modifier.fillMaxSize().padding(20.dp)) {
+        Text("Portfólio", color = Ink, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
+        Text("Até 12 imagens (JPG, PNG ou WebP, 4 MB cada).", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
+        when (val s = state) {
+            PortfolioState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Ink) }
+            PortfolioState.Error -> ProfileStatus("Não foi possível carregar seu portfólio.", "Tentar novamente") { viewModel.loadPortfolio() }
+            is PortfolioState.Ready -> {
+                if (s.message != null) Text(s.message, color = Gold, fontSize = 12.sp)
+                if (s.error != null) Text(portfolioErrorMessage(s.error), color = MaterialTheme.colorScheme.error, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                PrimaryButton(if (s.busy) "Enviando..." else "Adicionar imagem", enabled = !s.busy && s.items.size < 12, onClick = {
+                    picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                })
+                Spacer(Modifier.height(14.dp))
+                if (s.items.isEmpty()) {
+                    Text("Nenhuma imagem ainda. Adicione a primeira.", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 24.dp))
+                } else {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        items(s.items, key = { it.id }) { item -> PortfolioItemCard(item, s.items, s.busy, viewModel) }
+                    }
+                }
+            }
+        }
+    }
+
+    pendingUri?.let { uri ->
+        PortfolioMetadataDialog(
+            title = "Nova imagem",
+            initialAlt = "",
+            initialCaption = "",
+            initialCategory = "other",
+            onDismiss = { pendingUri = null },
+            onConfirm = { altText, caption, category ->
+                val upload = readPortfolioUpload(context, uri)
+                pendingUri = null
+                if (upload != null) viewModel.addPortfolioImage(upload.bytes, upload.contentType, altText, caption, category)
+            }
+        )
+    }
+}
+
+@Composable
+private fun PortfolioItemCard(item: PortfolioItem, items: List<PortfolioItem>, busy: Boolean, viewModel: LensClickViewModel) {
+    var editing by remember { mutableStateOf(false) }
+    val index = items.indexOfFirst { it.id == item.id }
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(16.dp)).padding(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Photo(Modifier.size(64.dp))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(item.caption.ifBlank { "Sem legenda" }, color = Ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(item.category, color = Muted, fontSize = 11.sp)
+                if (item.isCover) Text("Capa", color = Gold, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(top = 8.dp)) {
+            TextButton(enabled = !busy && !item.isCover, onClick = { viewModel.updatePortfolio(items.map { it.copy(isCover = it.id == item.id) }) }, contentPadding = PaddingValues(6.dp)) { Text("Capa", fontSize = 11.sp, color = Ink) }
+            TextButton(enabled = !busy && index > 0, onClick = { viewModel.updatePortfolio(movePortfolioItem(items, index, index - 1)) }, contentPadding = PaddingValues(6.dp)) { Text("↑", fontSize = 13.sp, color = Ink) }
+            TextButton(enabled = !busy && index < items.size - 1, onClick = { viewModel.updatePortfolio(movePortfolioItem(items, index, index + 1)) }, contentPadding = PaddingValues(6.dp)) { Text("↓", fontSize = 13.sp, color = Ink) }
+            TextButton(enabled = !busy, onClick = { editing = true }, contentPadding = PaddingValues(6.dp)) { Text("Editar", fontSize = 11.sp, color = Ink) }
+            TextButton(enabled = !busy, onClick = { viewModel.removePortfolioItem(item.id) }, contentPadding = PaddingValues(6.dp)) { Text("Excluir", fontSize = 11.sp, color = MaterialTheme.colorScheme.error) }
+        }
+    }
+    if (editing) {
+        PortfolioMetadataDialog(
+            title = "Editar imagem",
+            initialAlt = item.altText,
+            initialCaption = item.caption,
+            initialCategory = item.category,
+            onDismiss = { editing = false },
+            onConfirm = { altText, caption, category ->
+                editing = false
+                viewModel.updatePortfolio(items.map { if (it.id == item.id) it.copy(altText = altText, caption = caption, category = category) else it })
+            }
+        )
+    }
+}
+
+private fun movePortfolioItem(items: List<PortfolioItem>, from: Int, to: Int): List<PortfolioItem> {
+    val list = items.toMutableList()
+    val moved = list.removeAt(from)
+    list.add(to, moved)
+    return list.mapIndexed { i, it -> it.copy(position = i) }
+}
+
+@Composable
+private fun PortfolioMetadataDialog(
+    title: String,
+    initialAlt: String,
+    initialCaption: String,
+    initialCategory: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String, String) -> Unit
+) {
+    var altText by remember { mutableStateOf(initialAlt) }
+    var caption by remember { mutableStateOf(initialCaption) }
+    var category by remember { mutableStateOf(initialCategory) }
+    var categoryMenu by remember { mutableStateOf(false) }
+    val categories = listOf("wedding", "events", "portrait", "family", "corporate", "product", "fashion", "newborn", "nature", "real-estate", "other")
+    Dialog(onDismissRequest = onDismiss) {
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Paper).padding(20.dp)) {
+            Text(title, color = Ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(12.dp))
+            LensField("Descrição para acessibilidade (alt)", altText, { altText = it }, singleLine = false, minLines = 2)
+            Spacer(Modifier.height(10.dp))
+            LensField("Legenda", caption, { caption = it })
+            Spacer(Modifier.height(10.dp))
+            Box {
+                OutlinedButton(onClick = { categoryMenu = true }, modifier = Modifier.fillMaxWidth()) { Text("Categoria: $category", color = Ink) }
+                DropdownMenu(expanded = categoryMenu, onDismissRequest = { categoryMenu = false }) {
+                    categories.forEach { value -> DropdownMenuItem(text = { Text(value) }, onClick = { category = value; categoryMenu = false }) }
+                }
+            }
+            if (altText.trim().length < 3) Text("A descrição precisa de ao menos 3 caracteres.", color = MaterialTheme.colorScheme.error, fontSize = 10.sp, modifier = Modifier.padding(top = 6.dp))
+            Spacer(Modifier.height(14.dp))
+            PrimaryButton("Confirmar", enabled = altText.trim().length >= 3, onClick = { onConfirm(altText.trim(), caption.trim(), category) })
+            Spacer(Modifier.height(8.dp))
+            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Cancelar", color = Muted) }
+        }
+    }
+}
+
+private data class PortfolioUpload(val bytes: ByteArray, val contentType: String)
+
+private fun readPortfolioUpload(context: android.content.Context, uri: android.net.Uri): PortfolioUpload? = try {
+    val bitmap = context.contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it) }
+    if (bitmap == null) {
+        null
+    } else {
+        val scaled = scalePortfolioBitmap(bitmap, 2048)
+        val out = java.io.ByteArrayOutputStream()
+        scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, out)
+        if (scaled !== bitmap) bitmap.recycle()
+        PortfolioUpload(out.toByteArray(), "image/jpeg")
+    }
+} catch (_: Exception) {
+    null
+}
+
+private fun scalePortfolioBitmap(bitmap: android.graphics.Bitmap, maxDim: Int): android.graphics.Bitmap {
+    val width = bitmap.width
+    val height = bitmap.height
+    if (width <= maxDim && height <= maxDim) return bitmap
+    val ratio = maxDim.toFloat() / maxOf(width, height)
+    return android.graphics.Bitmap.createScaledBitmap(bitmap, (width * ratio).toInt().coerceAtLeast(1), (height * ratio).toInt().coerceAtLeast(1), true)
+}
+
+private fun portfolioErrorMessage(code: MobileAuthErrorCode): String = when (code) {
+    MobileAuthErrorCode.CONFLICT -> "Seu portfólio já possui o limite de 12 imagens."
+    MobileAuthErrorCode.INVALID_INPUT -> "Imagem inválida. Use JPG, PNG ou WebP de até 4 MB e descrição com 3+ caracteres."
+    MobileAuthErrorCode.FORBIDDEN -> "Somente perfis de fotógrafo podem gerenciar o portfólio."
+    MobileAuthErrorCode.UNAUTHENTICATED -> "Sua sessão expirou. Entre novamente."
+    MobileAuthErrorCode.RATE_LIMITED -> "Muitos envios. Aguarde antes de tentar novamente."
+    else -> "Não foi possível concluir a operação. Tente novamente."
 }
 
 private fun initialsForDisplay(name: String?): String = name.orEmpty().trim().split(Regex("\\s+")).filter { it.isNotBlank() }.take(2).joinToString("") { it.first().uppercase() }.ifBlank { "LC" }
