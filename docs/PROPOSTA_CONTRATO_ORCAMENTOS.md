@@ -1,6 +1,6 @@
 # Proposta de contrato — orçamentos, propostas, agenda e favoritos
 
-Status: **PROPOSTA pendente de aprovação do mantenedor.** Novo contrato no backend `LensClick` + consumo Android. Escopo completo da Feira Tecnológica (ver [`DECISOES.md`](./DECISOES.md)).
+Status: **APROVADO pelo mantenedor (2026-11-14).** Auditoria (`budget_audit`) incluída na primeira fatia; limite de 1 pedido pendente por par cliente/fotógrafo. Novo contrato no backend `LensClick` + consumo Android. Escopo completo da Feira Tecnológica (ver [`DECISOES.md`](./DECISOES.md)).
 Data: 2026-11-14
 
 - Backend de referência: `Renato1909/LensClick` @ `6659948` (padrões `review_requests`, `conversations`/`messages`, `review_audit`).
@@ -32,7 +32,7 @@ Seguir o padrão D1 das migrações existentes (FK `ON DELETE CASCADE`, `CHECK`,
 | `status` | TEXT NOT NULL DEFAULT 'pending', `CHECK IN ('pending','proposed','accepted','rejected','cancelled')` |
 | `created_at`/`updated_at` | TEXT DEFAULT CURRENT_TIMESTAMP |
 
-`CHECK (client_user_id <> photographer_user_id)`. Índices por `(photographer_user_id, status, created_at DESC)` e `(client_user_id, created_at DESC)`. Limite de pedidos pendentes por par cliente/fotógrafo (ex.: 1 pendente, como `review_requests`) — a decidir.
+`CHECK (client_user_id <> photographer_user_id)`. Índices por `(photographer_user_id, status, created_at DESC)` e `(client_user_id, created_at DESC)`. Limite de **1 pedido pendente por par** cliente/fotógrafo (índice único parcial `WHERE status='pending'`, como `review_requests`).
 
 ### 2.2 `proposals`
 | Coluna | Tipo / regra |
@@ -60,8 +60,8 @@ Seguir o padrão D1 das migrações existentes (FK `ON DELETE CASCADE`, `CHECK`,
 ### 2.4 Agenda
 Sem tabela própria: derivada de `budget_requests` com `status='accepted'`, ordenada por `event_date`. (Evita duplicar estado.)
 
-### 2.5 Auditoria (opcional, recomendado)
-`budget_audit` nos moldes de `review_audit` (action, actor, reason) para transições de status — a decidir se entra na primeira fatia.
+### 2.5 Auditoria (incluída na primeira fatia)
+`budget_audit` nos moldes de `review_audit` (action, actor, reason) para transições de status de pedidos e propostas.
 
 ## 3. Rotas propostas
 
@@ -116,8 +116,7 @@ Corpo `{ "error": "texto" }` (padrão atual). Pendência: códigos semânticos e
 
 ## 9. Pendências e aceite
 
-- Aprovação do mantenedor (modelo, rotas, limites, auditoria).
-- Decidir: limite de pedidos pendentes por par; auditoria na primeira fatia; campos exatos da proposta.
+- ~~Aprovação do mantenedor~~ — aprovada (2026-11-14); auditoria incluída; 1 pedido pendente por par.
 - Implementação backend (migrações + handlers + testes) e integração Android.
 - Validação em staging.
 
