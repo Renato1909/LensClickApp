@@ -32,6 +32,7 @@ Este documento separa trabalho integrado, trabalho documentado e dependências e
 - confirmar o pacote `com.lensclick.app` na conta Google Play;
 - fornecer endpoint staging operacional;
 - aprovar contratos de cadastro, recuperação, verificação de e-mail e conta;
+- aprovar a proposta de contrato móvel de perfil profissional/portfólio ([`PROPOSTA_CONTRATO_MOVEL_PERFIL_PORTFOLIO.md`](./PROPOSTA_CONTRATO_MOVEL_PERFIL_PORTFOLIO.md));
 - decidir se orçamentos, propostas, agenda e favoritos entram no primeiro lançamento;
 - aprovar o ADR 002 antes de implementar 2FA;
 - fornecer dispositivo físico/emulador controlado e validação manual de TalkBack;

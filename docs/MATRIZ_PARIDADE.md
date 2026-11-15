@@ -93,6 +93,8 @@ São contratos **web atuais**, não endpoints móveis aprovados. Caminhos relati
 - `GET` e `PUT /api/account/professional-profile`: rascunho/publicação do fotógrafo. Campos incluem `bio`, `specialties`, `city`, `state`, `serviceRadiusKm`, `startingPriceCents`, `availability`, contatos, `showEmail`, `showPhone`, `isPublished`. Publicação exige foto, bio suficiente, especialidade, localização e contato público; autorização e critérios pertencem ao servidor.
 - `GET`, `POST` e `PUT /api/account/portfolio`; `GET /api/account/portfolio/:id/image`; `DELETE /api/account/portfolio/:id`: upload usa `multipart/form-data` com `image`, `altText`, `caption`, `category`; JPG/PNG/WebP até **4.000.000 bytes**, máximo **12 itens**. Atualização recebe `items` com metadados/ordem e no máximo uma capa. DTO contém `id`, `caption`, `altText`, `position`, `isCover`, `category`, `imageUrl`.
 
+- **Proposta de contrato móvel** de perfil profissional e portfólio: [`PROPOSTA_CONTRATO_MOVEL_PERFIL_PORTFOLIO.md`](./PROPOSTA_CONTRATO_MOVEL_PERFIL_PORTFOLIO.md) (pendente de aprovação). As rotas `/api/account/professional-profile` e `/api/account/portfolio*` já aceitam Bearer (`MOBILE_PRINCIPAL_ROUTES`); não são necessários endpoints móveis novos.
+
 Fontes: W1/W2/W4/W5. Valores monetários, enumerações e IDs precisam de mapeadores próprios; não serializar diretamente entidades Room de demonstração.
 
 ### Avaliações e mensagens

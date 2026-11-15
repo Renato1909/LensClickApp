@@ -35,7 +35,7 @@ A camada de dados está separada em `data.local` (Room), `data.remote` (descober
 
 ## Fase 3 — integração funcional
 
-> Preparação (`434af51`): modelos de domínio e ports de perfil profissional e portfólio prontos (contrato web documentado), com testes JVM; implementação remota e telas aguardam aprovação do contrato móvel.
+> Preparação (`434af51`): modelos de domínio e ports de perfil profissional e portfólio prontos (contrato web documentado), com testes JVM. Proposta de contrato móvel em `docs/PROPOSTA_CONTRATO_MOVEL_PERFIL_PORTFOLIO.md` (as rotas `/api/account/*` já aceitam Bearer); implementação remota e telas aguardam aprovação.
 
 - [x] Autenticação, sessão e cadastro móvel (verificação de e-mail e conta ainda pendentes).
 - [x] Descoberta, perfil público e leitura do portfólio público.
