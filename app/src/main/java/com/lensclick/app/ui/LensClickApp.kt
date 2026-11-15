@@ -55,6 +55,8 @@ import com.lensclick.app.data.local.Budget
 import com.lensclick.app.data.local.Photographer
 import com.lensclick.app.domain.PublicPhotographer
 import com.lensclick.app.data.local.User
+import com.lensclick.app.data.remote.auth.MobileAuthErrorCode
+import com.lensclick.app.domain.ProfessionalProfile
 import java.text.NumberFormat
 import java.util.Locale
 import kotlinx.coroutines.delay
@@ -168,7 +170,7 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
             composable(Screen.ProDashboard.name) { PhotographerDashboardScreen(currentPhotographer, budgets, ::go, onClientMode = { resetTo(Screen.Home) }) }
             composable(Screen.ProRequests.name) { PhotographerRequestsScreen(budgets, ::go) }
             composable(Screen.ProAgenda.name) { PhotographerAgendaScreen(budgets, ::go) }
-            composable(Screen.ProProfile.name) { PhotographerProfileScreen(currentUser, currentPhotographer, ::go, onClientMode = { resetTo(Screen.Home) }, onLogout = { viewModel.logout() }) }
+            composable(Screen.ProProfile.name) { ProfessionalProfileScreen(viewModel, ::go, onClientMode = { resetTo(Screen.Home) }, onLogout = { viewModel.logout() }) }
         }
     }
 }
@@ -892,32 +894,117 @@ private fun PhotographerAgendaScreen(budgets: List<Budget>, onNavigate: (Screen)
 }
 
 @Composable
-private fun PhotographerProfileScreen(
-    user: User?,
-    photographer: Photographer?,
+private fun ProfessionalProfileScreen(
+    viewModel: LensClickViewModel,
     onNavigate: (Screen) -> Unit,
     onClientMode: () -> Unit,
     onLogout: () -> Unit
 ) = PhotographerPage(Screen.ProProfile, onNavigate) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Avatar(photographer?.initials ?: initialsForDisplay(user?.name), Modifier.size(90.dp))
-        Text(photographer?.name ?: user?.name.orEmpty(), color = Ink, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 10.dp))
-        Text(photographer?.specialty.orEmpty(), color = Muted, fontSize = 12.sp)
-        Text(photographer?.city.orEmpty(), color = Muted, fontSize = 11.sp)
-        Spacer(Modifier.height(20.dp))
-        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(16.dp)).padding(16.dp)) {
-            Text("Sobre", color = Ink, fontWeight = FontWeight.SemiBold)
-            Text(photographer?.bio?.ifBlank { "Adicione uma apresentação ao seu perfil." }.orEmpty(), color = Muted, fontSize = 11.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 7.dp))
-            HorizontalDivider(Modifier.padding(vertical = 14.dp), color = Line)
-            Text("Preço inicial: ${photographer?.price.orEmpty()}", color = Ink, fontSize = 12.sp)
-            Text(user?.email.orEmpty(), color = Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 5.dp))
+    val state by viewModel.professionalProfile.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { viewModel.loadProfessionalProfile() }
+    when (val s = state) {
+        ProfessionalProfileState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Ink) }
+        ProfessionalProfileState.Error -> ProfileStatus("Não foi possível carregar seu perfil profissional.", "Tentar novamente") { viewModel.loadProfessionalProfile() }
+        is ProfessionalProfileState.Ready -> ProfessionalProfileForm(s, viewModel, onClientMode, onLogout)
+    }
+}
+
+@Composable
+private fun ProfessionalProfileForm(
+    state: ProfessionalProfileState.Ready,
+    viewModel: LensClickViewModel,
+    onClientMode: () -> Unit,
+    onLogout: () -> Unit
+) {
+    val profile = state.profile
+    var bio by rememberSaveable { mutableStateOf(profile.bio) }
+    var specialties by rememberSaveable { mutableStateOf(profile.specialties.joinToString(", ")) }
+    var city by rememberSaveable { mutableStateOf(profile.city) }
+    var stateUf by rememberSaveable { mutableStateOf(profile.state) }
+    var availability by rememberSaveable { mutableStateOf(profile.availability) }
+    var price by rememberSaveable { mutableStateOf(profile.startingPriceCents?.let { (it / 100.0).toString() } ?: "") }
+    var radius by rememberSaveable { mutableStateOf(profile.serviceRadiusKm?.toString() ?: "") }
+    var publicEmail by rememberSaveable { mutableStateOf(profile.publicEmail) }
+    var publicPhone by rememberSaveable { mutableStateOf(profile.publicPhone) }
+    var instagram by rememberSaveable { mutableStateOf(profile.instagram) }
+    var website by rememberSaveable { mutableStateOf(profile.website) }
+    var showEmail by rememberSaveable { mutableStateOf(profile.showEmail) }
+    var showPhone by rememberSaveable { mutableStateOf(profile.showPhone) }
+    var published by rememberSaveable { mutableStateOf(profile.isPublished) }
+
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
+        Text("Perfil profissional", color = Ink, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
+        Text("Edite seus dados e publique quando estiver pronto.", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp))
+        LensField("Apresentação (bio)", bio, { bio = it }, singleLine = false, minLines = 3); Spacer(Modifier.height(11.dp))
+        LensField("Especialidades (separadas por vírgula)", specialties, { specialties = it }); Spacer(Modifier.height(11.dp))
+        LensField("Cidade", city, { city = it }); Spacer(Modifier.height(11.dp))
+        LensField("UF (ex.: SP)", stateUf, { stateUf = it }); Spacer(Modifier.height(11.dp))
+        Text("Disponibilidade", color = Ink, fontSize = 12.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+            listOf("available" to "Disponível", "limited" to "Limitada", "unavailable" to "Indisponível").forEach { (value, label) ->
+                val selected = availability == value
+                Text(label, color = if (selected) Color.White else Ink, fontSize = 11.sp, modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(if (selected) Ink else SurfaceHigh).border(1.dp, Line, RoundedCornerShape(12.dp)).clickable { availability = value }.padding(horizontal = 12.dp, vertical = 8.dp))
+            }
         }
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(11.dp))
+        LensField("Preço inicial (R$)", price, { price = it }, keyboard = KeyboardType.Decimal); Spacer(Modifier.height(11.dp))
+        LensField("Raio de atendimento (km)", radius, { radius = it }, keyboard = KeyboardType.Number); Spacer(Modifier.height(11.dp))
+        LensField("E-mail profissional", publicEmail, { publicEmail = it }, keyboard = KeyboardType.Email); Spacer(Modifier.height(11.dp))
+        LensField("Telefone profissional", publicPhone, { publicPhone = it }, keyboard = KeyboardType.Phone); Spacer(Modifier.height(11.dp))
+        LensField("Instagram (sem @)", instagram, { instagram = it }); Spacer(Modifier.height(11.dp))
+        LensField("Website", website, { website = it }, keyboard = KeyboardType.Uri); Spacer(Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { showEmail = !showEmail }.padding(vertical = 6.dp)) {
+            Checkbox(showEmail, { showEmail = it }, colors = CheckboxDefaults.colors(checkedColor = Ink))
+            Text("Exibir e-mail no perfil público", color = Ink, fontSize = 12.sp)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { showPhone = !showPhone }.padding(vertical = 6.dp)) {
+            Checkbox(showPhone, { showPhone = it }, colors = CheckboxDefaults.colors(checkedColor = Ink))
+            Text("Exibir telefone no perfil público", color = Ink, fontSize = 12.sp)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { published = !published }.padding(vertical = 6.dp)) {
+            Checkbox(published, { published = it }, colors = CheckboxDefaults.colors(checkedColor = Ink))
+            Text("Publicar perfil profissional", color = Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        }
+        if (state.error != null) Text(profileErrorMessage(state.error), color = MaterialTheme.colorScheme.error, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
+        if (state.saved) Text("Perfil salvo.", color = Gold, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+        Spacer(Modifier.height(16.dp))
+        PrimaryButton(if (state.saving) "Salvando..." else "Salvar perfil", enabled = !state.saving, onClick = {
+            viewModel.saveProfessionalProfile(
+                ProfessionalProfile(
+                    slug = profile.slug,
+                    bio = bio.trim(),
+                    specialties = specialties.split(",").map { it.trim() }.filter { it.isNotBlank() },
+                    city = city.trim(),
+                    state = stateUf.trim().uppercase(),
+                    serviceRadiusKm = radius.trim().toIntOrNull(),
+                    startingPriceCents = price.trim().replace(",", ".").toDoubleOrNull()?.let { Math.round(it * 100) },
+                    availability = availability,
+                    ratingAverage = profile.ratingAverage,
+                    reviewCount = profile.reviewCount,
+                    instagram = instagram.trim().removePrefix("@"),
+                    website = website.trim(),
+                    publicEmail = publicEmail.trim(),
+                    publicPhone = publicPhone.trim(),
+                    showEmail = showEmail,
+                    showPhone = showPhone,
+                    isPublished = published
+                )
+            )
+        })
+        Spacer(Modifier.height(10.dp))
         PrimaryButton("Usar o app como cliente", onClientMode)
         Spacer(Modifier.height(10.dp))
         LogoutButton(onLogout)
         Spacer(Modifier.height(8.dp))
     }
+}
+
+private fun profileErrorMessage(code: MobileAuthErrorCode): String = when (code) {
+    MobileAuthErrorCode.INVALID_INPUT -> "Revise os dados. Para publicar, inclua foto, apresentação (60+ caracteres), especialidade, localização e um contato profissional."
+    MobileAuthErrorCode.FORBIDDEN -> "Selecione o perfil de fotógrafo nos dados pessoais para continuar."
+    MobileAuthErrorCode.UNAUTHENTICATED -> "Sua sessão expirou. Entre novamente."
+    MobileAuthErrorCode.RATE_LIMITED -> "Muitas alterações. Aguarde antes de tentar novamente."
+    else -> "Não foi possível salvar. Tente novamente."
 }
 
 private fun initialsForDisplay(name: String?): String = name.orEmpty().trim().split(Regex("\\s+")).filter { it.isNotBlank() }.take(2).joinToString("") { it.first().uppercase() }.ifBlank { "LC" }

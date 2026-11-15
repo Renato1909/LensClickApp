@@ -18,6 +18,8 @@ import com.lensclick.app.data.remote.auth.MobileAuthErrorCode
 import com.lensclick.app.data.remote.auth.MobileAuthException
 import com.lensclick.app.data.remote.auth.MobileAuthRepository
 import com.lensclick.app.domain.MobileUser
+import com.lensclick.app.domain.ProfessionalProfile
+import com.lensclick.app.domain.ProfessionalProfileGateway
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -50,16 +52,32 @@ sealed interface AuthenticationState {
     data object SessionExpired : AuthenticationState
 }
 
+sealed interface ProfessionalProfileState {
+    data object Loading : ProfessionalProfileState
+    data object Error : ProfessionalProfileState
+    data class Ready(
+        val profile: ProfessionalProfile,
+        val saving: Boolean = false,
+        val saved: Boolean = false,
+        val error: MobileAuthErrorCode? = null
+    ) : ProfessionalProfileState
+}
+
 class LensClickViewModel(
     private val repository: LensClickRepository,
     private val publicPhotographers: PublicPhotographersGateway = HttpPublicPhotographersGateway(),
-    private val mobileAuthRepository: MobileAuthRepository? = null
+    private val mobileAuthRepository: MobileAuthRepository? = null,
+    private val professionalProfileGateway: ProfessionalProfileGateway? = null
 ) : ViewModel() {
     companion object {
         val Factory = viewModelFactory {
             initializer {
                 val application = this[APPLICATION_KEY] as LensClickApplication
-                LensClickViewModel(application.repository, mobileAuthRepository = application.mobileAuthRepository)
+                LensClickViewModel(
+                    application.repository,
+                    mobileAuthRepository = application.mobileAuthRepository,
+                    professionalProfileGateway = application.professionalProfileGateway
+                )
             }
         }
     }
@@ -290,6 +308,46 @@ class LensClickViewModel(
         viewModelScope.launch {
             repository.createBudget(type, date, place, duration, description, additionalInfo)
             done()
+        }
+    }
+
+    private val _professionalProfile = MutableStateFlow<ProfessionalProfileState>(ProfessionalProfileState.Loading)
+    val professionalProfile: StateFlow<ProfessionalProfileState> = _professionalProfile.asStateFlow()
+
+    fun loadProfessionalProfile() {
+        val gateway = professionalProfileGateway
+        if (gateway == null) {
+            _professionalProfile.value = ProfessionalProfileState.Error
+            return
+        }
+        viewModelScope.launch {
+            _professionalProfile.value = ProfessionalProfileState.Loading
+            _professionalProfile.value = try {
+                ProfessionalProfileState.Ready(gateway.load())
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                ProfessionalProfileState.Error
+            }
+        }
+    }
+
+    fun saveProfessionalProfile(profile: ProfessionalProfile) {
+        val gateway = professionalProfileGateway ?: return
+        viewModelScope.launch {
+            val current = _professionalProfile.value
+            if (current is ProfessionalProfileState.Ready) {
+                _professionalProfile.value = current.copy(saving = true, saved = false, error = null)
+            }
+            _professionalProfile.value = try {
+                ProfessionalProfileState.Ready(gateway.save(profile), saving = false, saved = true)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: MobileAuthException) {
+                ProfessionalProfileState.Ready(profile, saving = false, error = error.code)
+            } catch (_: Exception) {
+                ProfessionalProfileState.Ready(profile, saving = false, error = MobileAuthErrorCode.SERVER)
+            }
         }
     }
 }
