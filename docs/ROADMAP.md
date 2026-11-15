@@ -40,7 +40,7 @@ A camada de dados está separada em `data.local` (Room), `data.remote` (descober
 - [x] Autenticação, sessão e cadastro móvel (verificação de e-mail e conta ainda pendentes).
 - [x] Descoberta, perfil público e leitura do portfólio público.
 - [ ] Perfil profissional e edição/envio de portfólio.
-- [ ] Orçamentos e propostas.
+- [x] Orçamentos e propostas (backend LensClick #153 + Android `7b0dd2f`/`a8f8434`/`ab28b7a`; agenda e favoritos incluídos).
 - [ ] Avaliações.
 - [ ] Conversas, mensagens e notificações.
 - [ ] Exportação e exclusão LGPD.

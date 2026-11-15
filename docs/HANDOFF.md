@@ -19,7 +19,7 @@
 - **Room não persiste mais senhas**: a migração 2→3 removeu a coluna `passwordHash`; os hashes SHA-256 de demonstração vivem apenas em memória (`ConcurrentHashMap` no repositório) e desaparecem ao reiniciar o processo;
 - backend real conectado na primeira fatia de autenticação móvel: login, restauração via `/me`, logout, expiração e revogação;
 - conta de demonstração não é mais usada pelo fluxo de autenticação conectado e não pode voltar à release pública;
-- cadastro móvel já usa o contrato remoto; orçamentos e mensagens ainda não possuem contratos móveis;
+- cadastro móvel já usa o contrato remoto; orçamentos/propostas/agenda/favoritos integrados (backend LensClick #153 + Android `7b0dd2f`/`a8f8434`/`ab28b7a`); mensagens ainda não possuem contrato móvel;
 - domínio de perfil profissional e portfólio preparado (`ProfessionalProfile`/`PortfolioItem` + ports, commit `434af51`), sem implementação HTTP;
 - contrato móvel de perfil profissional/portfólio aprovado, camada de dados remota (`a88f1ca`) e telas implementadas: edição de perfil (`ff36af3`) e gestão de portfólio com upload (`2bd4d31`), com Bearer sobre `/api/account/*` (sem endpoints novos) e testes JVM; validação em staging pendente. Ver [`PROPOSTA_CONTRATO_MOVEL_PERFIL_PORTFOLIO.md`](./PROPOSTA_CONTRATO_MOVEL_PERFIL_PORTFOLIO.md).
 
@@ -46,7 +46,7 @@ O aplicativo deve consumir a API da plataforma LensClick e compartilhar usuário
 2. ~~Criar CI Android~~ — concluído (`.github/workflows/android.yml`); o mantenedor deve marcar os checks como obrigatórios na proteção da `main`.
 3. ~~Produzir `docs/MATRIZ_PARIDADE.md`~~ — primeira versão entregue; atualizar a cada fatia.
 4. **Atualizar esta matriz de paridade** a cada nova fatia e registrar contratos, testes e limitações.
-5. Confirmar com o mantenedor o pacote `com.lensclick.app` na conta Google Play, além do endpoint staging, política de papéis e destino da UX de orçamentos/propostas que não existe na API.
+5. Para a demo da Feira Tecnológica: APK release assinado com chave local (sideload), backend de produção e contas de demonstração; Google Play, domínio e jurídico adiados (ver [`DECISOES.md`](./DECISOES.md)).
 6. Definir IDs reais, domínio e políticas de link profundo; integrar descoberta e perfis públicos somente após contrato.
 7. Fechar os contratos de recuperação de senha, verificação de e-mail e dados da conta.
 8. Aprovar o threat model e o ADR 002 antes de implementar 2FA.
