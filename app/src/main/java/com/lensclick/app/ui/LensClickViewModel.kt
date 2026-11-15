@@ -22,6 +22,11 @@ import com.lensclick.app.domain.ProfessionalProfile
 import com.lensclick.app.domain.ProfessionalProfileGateway
 import com.lensclick.app.domain.PortfolioItem
 import com.lensclick.app.domain.PortfolioGateway
+import com.lensclick.app.domain.BudgetRequest
+import com.lensclick.app.domain.BudgetRequestDraft
+import com.lensclick.app.domain.BudgetRequestsGateway
+import com.lensclick.app.domain.Favorite
+import com.lensclick.app.domain.FavoritesGateway
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -81,7 +86,9 @@ class LensClickViewModel(
     private val publicPhotographers: PublicPhotographersGateway = HttpPublicPhotographersGateway(),
     private val mobileAuthRepository: MobileAuthRepository? = null,
     private val professionalProfileGateway: ProfessionalProfileGateway? = null,
-    private val portfolioGateway: PortfolioGateway? = null
+    private val portfolioGateway: PortfolioGateway? = null,
+    private val budgetRequestsGateway: BudgetRequestsGateway? = null,
+    private val favoritesGateway: FavoritesGateway? = null
 ) : ViewModel() {
     companion object {
         val Factory = viewModelFactory {
@@ -91,7 +98,9 @@ class LensClickViewModel(
                     application.repository,
                     mobileAuthRepository = application.mobileAuthRepository,
                     professionalProfileGateway = application.professionalProfileGateway,
-                    portfolioGateway = application.portfolioGateway
+                    portfolioGateway = application.portfolioGateway,
+                    budgetRequestsGateway = application.budgetRequestsGateway,
+                    favoritesGateway = application.favoritesGateway
                 )
             }
         }
@@ -151,11 +160,18 @@ class LensClickViewModel(
         SharingStarted.WhileSubscribed(5_000),
         emptyList()
     )
-    val budgets = repository.budgets.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5_000),
-        emptyList()
-    )
+    private val _budgets = MutableStateFlow<List<BudgetRequest>>(emptyList())
+    val budgets: StateFlow<List<BudgetRequest>> = _budgets.asStateFlow()
+    private val _agenda = MutableStateFlow<List<BudgetRequest>>(emptyList())
+    val agenda: StateFlow<List<BudgetRequest>> = _agenda.asStateFlow()
+    private val _favorites = MutableStateFlow<List<Favorite>>(emptyList())
+    val favorites: StateFlow<List<Favorite>> = _favorites.asStateFlow()
+    private val _budgetBusy = MutableStateFlow(false)
+    val budgetBusy: StateFlow<Boolean> = _budgetBusy.asStateFlow()
+    private val _budgetError = MutableStateFlow<MobileAuthErrorCode?>(null)
+    val budgetError: StateFlow<MobileAuthErrorCode?> = _budgetError.asStateFlow()
+    private val _budgetMessage = MutableStateFlow<String?>(null)
+    val budgetMessage: StateFlow<String?> = _budgetMessage.asStateFlow()
 
     init {
         viewModelScope.launch { repository.seedDemoData() }
@@ -311,18 +327,136 @@ class LensClickViewModel(
         }
     }
 
-    fun createBudget(
-        type: String,
-        date: String,
-        place: String,
-        duration: String,
-        description: String,
-        additionalInfo: String,
-        done: () -> Unit
-    ) {
+    fun loadBudgets() {
+        val gateway = budgetRequestsGateway ?: return
         viewModelScope.launch {
-            repository.createBudget(type, date, place, duration, description, additionalInfo)
-            done()
+            try {
+                _budgets.value = gateway.list()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    fun loadAgenda() {
+        val gateway = budgetRequestsGateway ?: return
+        viewModelScope.launch {
+            try {
+                _agenda.value = gateway.agenda()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    fun loadFavorites() {
+        val gateway = favoritesGateway ?: return
+        viewModelScope.launch {
+            try {
+                _favorites.value = gateway.list()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    fun createBudgetRequest(slug: String, draft: BudgetRequestDraft, result: (Boolean) -> Unit) {
+        val gateway = budgetRequestsGateway ?: run { result(false); return }
+        viewModelScope.launch {
+            _budgetBusy.value = true; _budgetError.value = null; _budgetMessage.value = null
+            try {
+                gateway.create(slug, draft)
+                _budgets.value = gateway.list()
+                _budgetMessage.value = "Pedido de orçamento enviado."
+                result(true)
+            } catch (error: MobileAuthException) {
+                _budgetError.value = error.code; result(false)
+            } catch (_: Exception) {
+                _budgetError.value = MobileAuthErrorCode.SERVER; result(false)
+            } finally {
+                _budgetBusy.value = false
+            }
+        }
+    }
+
+    fun proposeToRequest(id: Long, priceCents: Long, conditions: String, result: (Boolean) -> Unit) {
+        val gateway = budgetRequestsGateway ?: run { result(false); return }
+        viewModelScope.launch {
+            _budgetBusy.value = true; _budgetError.value = null; _budgetMessage.value = null
+            try {
+                gateway.propose(id, priceCents, conditions)
+                _budgets.value = gateway.list()
+                _budgetMessage.value = "Proposta enviada."
+                result(true)
+            } catch (error: MobileAuthException) {
+                _budgetError.value = error.code; result(false)
+            } catch (_: Exception) {
+                _budgetError.value = MobileAuthErrorCode.SERVER; result(false)
+            } finally {
+                _budgetBusy.value = false
+            }
+        }
+    }
+
+    fun decideRequest(id: Long, proposalId: Long, accept: Boolean, result: (Boolean) -> Unit) {
+        val gateway = budgetRequestsGateway ?: run { result(false); return }
+        viewModelScope.launch {
+            _budgetBusy.value = true; _budgetError.value = null; _budgetMessage.value = null
+            try {
+                gateway.decide(id, proposalId, accept)
+                _budgets.value = gateway.list()
+                _agenda.value = gateway.agenda()
+                _budgetMessage.value = if (accept) "Proposta aceita." else "Proposta recusada."
+                result(true)
+            } catch (error: MobileAuthException) {
+                _budgetError.value = error.code; result(false)
+            } catch (_: Exception) {
+                _budgetError.value = MobileAuthErrorCode.SERVER; result(false)
+            } finally {
+                _budgetBusy.value = false
+            }
+        }
+    }
+
+    fun cancelRequest(id: Long, result: (Boolean) -> Unit) {
+        val gateway = budgetRequestsGateway ?: run { result(false); return }
+        viewModelScope.launch {
+            _budgetBusy.value = true; _budgetError.value = null; _budgetMessage.value = null
+            try {
+                gateway.cancel(id)
+                _budgets.value = gateway.list()
+                _budgetMessage.value = "Pedido cancelado."
+                result(true)
+            } catch (error: MobileAuthException) {
+                _budgetError.value = error.code; result(false)
+            } catch (_: Exception) {
+                _budgetError.value = MobileAuthErrorCode.SERVER; result(false)
+            } finally {
+                _budgetBusy.value = false
+            }
+        }
+    }
+
+    fun addFavorite(slug: String, result: (Boolean) -> Unit) {
+        val gateway = favoritesGateway ?: run { result(false); return }
+        viewModelScope.launch {
+            try {
+                gateway.add(slug)
+                _favorites.value = gateway.list()
+                result(true)
+            } catch (_: Exception) {
+                result(false)
+            }
+        }
+    }
+
+    fun removeFavorite(photographerId: Long, result: (Boolean) -> Unit) {
+        val gateway = favoritesGateway ?: run { result(false); return }
+        viewModelScope.launch {
+            try {
+                gateway.remove(photographerId)
+                _favorites.value = gateway.list()
+                result(true)
+            } catch (_: Exception) {
+                result(false)
+            }
         }
     }
 

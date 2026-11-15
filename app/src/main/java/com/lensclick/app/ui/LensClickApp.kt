@@ -56,9 +56,11 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.lensclick.app.R
-import com.lensclick.app.data.local.Budget
 import com.lensclick.app.data.local.Photographer
 import com.lensclick.app.domain.PublicPhotographer
+import com.lensclick.app.domain.BudgetRequest
+import com.lensclick.app.domain.BudgetRequestDraft
+import com.lensclick.app.domain.Favorite
 import com.lensclick.app.data.local.User
 import com.lensclick.app.data.remote.auth.MobileAuthErrorCode
 import com.lensclick.app.domain.PortfolioItem
@@ -77,6 +79,7 @@ private val Gold = Color(0xFF9A6A24)
 
 private enum class Screen { Onboarding, AccountType, Login, SignUp, PhotographerSignUp, Home, Search, Photographer, Quote, Budgets, Conversations, Chat, Account, ProDashboard, ProRequests, ProAgenda, ProProfile, ProPortfolio }
 private const val PhotographerRoute = "Photographer/{slug}"
+private const val QuoteRoute = "Quote/{slug}"
 
 @Composable
 fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickViewModel.Factory)) {
@@ -86,6 +89,8 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
     val currentEntry by navController.currentBackStackEntryAsState()
     val photographers by viewModel.photographers.collectAsStateWithLifecycle()
     val budgets by viewModel.budgets.collectAsStateWithLifecycle()
+    val agenda by viewModel.agenda.collectAsStateWithLifecycle()
+    val favorites by viewModel.favorites.collectAsStateWithLifecycle()
     val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
     val authentication by viewModel.authentication.collectAsStateWithLifecycle()
     val currentPhotographer = photographers.firstOrNull { it.userId == currentUser?.id }
@@ -125,6 +130,14 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
         }
     }
 
+    LaunchedEffect(authentication) {
+        if (authentication is AuthenticationState.Authenticated) {
+            viewModel.loadBudgets()
+            viewModel.loadFavorites()
+            viewModel.loadAgenda()
+        }
+    }
+
     androidx.compose.material3.Surface(modifier = Modifier.fillMaxSize(), color = Paper) {
         NavHost(navController = navController, startDestination = Screen.Onboarding.name) {
             composable(Screen.Onboarding.name) { OnboardingScreen(onStart = { go(Screen.AccountType) }, onLogin = { go(Screen.Login) }, onBrowse = { go(Screen.Search) }) }
@@ -154,15 +167,18 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
             composable(Screen.Search.name) { SearchScreen(viewModel, guest = currentUser == null, onNavigate = ::go, onPhotographer = { slug -> navController.navigate("Photographer/$slug") }) }
             composable(PhotographerRoute) { entry ->
                 val slug = entry.arguments?.getString("slug").orEmpty()
-                PhotographerScreen(viewModel, slug, onBack = { navController.popBackStack() }, onQuote = { go(Screen.Quote) })
+                PhotographerScreen(viewModel, slug, onBack = { navController.popBackStack() }, onQuote = { navController.navigate("Quote/$slug") })
             }
-            composable(Screen.Quote.name) { QuoteScreen(
-                onBack = { navController.popBackStack() },
-                onSent = { type, date, place, duration, description, details ->
-                    viewModel.createBudget(type, date, place, duration, description, details) { go(Screen.Budgets) }
-                }
-            ) }
-            composable(Screen.Budgets.name) { BudgetsScreen(budgets, onNavigate = ::go) }
+            composable(QuoteRoute) { entry ->
+                val slug = entry.arguments?.getString("slug").orEmpty()
+                QuoteScreen(
+                    onBack = { navController.popBackStack() },
+                    onSent = { type, date, place, duration, description, details ->
+                        viewModel.createBudgetRequest(slug, BudgetRequestDraft(type, date, place, duration, description, details)) { success -> if (success) go(Screen.Budgets) }
+                    }
+                )
+            }
+            composable(Screen.Budgets.name) { BudgetsScreen(viewModel, budgets, favorites, onNavigate = ::go) }
             composable(Screen.Conversations.name) { ConversationsScreen(photographers, onNavigate = ::go) }
             composable(Screen.Chat.name) { ChatScreen(onBack = { navController.popBackStack() }) }
             composable(Screen.Account.name) { AccountScreen(
@@ -174,8 +190,8 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
                 onLogout = { viewModel.logout() }
             ) }
             composable(Screen.ProDashboard.name) { PhotographerDashboardScreen(currentPhotographer, budgets, ::go, onClientMode = { resetTo(Screen.Home) }) }
-            composable(Screen.ProRequests.name) { PhotographerRequestsScreen(budgets, ::go) }
-            composable(Screen.ProAgenda.name) { PhotographerAgendaScreen(budgets, ::go) }
+            composable(Screen.ProRequests.name) { PhotographerRequestsScreen(viewModel, budgets, ::go) }
+            composable(Screen.ProAgenda.name) { PhotographerAgendaScreen(agenda, ::go) }
             composable(Screen.ProProfile.name) { ProfessionalProfileScreen(viewModel, ::go, onClientMode = { resetTo(Screen.Home) }, onLogout = { viewModel.logout() }) }
             composable(Screen.ProPortfolio.name) { PortfolioScreen(viewModel, ::go) }
         }
@@ -658,7 +674,8 @@ private fun specialtyLabel(value: String): String = when (value) {
 
 @Composable
 private fun PhotographerScreen(viewModel: LensClickViewModel, slug: String, onBack: () -> Unit, onQuote: () -> Unit) {
-    var favorite by rememberSaveable { mutableStateOf(false) }
+    val favorites by viewModel.favorites.collectAsStateWithLifecycle()
+    val favorite = favorites.any { it.slug == slug }
     val state by viewModel.publicProfile.collectAsStateWithLifecycle()
     LaunchedEffect(slug) { viewModel.loadPublicPhotographer(slug) }
     when (val result = state) {
@@ -686,7 +703,7 @@ private fun PhotographerScreen(viewModel: LensClickViewModel, slug: String, onBa
                 }
             }
         }
-        Row(Modifier.background(SurfaceHigh).padding(20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) { Button(onQuote, Modifier.weight(1f).height(52.dp), shape = RoundedCornerShape(17.dp), colors = ButtonDefaults.buttonColors(Ink, Color.White)) { Text("Solicitar orçamento", fontWeight = FontWeight.SemiBold) }; OutlinedButton({ favorite = !favorite }, Modifier.size(52.dp), contentPadding = PaddingValues(0.dp), shape = CircleShape, border = androidx.compose.foundation.BorderStroke(1.dp, Ink)) { Text(if (favorite) "♥" else "♡", color = Ink, fontSize = 23.sp) } }
+        Row(Modifier.background(SurfaceHigh).padding(20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) { Button(onQuote, Modifier.weight(1f).height(52.dp), shape = RoundedCornerShape(17.dp), colors = ButtonDefaults.buttonColors(Ink, Color.White)) { Text("Solicitar orçamento", fontWeight = FontWeight.SemiBold) }; OutlinedButton({ if (favorite) { favorites.firstOrNull { it.slug == slug }?.let { viewModel.removeFavorite(it.photographerId) {} } } else { viewModel.addFavorite(slug) {} } }, Modifier.size(52.dp), contentPadding = PaddingValues(0.dp), shape = CircleShape, border = androidx.compose.foundation.BorderStroke(1.dp, Ink)) { Text(if (favorite) "♥" else "♡", color = Ink, fontSize = 23.sp) } }
     }
 }
     }
@@ -696,16 +713,21 @@ private fun PhotographerScreen(viewModel: LensClickViewModel, slug: String, onBa
 
 @Composable
 private fun QuoteScreen(onBack: () -> Unit, onSent: (String, String, String, String, String, String) -> Unit) {
-    var type by rememberSaveable { mutableStateOf("Casamento") }; var date by rememberSaveable { mutableStateOf("24/06/2025") }; var place by rememberSaveable { mutableStateOf("São Paulo, SP") }; var duration by rememberSaveable { mutableStateOf("8 horas") }; var description by rememberSaveable { mutableStateOf("") }; var details by rememberSaveable { mutableStateOf("") }
+    var type by rememberSaveable { mutableStateOf("Casamento") }; var date by rememberSaveable { mutableStateOf("") }; var place by rememberSaveable { mutableStateOf("São Paulo, SP") }; var duration by rememberSaveable { mutableStateOf("8 horas") }; var description by rememberSaveable { mutableStateOf("") }; var details by rememberSaveable { mutableStateOf("") }
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(20.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) { Text("‹", color = Ink, fontSize = 36.sp, modifier = Modifier.clickable(onClick = onBack)); Spacer(Modifier.width(8.dp)); Text("Solicitar orçamento", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold); Spacer(Modifier.weight(1f)); CompactLogo(40) }
         Text("Preencha os dados do seu evento\ne receba propostas personalizadas.", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 14.dp))
-        LensField("Tipo de evento", type, { type = it }); Spacer(Modifier.height(10.dp)); LensField("Data do evento", date, { date = it }); Spacer(Modifier.height(10.dp)); LensField("Local do evento", place, { place = it }); Spacer(Modifier.height(10.dp)); LensField("Duração", duration, { duration = it }); Spacer(Modifier.height(10.dp)); LensField("Descrição do evento", description, { description = it }, singleLine = false, minLines = 3); Spacer(Modifier.height(10.dp)); LensField("Informações adicionais (opcional)", details, { details = it }, singleLine = false, minLines = 3); Spacer(Modifier.height(22.dp)); PrimaryButton("Enviar solicitação", { onSent(type, date, place, duration, description, details) }, enabled = type.isNotBlank() && date.isNotBlank() && place.isNotBlank())
+        LensField("Tipo de evento", type, { type = it }); Spacer(Modifier.height(10.dp)); LensField("Data do evento (DD/MM/AAAA)", date, { date = it }); Spacer(Modifier.height(10.dp)); LensField("Local do evento", place, { place = it }); Spacer(Modifier.height(10.dp)); LensField("Duração", duration, { duration = it }); Spacer(Modifier.height(10.dp)); LensField("Descrição do evento", description, { description = it }, singleLine = false, minLines = 3); Spacer(Modifier.height(10.dp)); LensField("Informações adicionais (opcional)", details, { details = it }, singleLine = false, minLines = 3); Spacer(Modifier.height(22.dp)); PrimaryButton("Enviar solicitação", { onSent(type, isoDate(date), place, duration, description, details) }, enabled = type.isNotBlank() && date.isNotBlank() && place.isNotBlank() && description.isNotBlank())
     }
 }
 
+private fun isoDate(display: String): String {
+    val parts = display.trim().split("/")
+    return if (parts.size == 3) "${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}" else display.trim()
+}
+
 @Composable
-private fun BudgetsScreen(budgets: List<Budget>, onNavigate: (Screen) -> Unit) = AppPage(Screen.Budgets, onNavigate) {
+private fun BudgetsScreen(viewModel: LensClickViewModel, budgets: List<BudgetRequest>, favorites: List<Favorite>, onNavigate: (Screen) -> Unit) = AppPage(Screen.Budgets, onNavigate) {
     var selectedTab by rememberSaveable { mutableStateOf(0) }
     Column(Modifier.padding(20.dp)) {
         Text("Meus orçamentos", color = Ink, fontSize = 27.sp, fontWeight = FontWeight.SemiBold)
@@ -717,18 +739,60 @@ private fun BudgetsScreen(budgets: List<Budget>, onNavigate: (Screen) -> Unit) =
             }
         }
         Spacer(Modifier.height(14.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) { items(if (selectedTab == 2) budgets.filter { it.status == "Aceito" } else budgets) { BudgetCard(it) } }
+        when (selectedTab) {
+            2 -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (favorites.isEmpty()) item { Text("Nenhum favorito ainda.", color = Muted, modifier = Modifier.padding(vertical = 40.dp)) }
+                items(favorites, key = { it.photographerId }) { fav ->
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(16.dp)).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) { Text(fav.name, color = Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold); Text(fav.slug, color = Muted, fontSize = 10.sp) }
+                        TextButton(onClick = { viewModel.removeFavorite(fav.photographerId) {} }) { Text("Remover", color = MaterialTheme.colorScheme.error, fontSize = 11.sp) }
+                    }
+                }
+            }
+            1 -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                val proposed = budgets.filter { it.status == "proposed" }
+                if (proposed.isEmpty()) item { Text("Nenhuma proposta recebida.", color = Muted, modifier = Modifier.padding(vertical = 40.dp)) }
+                items(proposed, key = { it.id }) { req ->
+                    Column {
+                        BudgetCard(req)
+                        req.proposals.filter { it.status == "pending" }.forEach { p ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+                                Button(onClick = { viewModel.decideRequest(req.id, p.id, accept = true) {} }, Modifier.weight(1f), colors = ButtonDefaults.buttonColors(Ink, Color.White)) { Text("Aceitar", fontSize = 12.sp) }
+                                OutlinedButton(onClick = { viewModel.decideRequest(req.id, p.id, accept = false) {} }, Modifier.weight(1f)) { Text("Recusar", color = Ink, fontSize = 12.sp) }
+                            }
+                        }
+                    }
+                }
+            }
+            else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (budgets.isEmpty()) item { Text("Nenhum pedido ainda.", color = Muted, modifier = Modifier.padding(vertical = 40.dp)) }
+                items(budgets, key = { it.id }) { BudgetCard(it) }
+            }
+        }
     }
 }
 
-@Composable private fun BudgetCard(b: Budget) {
+@Composable private fun BudgetCard(b: BudgetRequest) {
     var expanded by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().shadow(2.dp, RoundedCornerShape(16.dp)).clip(RoundedCornerShape(16.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(16.dp)).clickable { expanded = !expanded }.padding(16.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(b.title, color = Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold); Text(b.status, color = Color.White, fontSize = 9.sp, modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(Ink).padding(8.dp, 5.dp)) }
-        Text(b.date, color = Muted, fontSize = 10.sp, modifier = Modifier.padding(vertical = 7.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(b.info, color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Medium); Text(if (expanded) "⌃" else "⌄", color = Muted) }
-        if (expanded) { HorizontalDivider(Modifier.padding(vertical = 12.dp), color = Line); Text("Toque em uma proposta para conversar com o fotógrafo ou acompanhar os próximos passos.", color = Muted, fontSize = 11.sp, lineHeight = 16.sp) }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(b.eventType, color = Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold); Text(budgetStatusLabel(b.status), color = Color.White, fontSize = 9.sp, modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(Ink).padding(8.dp, 5.dp)) }
+        Text("${b.eventDate} • ${b.place}", color = Muted, fontSize = 10.sp, modifier = Modifier.padding(vertical = 7.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(b.duration.ifBlank { b.counterpartName }, color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Medium); Text(if (expanded) "⌃" else "⌄", color = Muted) }
+        if (expanded) {
+            HorizontalDivider(Modifier.padding(vertical = 12.dp), color = Line)
+            Text(b.description, color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
+            b.proposals.forEach { p -> Text("Proposta: R$ ${"%.2f".format(p.priceCents / 100.0)} • ${budgetStatusLabel(p.status)}", color = Ink, fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp)) }
+        }
     }
+}
+
+private fun budgetStatusLabel(status: String): String = when (status) {
+    "pending" -> "Aguardando"
+    "proposed" -> "Proposta recebida"
+    "accepted" -> "Aceito"
+    "rejected" -> "Recusado"
+    "cancelled" -> "Cancelado"
+    else -> status
 }
 
 @Composable
@@ -820,7 +884,7 @@ private fun PhotographerBottomNav(active: Screen, onNavigate: (Screen) -> Unit) 
 @Composable
 private fun PhotographerDashboardScreen(
     photographer: Photographer?,
-    budgets: List<Budget>,
+    budgets: List<BudgetRequest>,
     onNavigate: (Screen) -> Unit,
     onClientMode: () -> Unit
 ) = PhotographerPage(Screen.ProDashboard, onNavigate) {
@@ -841,8 +905,8 @@ private fun PhotographerDashboardScreen(
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ProMetric("${budgets.count { it.status == "Aguardando" }}", "Novos pedidos", Modifier.weight(1f))
-                ProMetric("${budgets.count { it.status == "Aceito" }}", "Confirmados", Modifier.weight(1f))
+                ProMetric("${budgets.count { it.status == "pending" || it.status == "proposed" }}", "Novos pedidos", Modifier.weight(1f))
+                ProMetric("${budgets.count { it.status == "accepted" }}", "Confirmados", Modifier.weight(1f))
                 ProMetric("${budgets.size}", "Total", Modifier.weight(1f))
             }
         }
@@ -882,20 +946,53 @@ private fun ProAction(title: String, subtitle: String, modifier: Modifier = Modi
 }
 
 @Composable
-private fun PhotographerRequestsScreen(budgets: List<Budget>, onNavigate: (Screen) -> Unit) = PhotographerPage(Screen.ProRequests, onNavigate) {
+private fun PhotographerRequestsScreen(viewModel: LensClickViewModel, budgets: List<BudgetRequest>, onNavigate: (Screen) -> Unit) = PhotographerPage(Screen.ProRequests, onNavigate) {
+    var proposing by remember { mutableStateOf<BudgetRequest?>(null) }
     Column(Modifier.fillMaxSize().padding(top = 10.dp)) {
         Text("Pedidos de orçamento", color = Ink, fontSize = 26.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(20.dp, 10.dp))
         Text("Solicitações de clientes disponíveis para você.", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 20.dp))
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (budgets.isEmpty()) item { Text("Nenhum pedido novo.", color = Muted, modifier = Modifier.padding(vertical = 40.dp)) }
-            items(budgets, key = { it.id }) { BudgetCard(it) }
+            items(budgets, key = { it.id }) { req ->
+                Column {
+                    BudgetCard(req)
+                    if (req.status == "pending" || req.status == "proposed") {
+                        TextButton(onClick = { proposing = req }) { Text("Enviar proposta", color = Ink, fontSize = 12.sp) }
+                    }
+                }
+            }
+        }
+    }
+    proposing?.let { req ->
+        ProposeDialog(onDismiss = { proposing = null }, onConfirm = { priceCents, conditions ->
+            viewModel.proposeToRequest(req.id, priceCents, conditions) { proposing = null }
+        })
+    }
+}
+
+@Composable
+private fun ProposeDialog(onDismiss: () -> Unit, onConfirm: (Long, String) -> Unit) {
+    var price by remember { mutableStateOf("") }
+    var conditions by remember { mutableStateOf("") }
+    val priceCents = price.trim().replace(",", ".").toDoubleOrNull()?.let { Math.round(it * 100) }
+    Dialog(onDismissRequest = onDismiss) {
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Paper).padding(20.dp)) {
+            Text("Enviar proposta", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(12.dp))
+            LensField("Preço (R$)", price, { price = it }, keyboard = KeyboardType.Decimal)
+            Spacer(Modifier.height(10.dp))
+            LensField("Condições (opcional)", conditions, { conditions = it }, singleLine = false, minLines = 2)
+            Spacer(Modifier.height(14.dp))
+            PrimaryButton("Enviar", enabled = priceCents != null && priceCents >= 0, onClick = { onConfirm(priceCents!!, conditions.trim()) })
+            Spacer(Modifier.height(8.dp))
+            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Cancelar", color = Muted) }
         }
     }
 }
 
 @Composable
-private fun PhotographerAgendaScreen(budgets: List<Budget>, onNavigate: (Screen) -> Unit) = PhotographerPage(Screen.ProAgenda, onNavigate) {
-    val confirmed = budgets.filter { it.status == "Aceito" }
+private fun PhotographerAgendaScreen(budgets: List<BudgetRequest>, onNavigate: (Screen) -> Unit) = PhotographerPage(Screen.ProAgenda, onNavigate) {
+    val confirmed = budgets
     Column(Modifier.fillMaxSize().padding(top = 10.dp)) {
         Text("Agenda", color = Ink, fontSize = 26.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(20.dp, 10.dp))
         Text("Trabalhos confirmados", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 20.dp))
