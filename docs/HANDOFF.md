@@ -21,7 +21,7 @@
 - conta de demonstração não é mais usada pelo fluxo de autenticação conectado e não pode voltar à release pública;
 - cadastro móvel já usa o contrato remoto; orçamentos e mensagens ainda não possuem contratos móveis;
 - domínio de perfil profissional e portfólio preparado (`ProfessionalProfile`/`PortfolioItem` + ports, commit `434af51`), sem implementação HTTP;
-- contrato móvel de perfil profissional/portfólio aprovado e camada de dados remota implementada (`a88f1ca`): gateways com Bearer sobre as rotas `/api/account/*` (sem endpoints novos), parsers e testes JVM; telas pendentes. Ver [`PROPOSTA_CONTRATO_MOVEL_PERFIL_PORTFOLIO.md`](./PROPOSTA_CONTRATO_MOVEL_PERFIL_PORTFOLIO.md).
+- contrato móvel de perfil profissional/portfólio aprovado, camada de dados remota (`a88f1ca`) e telas implementadas: edição de perfil (`ff36af3`) e gestão de portfólio com upload (`2bd4d31`), com Bearer sobre `/api/account/*` (sem endpoints novos) e testes JVM; validação em staging pendente. Ver [`PROPOSTA_CONTRATO_MOVEL_PERFIL_PORTFOLIO.md`](./PROPOSTA_CONTRATO_MOVEL_PERFIL_PORTFOLIO.md).
 
 ## Fundação entregue (integrada em `main` via PR #4, commit `fbbd934`)
 

@@ -35,7 +35,7 @@ A camada de dados está separada em `data.local` (Room), `data.remote` (descober
 
 ## Fase 3 — integração funcional
 
-> Contrato aprovado e camada de dados remota implementada (`a88f1ca`): gateways `HttpProfessionalProfileGateway`/`HttpPortfolioGateway` (Bearer, parsers, multipart, erros) + testes JVM, sobre o domínio preparado (`434af51`). Telas de perfil profissional e portfólio na próxima fatia; proposta em `docs/PROPOSTA_CONTRATO_MOVEL_PERFIL_PORTFOLIO.md`.
+> Contrato aprovado, camada de dados remota (`a88f1ca`) e telas implementadas: edição de perfil profissional (`ff36af3`) e gestão de portfólio com upload (`2bd4d31`), com testes JVM. Validação em staging e testes de contrato pendentes; proposta em `docs/PROPOSTA_CONTRATO_MOVEL_PERFIL_PORTFOLIO.md`.
 
 - [x] Autenticação, sessão e cadastro móvel (verificação de e-mail e conta ainda pendentes).
 - [x] Descoberta, perfil público e leitura do portfólio público.

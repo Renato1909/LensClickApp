@@ -1,6 +1,6 @@
 # Proposta de contrato móvel — perfil profissional e portfólio
 
-Status: **APROVADO pelo mantenedor.** Camada de dados remota implementada em `a88f1ca` (gateways `HttpProfessionalProfileGateway`/`HttpPortfolioGateway`, parsers DTO, upload multipart, mapeamento de erros e testes JVM), consumindo as rotas de conta existentes com `Authorization: Bearer`. Telas de perfil profissional e portfólio pendentes (próxima fatia).
+Status: **APROVADO pelo mantenedor.** Camada de dados remota implementada em `a88f1ca` (gateways `HttpProfessionalProfileGateway`/`HttpPortfolioGateway`, parsers DTO, upload multipart, mapeamento de erros e testes JVM), consumindo as rotas de conta existentes com `Authorization: Bearer`. Telas de perfil profissional e portfólio implementadas (`ff36af3`/`2bd4d31`); validação em staging e testes de contrato pendentes.
 Data: 2026-11-14
 
 - Backend auditado: `Renato1909/LensClick` @ `6659948` (`src/router.mjs`, `src/photographers.mjs`, `src/portfolio.mjs`, `src/account.mjs`, `src/worker.mjs`).
@@ -182,7 +182,7 @@ Pendências:
 - ~~camada de dados remota + testes JVM~~ — concluído (`a88f1ca`);
 - códigos de erro semânticos estáveis no corpo (backend);
 - testes de contrato móveis em ambiente controlado (ownership, capa única, limite de 12, critérios de publicação);
-- telas de perfil profissional e portfólio (próxima fatia);
+- ~~telas de perfil profissional e portfólio~~ — implementadas (`ff36af3`/`2bd4d31`);
 - decisão de escopo (fotógrafo no primeiro lançamento);
 - staging operacional para validação.
 
