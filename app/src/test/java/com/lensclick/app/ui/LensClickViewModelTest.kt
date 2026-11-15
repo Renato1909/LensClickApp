@@ -7,6 +7,9 @@ import com.lensclick.app.domain.PublicPhotographerPage
 import com.lensclick.app.domain.PublicPhotographerProfile
 import com.lensclick.app.domain.PublicPhotographerNotFoundException
 import com.lensclick.app.domain.PublicPhotographersGateway
+import com.lensclick.app.domain.BudgetRequest
+import com.lensclick.app.domain.BudgetRequestDraft
+import com.lensclick.app.domain.BudgetRequestsGateway
 import com.lensclick.app.data.local.User
 import com.lensclick.app.data.remote.auth.HttpResponse
 import com.lensclick.app.data.remote.auth.InMemorySessionStore
@@ -22,9 +25,7 @@ import com.lensclick.app.domain.MobileUser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -150,27 +151,29 @@ class LensClickViewModelTest {
     }
 
     @Test
-    fun budgetCompletionAndObservedStateFollowStoredRequest() = runTest(dispatcher) {
-        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
-            viewModel.budgets.collect {}
+    fun budgetRequestCreationUpdatesRemoteList() = runTest(dispatcher) {
+        val created = BudgetRequest(7, "Ensaio", "2026-09-20", "Recife", "2 horas", "Retratos", "", "pending", "", "")
+        val gateway = object : BudgetRequestsGateway {
+            override suspend fun create(slug: String, draft: BudgetRequestDraft): Long = 7
+            override suspend fun list(): List<BudgetRequest> = listOf(created)
+            override suspend fun detail(id: Long): BudgetRequest = created
+            override suspend fun propose(id: Long, priceCents: Long, conditions: String): Long = 1
+            override suspend fun decide(id: Long, proposalId: Long, accept: Boolean) {}
+            override suspend fun cancel(id: Long) {}
+            override suspend fun agenda(): List<BudgetRequest> = emptyList()
         }
-        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
-            viewModel.photographers.collect {}
-        }
-        advanceUntilIdle()
-        assertTrue(viewModel.photographers.value.isNotEmpty())
-        val originalCount = viewModel.budgets.value.size
+        viewModel = LensClickViewModel(LensClickRepository(dao), budgetRequestsGateway = gateway)
+        store.put("test", viewModel)
         var done = false
-        viewModel.createBudget("Ensaio", "20/09/2026", "Recife", "2 horas", "Retratos", "") {
-            assertEquals("Ensaio", dao.budgetRows.value.last().title)
-            done = true
+        viewModel.createBudgetRequest("fotografa", BudgetRequestDraft("Ensaio", "2026-09-20", "Recife", "2 horas", "Retratos", "")) { success ->
+            done = success
         }
         assertFalse(done)
         advanceUntilIdle()
 
         assertTrue(done)
-        assertEquals(originalCount + 1, viewModel.budgets.value.size)
-        assertEquals("Ensaio", viewModel.budgets.value.last().title)
+        assertEquals(1, viewModel.budgets.value.size)
+        assertEquals("Ensaio", viewModel.budgets.value.last().eventType)
     }
 
     @Test
