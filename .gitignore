@@ -36,3 +36,7 @@ credentials
 credentials.json
 service-account*.json
 *.kdbx
+
+# Keystores de assinatura (nunca versionar)
+*.jks
+*.keystore

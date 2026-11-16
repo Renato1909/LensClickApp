@@ -13,7 +13,49 @@ A URL de produção e o `applicationId` estão definidos em `app/build.gradle.kt
 
 ## Opção A — Gerar pelo GitHub Actions (recomendado)
 
-O workflow `.github/workflows/android.yml` possui o job **"APK release da feira"** (executado manualmente via `workflow_dispatch`) que gera `:app:assembleRelease` e publica o artefato `lensclick-feira-release-apk`.
+> **Observação importante:** adicionar/alterar `.github/workflows/android.yml` no GitHub exige credenciais Git com escopo `workflow`. Se o push do workflow for rejeitado, aplique o job abaixo em `.github/workflows/android.yml` a partir de um ambiente autorizado (ou via interface do GitHub) e faça push com permissão de workflow.
+
+O job **"APK release da feira"** (executado manualmente via `workflow_dispatch`) gera `:app:assembleRelease` e publica o artefato `lensclick-feira-release-apk`. Adicione este job ao final de `.github/workflows/android.yml`:
+
+```yaml
+  release:
+    name: APK release da feira
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      LENSCLICK_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      LENSCLICK_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      LENSCLICK_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      LENSCLICK_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+      - name: Instalar SDK exigido pelo projeto
+        run: sdkmanager 'platforms;android-36.1' 'build-tools;36.0.0' 'platform-tools'
+      - name: Verificar segredos de assinatura
+        run: |
+          if [ -z "${LENSCLICK_RELEASE_KEYSTORE_BASE64}" ] || [ -z "${LENSCLICK_RELEASE_STORE_PASSWORD}" ] || [ -z "${LENSCLICK_RELEASE_KEY_ALIAS}" ] || [ -z "${LENSCLICK_RELEASE_KEY_PASSWORD}" ]; then
+            echo "Segredos de assinatura ausentes. Configure ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS e ANDROID_KEY_PASSWORD para gerar o APK release assinado."
+            exit 1
+          fi
+      - name: Gerar APK release assinado
+        run: bash ./gradlew --no-daemon --stacktrace :app:assembleRelease
+      - name: Publicar APK release
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: lensclick-feira-release-apk
+          retention-days: 30
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+```
 
 ### 1) Criar a keystore de assinatura (uma vez, localmente)
 
