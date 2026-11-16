@@ -1,3 +1,5 @@
+import java.util.Base64
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -13,6 +15,41 @@ val stagingApiBaseUrl = providers.gradleProperty("lensclick.stagingApiBaseUrl")
 require(stagingApiBaseUrl.startsWith("https://")) {
     "The staging API base URL must use HTTPS."
 }
+
+val releaseKeystorePath = providers.gradleProperty("lensclick.releaseKeystorePath")
+    .orElse(providers.environmentVariable("LENSCLICK_RELEASE_KEYSTORE_PATH"))
+    .orNull
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+val releaseKeystoreBase64 = providers.gradleProperty("lensclick.releaseKeystoreBase64")
+    .orElse(providers.environmentVariable("LENSCLICK_RELEASE_KEYSTORE_BASE64"))
+    .orNull
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+val releaseStorePassword = providers.gradleProperty("lensclick.releaseStorePassword")
+    .orElse(providers.environmentVariable("LENSCLICK_RELEASE_STORE_PASSWORD"))
+    .orNull
+val releaseKeyAlias = providers.gradleProperty("lensclick.releaseKeyAlias")
+    .orElse(providers.environmentVariable("LENSCLICK_RELEASE_KEY_ALIAS"))
+    .orNull
+val releaseKeyPassword = providers.gradleProperty("lensclick.releaseKeyPassword")
+    .orElse(providers.environmentVariable("LENSCLICK_RELEASE_KEY_PASSWORD"))
+    .orNull
+
+val decodedReleaseKeystore = if (releaseKeystorePath == null && releaseKeystoreBase64 != null) {
+    layout.buildDirectory.file("signing/release.keystore").get().asFile.apply {
+        parentFile.mkdirs()
+        writeBytes(Base64.getDecoder().decode(releaseKeystoreBase64))
+    }
+} else {
+    null
+}
+
+val releaseKeystoreFile = releaseKeystorePath?.let { file(it) } ?: decodedReleaseKeystore
+val hasReleaseSigning = releaseKeystoreFile != null &&
+    !releaseStorePassword.isNullOrEmpty() &&
+    !releaseKeyAlias.isNullOrEmpty() &&
+    !releaseKeyPassword.isNullOrEmpty()
 
 android {
     namespace = "com.lensclick.app"
@@ -42,6 +79,17 @@ android {
         compose = true
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = releaseKeystoreFile
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
@@ -58,6 +106,9 @@ android {
         }
         release {
             isMinifyEnabled = false
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             buildConfigField(
                 "String",
                 "API_BASE_URL",
