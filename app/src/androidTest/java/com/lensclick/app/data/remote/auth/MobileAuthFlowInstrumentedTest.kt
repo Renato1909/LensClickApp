@@ -98,11 +98,13 @@ class MobileAuthFlowInstrumentedTest {
 }
 
 private class FakeFlowApi : MobileAuthApi {
-    override suspend fun login(request: MobileAuthRequest): MobileSession =
-        MobileSession(
-            user = MobileUser(1, "Conta", request.email, null, "client", true, false),
-            accessToken = "token-${request.email}",
-            expiresAt = "2099-01-01T00:00:00Z"
+    override suspend fun login(request: MobileAuthRequest): MobileLoginResult =
+        MobileLoginResult.Success(
+            MobileSession(
+                user = MobileUser(1, "Conta", request.email, null, "client", true, false),
+                accessToken = "token-${request.email}",
+                expiresAt = "2099-01-01T00:00:00Z"
+            )
         )
 
     override suspend fun register(request: MobileRegisterRequest): MobileSession = error("Unused")
@@ -118,7 +120,7 @@ private class FakeFlowApi : MobileAuthApi {
 }
 
 private class NetworkFailingFlowApi : MobileAuthApi {
-    override suspend fun login(request: MobileAuthRequest): MobileSession =
+    override suspend fun login(request: MobileAuthRequest): MobileLoginResult =
         throw MobileAuthException(MobileAuthErrorCode.NETWORK)
 
     override suspend fun register(request: MobileRegisterRequest): MobileSession =
