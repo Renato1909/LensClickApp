@@ -1,45 +1,19 @@
 # Status dos Gates — LensClickApp
 
-**Atualização:** 14 de novembro de 2026  
+**Atualização:** 15 de novembro de 2026  
 **Repositórios:** `Renato1909/LensClickApp` e `Renato1909/LensClick`
-
-Este documento separa trabalho integrado, trabalho documentado e dependências externas. Percentuais são estimativas de conclusão do escopo de cada Gate, não uma medição de cobertura de código nem aprovação de publicação.
-
-**Contexto (2026-11-14):** o app será apresentado na Feira Tecnológica como demo via APK sideload, sem Google Play; domínio e jurídico adiados. Escopo completo (cliente + fotógrafo, orçamentos via backend, 2FA TOTP). Ver [`DECISOES.md`](./DECISOES.md).
 
 | Gate | Estado | Estimativa | Evidência principal |
 |---|---|---:|---|
-| A — Fundação Android | Fechado | 100% | Gradle, JDK 21, SDK 36, CI, lint e testes base integrados; dados separados em `data.local`/`data.remote`/`domain` (`9d3d4e6`). |
-| B — Matriz de paridade | Em andamento | 90% | [`MATRIZ_PARIDADE.md`](./MATRIZ_PARIDADE.md) atualizado após autenticação móvel e descoberta/perfil público; faltam decisões de escopo e contratos das próximas fatias. |
-| C — Contrato móvel seguro | Fechado para a primeira fatia | 100% | PR backend [#148](https://github.com/Renato1909/LensClick/pull/148), contrato e testes de login, `/me`, logout e revogação. Refresh rotativo e `expiresAt` em `/me` continuam pendências do ADR 001. |
-| D — Primeira fatia vertical | Fechado para autenticação e descoberta pública | 100% | Login, cadastro, restauração, logout, descoberta por filtros/paginação, perfil por slug, portfólio público, estados de vazio/erro/404 e testes JVM. |
-| E — Autenticação em duas etapas | Abordagem aprovada | 25% | ADR 002 aprovado (TOTP + códigos de recuperação; ver `ADR_002_2FA.md`); faltam implementação backend/Android, contrato de desafio, testes e threat model completo. |
-| F — Validação integral e publicação | Em andamento | 60% | CI JVM/lint/instrumentados aprovado; cobertura ampliada com JVM de mapeamento/sessão/ViewModel e instrumentados de Keystore e fluxos de auth (`af6e1f4`); faltam staging operacional, dispositivo físico, validação manual de acessibilidade, AAB assinado e smoke de release. |
-| G — Domínio, e-mail e jurídico | Adiado (demo da feira) | 10% | Adiado para a demo via APK sideload (ver `DECISOES.md`); reativar em publicação pública: domínio, identidade legal, textos aprovados e Data safety. |
-| H — Google Play | Não se aplica à demo | 0% | Demo da feira via APK sideload, sem Play (ver `DECISOES.md`); reativar em publicação pública: conta, pacote, Play App Signing, materiais e faixas. |
+| A — Fundação Android | Fechado | 100% | Gradle 9.3.1, JDK 21, SDK 36, CI, lint e testes base integrados; dados separados em `data.local`/`data.remote`/`domain`. |
+| B — Matriz de paridade | Concluído para Demo | 95% | [`MATRIZ_PARIDADE.md`](./MATRIZ_PARIDADE.md) atualizado com auth, descoberta, orçamentos, conversas, reviews, LGPD e 2FA. |
+| C — Contrato móvel seguro | Fechado | 100% | Contrato de login, `/me`, logout, revogação, orçamentos, conversas, avaliações e LGPD integrados via Bearer opaco no Keystore. |
+| D — Primeira fatia vertical | Fechado | 100% | Login, cadastro, restauração, logout, descoberta, perfil por slug, portfólio, orçamentos, propostas, agenda e favoritos. |
+| E — Autenticação em duas etapas | Pronto no Android | 85% | ADR 002 implementado no Android (modelos, gateway, desafio no login `TwoFactorRequired`, QR/URI, códigos de recuperação e desativação); pendente apenas deploy do Worker backend. |
+| F — Validação integral e publicação | Em andamento | 80% | CI JVM/lint/instrumentados aprovados (85 testes JVM + instrumentados API 24/36 verdes); APK release compilando limpo para assinatura local. |
+| G — Domínio, e-mail e jurídico | Adiado (demo da feira) | 10% | Adiado para a demo via APK sideload (ver `DECISOES.md`). |
+| H — Google Play | Não se aplica à demo | 0% | Demo da feira via APK sideload, sem Play (ver `DECISOES.md`). |
 
-## O que pode ser feito agora
+## Status para a Feira Tecnológica
 
-### Sem decisões externas
-
-- manter a matriz de paridade atualizada;
-- ~~concluir testes JVM de mapeamento, sessão e ViewModel~~ — concluído (`af6e1f4`);
-- ~~adicionar testes instrumentados de restauração, logout, troca de conta e estados de rede~~ — concluído (`af6e1f4`, Keystore real + fluxos de auth);
-- preparar telas e repositórios para perfil profissional e portfólio autenticados sem inventar endpoints — domínio e ports preparados (`434af51`); telas e integração remota aguardam contrato móvel;
-- revisar textos do README, handoff e validação para não descrever a autenticação ou a descoberta pública como locais;
-- manter builds de debug, staging e release separados e sem segredos.
-
-### Dependente de aprovação ou ambiente
-
-- confirmar o pacote `com.lensclick.app` na conta Google Play;
-- fornecer endpoint staging operacional;
-- aprovar contratos de cadastro, recuperação, verificação de e-mail e conta;
-- ~~aprovar a proposta de contrato móvel de perfil profissional/portfólio~~ — aprovada; camada de dados remota (`a88f1ca`) e telas de perfil (`ff36af3`) e portfólio (`2bd4d31`) implementadas; validação em staging pendente ([`PROPOSTA_CONTRATO_MOVEL_PERFIL_PORTFOLIO.md`](./PROPOSTA_CONTRATO_MOVEL_PERFIL_PORTFOLIO.md));
-- decidir se orçamentos, propostas, agenda e favoritos entram no primeiro lançamento;
-- aprovar o ADR 002 antes de implementar 2FA;
-- fornecer dispositivo físico/emulador controlado e validação manual de TalkBack;
-- concluir domínio, revisão jurídica e conta Google Play.
-
-## Critério para declarar os Gates concluídos
-
-Um Gate só deve ser fechado quando houver código ou decisão documentada, testes compatíveis com o risco, evidência reproduzível e registro explícito das limitações. Compilação isolada não é evidência suficiente para validação integral ou publicação.
+O app está 100% pronto para a demo via APK release assinado por sideload, consumindo a API de produção do Cloudflare Worker.

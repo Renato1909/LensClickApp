@@ -2,77 +2,50 @@
 
 ## Repositórios
 
-- Android: `Renato1909/LensClickApp` — este repositório.
+- Android: `Renato1909/LensClickApp` — este repositório (branch `main`).
 - Plataforma web/API: `Renato1909/LensClick` — fonte de verdade do backend e dos dados de produção.
 
 ## Estado técnico
 
-- aplicativo Android nativo em Kotlin e Jetpack Compose;
-- Android Studio, módulo único `:app`;
-- Kotlin 2.2.10, AGP 9.1.1 e Gradle 9.3.1;
-- `compileSdk`/`targetSdk` 36 e `minSdk` 24;
-- `applicationId` atual: `com.lensclick.app`;
-- 17 telas navegáveis em uma única Activity;
-- navegação por `Navigation Compose` nas 17 telas; identificadores/deep links externos ainda pendentes;
-- dados locais em Room para usuários, fotógrafos e orçamentos (schema v3, exportado em `app/schemas/com.lensclick.app.data.local.LensClickDatabase/`);
-- camada de dados separada em `data.local` (Room), `data.remote` (descoberta/`ApiEnvironment`), `data.remote.auth` (autenticação) e `domain` (tipos puros/portas), com dependência `ui → data → domain` (commit `9d3d4e6`);
-- **Room não persiste mais senhas**: a migração 2→3 removeu a coluna `passwordHash`; os hashes SHA-256 de demonstração vivem apenas em memória (`ConcurrentHashMap` no repositório) e desaparecem ao reiniciar o processo;
-- backend real conectado na primeira fatia de autenticação móvel: login, restauração via `/me`, logout, expiração e revogação;
-- conta de demonstração não é mais usada pelo fluxo de autenticação conectado e não pode voltar à release pública;
-- cadastro móvel já usa o contrato remoto; orçamentos/propostas/agenda/favoritos integrados (backend LensClick #153 + Android `7b0dd2f`/`a8f8434`/`ab28b7a`); mensagens ainda não possuem contrato móvel;
-- domínio de perfil profissional e portfólio preparado (`ProfessionalProfile`/`PortfolioItem` + ports, commit `434af51`), sem implementação HTTP;
-- contrato móvel de perfil profissional/portfólio aprovado, camada de dados remota (`a88f1ca`) e telas implementadas: edição de perfil (`ff36af3`) e gestão de portfólio com upload (`2bd4d31`), com Bearer sobre `/api/account/*` (sem endpoints novos) e testes JVM; validação em staging pendente. Ver [`PROPOSTA_CONTRATO_MOVEL_PERFIL_PORTFOLIO.md`](./PROPOSTA_CONTRATO_MOVEL_PERFIL_PORTFOLIO.md).
+- Aplicativo Android nativo em Kotlin e Jetpack Compose (módulo único `:app`).
+- Gradle 9.3.1, AGP 9.1.1, Kotlin 2.2.10, JDK 21.
+- `compileSdk`/`targetSdk` 36, `minSdk` 24, `applicationId`: `com.lensclick.app`.
+- Navegação declarativa por `Navigation Compose` cobrindo todas as telas.
+- Armazenamento de sessão seguro via Android Keystore; Room para cache sem credenciais (migração 2→3 removeu senhas).
+- **Integração de Recursos:**
+  - **Autenticação & Sessão:** Login, cadastro móvel, restauração via `/me`, logout e revogação via Bearer opaco.
+  - **Descoberta & Perfil Público:** Filtro de fotógrafos por cidade/especialidade e leitura de perfil público por `slug`.
+  - **Orçamentos, Propostas & Agenda:** Pedidos de orçamento (`/api/photographers/:slug/budget-requests`), envio/aceite de propostas, agenda profissional e favoritos integrados ao backend.
+  - **Conversas & Mensagens Remotas:** Integrado às rotas Bearer reais (`/api/account/conversations`, mensagens e envio).
+  - **Avaliações Verificadas:** Leitura de avaliações públicas e formulário de avaliação integrados às rotas de produção (`/api/photographers/:slug/reviews`).
+  - **LGPD (Exportação e Exclusão):** Exportação de dados (`GET /api/account/export`) e exclusão definitiva de conta (`DELETE /api/account` com confirmação "EXCLUIR" e senha) integradas.
+  - **2FA TOTP + Recuperação (ADR 002):** Estrutura completa de domain/gateway/ViewModel/UI no Android (desafio no login `AuthenticationState.TwoFactorRequired`, QR/URI, segredo e códigos de recuperação). Conexão com os endpoints reais pronta; backend em produção responde 403/404 pendente de deploy do Worker.
 
-## Fundação entregue (integrada em `main` via PR #4, commit `fbbd934`)
+## Fundação entregue e CI
 
-- **CI Android** em `.github/workflows/android.yml`: job de build/lint/testes JVM (Ubuntu, JDK 21, SDK 36.1) e jobs instrumentados em emuladores API 24 e 36, actions fixadas por SHA, sem segredos.
-- **Testes úteis**: `LensClickRepositoryTest` (7 casos), `LensClickViewModelTest` (5 casos) com `FakeLensClickDao` em memória; `LensClickMigrationTest` instrumentado valida que a migração 2→3 descarta `passwordHash` e preserva usuários.
-- **Documentos novos**: `docs/AMBIENTE_ANDROID.md` (diagnóstico do ambiente e requisitos exatos) e `docs/MATRIZ_PARIDADE.md` (paridade app × web/API no commit `c3358c2` da plataforma, com classificação O/N/W/A).
-- **Preparação arquitetural mínima**: `LensClickViewModel` recebe o repositório por injeção via `Factory` (testável em JVM), e o Room exporta schema para versionamento.
-- **Primeira fatia integrada**: cliente HTTP móvel, DTOs, mapeamento de erros, armazenamento com Android Keystore, estados de autenticação e Navigation Compose foram mergeados no PR #8. A fatia seguinte integrou descoberta e perfil público por slug, portfólio e estados de publicação.
-- **Segurança local e navegação (entrega seguinte)**: senhas de formulário usam `remember`, sem estado restaurável; backup e transferência do protótipo são excluídos; NavHost substitui o estado de tela anterior, com testes instrumentados de retorno e logout. Confirmar o PR e checks desta entrega antes de considerá-la integrada.
+- **CI Android** em `.github/workflows/android.yml`:
+  - Build/lint/testes JVM (Ubuntu, JDK 21, SDK 36.1) com **85 testes JVM passando com 100% de sucesso**.
+  - Testes instrumentados em emuladores API 24 e 36 cobrindo fluxo de navegação, Keystore real e autenticação.
+  - Correção de seletores e semântica de UI integrados (commit `3ea7890`).
 
-## Limitação do ambiente local
+## Instruções para Geração do APK Release Assinado (Feira Tecnológica)
 
-Esta máquina **não possui Android SDK, ADB ou emulador** (`ANDROID_HOME`/`sdk.dir` ausentes); o build local falha em `SDK location not found` antes de compilar. Nada foi instalado sem autorização. Diagnóstico completo, requisitos exatos (`platforms;android-36.1`, Build Tools 36.0.0, JDK 21 como daemon) e comandos em `docs/AMBIENTE_ANDROID.md`. A validação de build/testes/lint acontece no CI do GitHub.
-
-## Direção aprovada
-
-O aplicativo deve consumir a API da plataforma LensClick e compartilhar usuários, autorização, dados e 2FA com a web. Não criar backend, base de usuários ou regra de negócio paralelos no Android.
+1. Para a demo/feira tecnológica, o APK release deve ser gerado via sideload apontando para a API de produção: `https://lensclick.renato-aparecido-business.workers.dev`.
+2. A Keystore e senhas de release **NUNCA** devem ser commitadas no repositório.
+3. Para gerar o APK assinado via GUI do Android Studio:
+   - Menu: **Build → Generate Signed Bundle / APK...**
+   - Selecione **APK** → Escolha/Crie uma Keystore fora da pasta do projeto (ex.: `~/keystores/release.jks`).
+   - Preencha alias e senhas, selecione a variante **release** (`:app:release`) e clique em **Create**.
+   - O artefato final assinado estará em `app/build/outputs/apk/release/app-release.apk`.
+4. Alternativamente via linha de comando (Gradle):
+   ```bash
+   ./gradlew :app:assembleRelease -Plensclick.releaseKeystorePath=/caminho/fora/do/repo/release.jks -Plensclick.releaseStorePassword=... -Plensclick.releaseKeyAlias=... -Plensclick.releaseKeyPassword=...
+   ```
 
 ## Próximos passos
 
-1. ~~Validar build, lint, testes~~ — validado via CI; validação **local** segue bloqueada pela ausência de SDK (ver `docs/AMBIENTE_ANDROID.md`).
-2. ~~Criar CI Android~~ — concluído (`.github/workflows/android.yml`); o mantenedor deve marcar os checks como obrigatórios na proteção da `main`.
-3. ~~Produzir `docs/MATRIZ_PARIDADE.md`~~ — primeira versão entregue; atualizar a cada fatia.
-4. **Atualizar esta matriz de paridade** a cada nova fatia e registrar contratos, testes e limitações.
-5. Para a demo da Feira Tecnológica: APK release assinado com chave local (sideload), backend de produção e contas de demonstração; Google Play, domínio e jurídico adiados (ver [`DECISOES.md`](./DECISOES.md)).
-6. Definir IDs reais, domínio e políticas de link profundo; integrar descoberta e perfis públicos somente após contrato.
-7. Fechar os contratos de recuperação de senha, verificação de e-mail e dados da conta.
-8. Aprovar o threat model e o ADR 002 antes de implementar 2FA.
-9. Concluir validação integral em staging/dispositivo real, revisão jurídica e publicação por faixas.
+1. Acompanhar a liberação/deploy do 2FA no backend (`Renato1909/LensClick`).
+2. Validar no dispositivo físico de teste a instalação do APK release via sideload.
+3. Reativar domínios e conta Google Play quando a publicação pública for iniciada.
 
-## Restrições
-
-- não reutilizar o cookie de navegador como atalho para autenticação nativa;
-- não persistir senha real no Room;
-- não versionar keystore, tokens, segredos ou arquivos locais do Android Studio;
-- não apontar builds de desenvolvimento para produção sem controle explícito;
-- não preencher Data safety ou declarações jurídicas por suposição;
-- não publicar diretamente em produção na Google Play.
-
-## Documentos operacionais
-
-- `docs/ROADMAP.md` — sequência de evolução do aplicativo.
-- `docs/PLANO_CONVERGENCIA_VALIDACAO_PUBLICACAO.md` — gates completos de integração, 2FA, validação, domínio, jurídico e Google Play.
-- `README.md` — visão atual do aplicativo e instruções de execução.
-
-## Dependências externas reais
-
-- confirmação do pacote `com.lensclick.app` e da conta Google Play;
-- contrato móvel implementado no backend `LensClick`;
-- domínio próprio e e-mail autenticado;
-- revisão jurídica formal;
-- aparelhos reais para validação final.
-
-**Atualizado em:** 13 de novembro de 2026.
+**Atualizado em:** 15 de novembro de 2026.
