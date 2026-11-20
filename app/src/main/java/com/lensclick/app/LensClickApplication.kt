@@ -4,20 +4,28 @@ import android.app.Application
 import com.lensclick.app.data.local.LensClickDatabase
 import com.lensclick.app.data.local.LensClickRepository
 import com.lensclick.app.data.remote.ApiEnvironment
+import com.lensclick.app.data.remote.HttpAccountGateway
 import com.lensclick.app.data.remote.HttpBudgetRequestsGateway
+import com.lensclick.app.data.remote.HttpConversationsGateway
 import com.lensclick.app.data.remote.HttpFavoritesGateway
 import com.lensclick.app.data.remote.HttpPortfolioGateway
 import com.lensclick.app.data.remote.HttpProfessionalProfileGateway
+import com.lensclick.app.data.remote.HttpReviewsGateway
+import com.lensclick.app.data.remote.HttpTwoFactorGateway
 import com.lensclick.app.data.remote.auth.AndroidKeystoreSessionStore
 import com.lensclick.app.data.remote.auth.HttpMobileAuthApi
 import com.lensclick.app.data.remote.auth.HttpTransport
 import com.lensclick.app.data.remote.auth.MobileAuthRepository
 import com.lensclick.app.data.remote.auth.SessionStore
 import com.lensclick.app.data.remote.auth.UrlConnectionTransport
+import com.lensclick.app.domain.AccountGateway
+import com.lensclick.app.domain.BudgetRequestsGateway
+import com.lensclick.app.domain.ConversationsGateway
+import com.lensclick.app.domain.FavoritesGateway
 import com.lensclick.app.domain.PortfolioGateway
 import com.lensclick.app.domain.ProfessionalProfileGateway
-import com.lensclick.app.domain.BudgetRequestsGateway
-import com.lensclick.app.domain.FavoritesGateway
+import com.lensclick.app.domain.ReviewsGateway
+import com.lensclick.app.domain.TwoFactorGateway
 
 class LensClickApplication : Application() {
     val repository: LensClickRepository by lazy {
@@ -46,5 +54,21 @@ class LensClickApplication : Application() {
 
     val favoritesGateway: FavoritesGateway by lazy {
         HttpFavoritesGateway(httpTransport, sessionStore)
+    }
+
+    val twoFactorGateway: TwoFactorGateway by lazy {
+        HttpTwoFactorGateway(httpTransport, sessionStore)
+    }
+
+    val conversationsGateway: ConversationsGateway by lazy {
+        HttpConversationsGateway(httpTransport, sessionStore)
+    }
+
+    val reviewsGateway: ReviewsGateway by lazy {
+        HttpReviewsGateway(httpTransport, sessionStore)
+    }
+
+    val accountGateway: AccountGateway by lazy {
+        HttpAccountGateway(httpTransport, sessionStore)
     }
 }

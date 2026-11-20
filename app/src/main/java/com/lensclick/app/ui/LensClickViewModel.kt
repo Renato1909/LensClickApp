@@ -8,25 +8,34 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.lensclick.app.BuildConfig
 import com.lensclick.app.LensClickApplication
 import com.lensclick.app.data.local.LensClickRepository
-import com.lensclick.app.data.remote.HttpPublicPhotographersGateway
-import com.lensclick.app.domain.PublicPhotographerPage
-import com.lensclick.app.domain.PublicPhotographerProfile
-import com.lensclick.app.domain.PublicPhotographerNotFoundException
-import com.lensclick.app.domain.PublicPhotographersGateway
 import com.lensclick.app.data.local.User
+import com.lensclick.app.data.remote.HttpPublicPhotographersGateway
 import com.lensclick.app.data.remote.auth.MobileAuthErrorCode
 import com.lensclick.app.data.remote.auth.MobileAuthException
 import com.lensclick.app.data.remote.auth.MobileAuthRepository
-import com.lensclick.app.domain.MobileUser
-import com.lensclick.app.domain.ProfessionalProfile
-import com.lensclick.app.domain.ProfessionalProfileGateway
-import com.lensclick.app.domain.PortfolioItem
-import com.lensclick.app.domain.PortfolioGateway
+import com.lensclick.app.domain.AccountGateway
 import com.lensclick.app.domain.BudgetRequest
 import com.lensclick.app.domain.BudgetRequestDraft
 import com.lensclick.app.domain.BudgetRequestsGateway
+import com.lensclick.app.domain.Conversation
+import com.lensclick.app.domain.ConversationsGateway
 import com.lensclick.app.domain.Favorite
 import com.lensclick.app.domain.FavoritesGateway
+import com.lensclick.app.domain.Message
+import com.lensclick.app.domain.MobileUser
+import com.lensclick.app.domain.PortfolioGateway
+import com.lensclick.app.domain.PortfolioItem
+import com.lensclick.app.domain.ProfessionalProfile
+import com.lensclick.app.domain.ProfessionalProfileGateway
+import com.lensclick.app.domain.PublicPhotographerNotFoundException
+import com.lensclick.app.domain.PublicPhotographerPage
+import com.lensclick.app.domain.PublicPhotographerProfile
+import com.lensclick.app.domain.PublicPhotographersGateway
+import com.lensclick.app.domain.PublicReviews
+import com.lensclick.app.domain.ReviewsGateway
+import com.lensclick.app.domain.TwoFactorGateway
+import com.lensclick.app.domain.TwoFactorSetup
+import com.lensclick.app.domain.TwoFactorStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -55,6 +64,7 @@ sealed interface AuthenticationState {
     data object SignedOut : AuthenticationState
     data object LogoutCompleted : AuthenticationState
     data class Authenticated(val user: User) : AuthenticationState
+    data class TwoFactorRequired(val email: String, val challengeToken: String) : AuthenticationState
     data class Error(val code: MobileAuthErrorCode) : AuthenticationState
     data object SessionExpired : AuthenticationState
 }
@@ -88,7 +98,11 @@ class LensClickViewModel(
     private val professionalProfileGateway: ProfessionalProfileGateway? = null,
     private val portfolioGateway: PortfolioGateway? = null,
     private val budgetRequestsGateway: BudgetRequestsGateway? = null,
-    private val favoritesGateway: FavoritesGateway? = null
+    private val favoritesGateway: FavoritesGateway? = null,
+    private val twoFactorGateway: TwoFactorGateway? = null,
+    private val conversationsGateway: ConversationsGateway? = null,
+    private val reviewsGateway: ReviewsGateway? = null,
+    private val accountGateway: AccountGateway? = null
 ) : ViewModel() {
     companion object {
         val Factory = viewModelFactory {
@@ -100,7 +114,11 @@ class LensClickViewModel(
                     professionalProfileGateway = application.professionalProfileGateway,
                     portfolioGateway = application.portfolioGateway,
                     budgetRequestsGateway = application.budgetRequestsGateway,
-                    favoritesGateway = application.favoritesGateway
+                    favoritesGateway = application.favoritesGateway,
+                    twoFactorGateway = application.twoFactorGateway,
+                    conversationsGateway = application.conversationsGateway,
+                    reviewsGateway = application.reviewsGateway,
+                    accountGateway = application.accountGateway
                 )
             }
         }
@@ -173,6 +191,22 @@ class LensClickViewModel(
     private val _budgetMessage = MutableStateFlow<String?>(null)
     val budgetMessage: StateFlow<String?> = _budgetMessage.asStateFlow()
 
+    // 2FA State
+    private val _twoFactorStatus = MutableStateFlow<TwoFactorStatus?>(null)
+    val twoFactorStatus: StateFlow<TwoFactorStatus?> = _twoFactorStatus.asStateFlow()
+    private val _twoFactorSetup = MutableStateFlow<TwoFactorSetup?>(null)
+    val twoFactorSetup: StateFlow<TwoFactorSetup?> = _twoFactorSetup.asStateFlow()
+
+    // Conversations & Messages State
+    private val _conversations = MutableStateFlow<List<Conversation>>(emptyList())
+    val conversations: StateFlow<List<Conversation>> = _conversations.asStateFlow()
+    private val _messages = MutableStateFlow<List<Message>>(emptyList())
+    val messages: StateFlow<List<Message>> = _messages.asStateFlow()
+
+    // Reviews State
+    private val _publicReviews = MutableStateFlow<PublicReviews?>(null)
+    val publicReviews: StateFlow<PublicReviews?> = _publicReviews.asStateFlow()
+
     init {
         viewModelScope.launch { repository.seedDemoData() }
         viewModelScope.launch { restoreSession() }
@@ -191,9 +225,82 @@ class LensClickViewModel(
                     )
                     setAuthenticated(session.user)
                 } catch (error: MobileAuthException) {
-                    _currentUser.value = null
-                    _authentication.value = AuthenticationState.Error(error.code)
+                    if (error.code == MobileAuthErrorCode.FORBIDDEN && error.statusCode == 202) {
+                        _authentication.value = AuthenticationState.TwoFactorRequired(
+                            email = email,
+                            challengeToken = "challenge_" + System.currentTimeMillis()
+                        )
+                    } else {
+                        _currentUser.value = null
+                        _authentication.value = AuthenticationState.Error(error.code)
+                    }
                 }
+            }
+        }
+    }
+
+    fun verifyTwoFactorChallenge(challengeToken: String, code: String) {
+        val gateway = twoFactorGateway ?: return
+        viewModelScope.launch {
+            authenticationMutex.withLock {
+                _authentication.value = AuthenticationState.Loading
+                try {
+                    val session = gateway.verifyChallenge(challengeToken, code)
+                    setAuthenticated(session.user)
+                } catch (error: MobileAuthException) {
+                    _authentication.value = AuthenticationState.Error(error.code)
+                } catch (_: Exception) {
+                    _authentication.value = AuthenticationState.Error(MobileAuthErrorCode.SERVER)
+                }
+            }
+        }
+    }
+
+    fun loadTwoFactorStatus() {
+        val gateway = twoFactorGateway ?: return
+        viewModelScope.launch {
+            try {
+                _twoFactorStatus.value = gateway.getStatus()
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun setupTwoFactor() {
+        val gateway = twoFactorGateway ?: return
+        viewModelScope.launch {
+            try {
+                _twoFactorSetup.value = gateway.setup()
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun enableTwoFactor(code: String, result: (Boolean) -> Unit) {
+        val gateway = twoFactorGateway ?: run { result(false); return }
+        viewModelScope.launch {
+            try {
+                val ok = gateway.enable(code)
+                if (ok) {
+                    _twoFactorStatus.value = TwoFactorStatus(enabled = true)
+                    _twoFactorSetup.value = null
+                }
+                result(ok)
+            } catch (_: Exception) {
+                result(false)
+            }
+        }
+    }
+
+    fun disableTwoFactor(password: String, code: String? = null, result: (Boolean) -> Unit) {
+        val gateway = twoFactorGateway ?: run { result(false); return }
+        viewModelScope.launch {
+            try {
+                val ok = gateway.disable(password, code)
+                if (ok) {
+                    _twoFactorStatus.value = TwoFactorStatus(enabled = false)
+                }
+                result(ok)
+            } catch (_: Exception) {
+                result(false)
             }
         }
     }
@@ -257,6 +364,8 @@ class LensClickViewModel(
         )
         _currentUser.value = localUser
         _authentication.value = AuthenticationState.Authenticated(localUser)
+        loadTwoFactorStatus()
+        loadConversations()
     }
 
     private fun requireMobileAuthRepository(): MobileAuthRepository =
@@ -323,6 +432,110 @@ class LensClickViewModel(
                     _authentication.value = AuthenticationState.Error(error.code)
                     result(false)
                 }
+            }
+        }
+    }
+
+    fun loadConversations() {
+        val gateway = conversationsGateway ?: return
+        viewModelScope.launch {
+            try {
+                _conversations.value = gateway.list()
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun loadMessages(conversationId: Long) {
+        val gateway = conversationsGateway ?: return
+        viewModelScope.launch {
+            try {
+                _messages.value = gateway.getMessages(conversationId)
+                gateway.markAsRead(conversationId)
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun sendMessage(conversationId: Long, text: String, result: (Boolean) -> Unit) {
+        val gateway = conversationsGateway ?: run { result(false); return }
+        viewModelScope.launch {
+            try {
+                val newMsg = gateway.sendMessage(conversationId, text)
+                _messages.value = _messages.value + newMsg
+                _conversations.value = gateway.list()
+                result(true)
+            } catch (_: Exception) {
+                result(false)
+            }
+        }
+    }
+
+    fun startConversation(photographerSlug: String, text: String, result: (Boolean) -> Unit) {
+        val gateway = conversationsGateway ?: run { result(false); return }
+        viewModelScope.launch {
+            try {
+                gateway.startConversation(photographerSlug, text)
+                _conversations.value = gateway.list()
+                result(true)
+            } catch (_: Exception) {
+                result(false)
+            }
+        }
+    }
+
+    fun loadReviews(photographerSlug: String) {
+        val gateway = reviewsGateway ?: return
+        viewModelScope.launch {
+            try {
+                _publicReviews.value = gateway.getReviews(photographerSlug)
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun submitReview(photographerSlug: String, rating: Int, comment: String, result: (Boolean) -> Unit) {
+        val gateway = reviewsGateway ?: run { result(false); return }
+        viewModelScope.launch {
+            try {
+                val ok = gateway.submitReview(photographerSlug, rating, comment)
+                if (ok) {
+                    _publicReviews.value = gateway.getReviews(photographerSlug)
+                }
+                result(ok)
+            } catch (_: Exception) {
+                result(false)
+            }
+        }
+    }
+
+    fun exportAccountData(onSuccess: (String) -> Unit, onError: (String) -> Unit) {
+        val gateway = accountGateway ?: run { onError("Serviço de conta indisponível."); return }
+        viewModelScope.launch {
+            try {
+                val data = gateway.exportData()
+                onSuccess(data.rawJson)
+            } catch (error: MobileAuthException) {
+                onError("Erro ao exportar dados: ${error.code}")
+            } catch (_: Exception) {
+                onError("Erro ao conectar ao servidor para exportação.")
+            }
+        }
+    }
+
+    fun deleteAccount(password: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        val gateway = accountGateway ?: run { onError("Serviço de conta indisponível."); return }
+        viewModelScope.launch {
+            try {
+                val ok = gateway.deleteAccount(password)
+                if (ok) {
+                    _currentUser.value = null
+                    _authentication.value = AuthenticationState.SignedOut
+                    onSuccess()
+                } else {
+                    onError("Não foi possível excluir a conta.")
+                }
+            } catch (error: MobileAuthException) {
+                onError("Senha incorreta ou erro no servidor (${error.code}).")
+            } catch (_: Exception) {
+                onError("Erro de conexão ao solicitar exclusão.")
             }
         }
     }

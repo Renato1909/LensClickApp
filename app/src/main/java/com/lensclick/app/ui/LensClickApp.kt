@@ -1,51 +1,81 @@
 package com.lensclick.app.ui
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -57,27 +87,32 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.lensclick.app.R
 import com.lensclick.app.data.local.Photographer
-import com.lensclick.app.domain.PublicPhotographer
-import com.lensclick.app.domain.BudgetRequest
-import com.lensclick.app.domain.BudgetRequestDraft
-import com.lensclick.app.domain.Favorite
 import com.lensclick.app.data.local.User
 import com.lensclick.app.data.remote.auth.MobileAuthErrorCode
+import com.lensclick.app.domain.BudgetRequest
+import com.lensclick.app.domain.BudgetRequestDraft
+import com.lensclick.app.domain.Conversation
+import com.lensclick.app.domain.Favorite
+import com.lensclick.app.domain.Message
 import com.lensclick.app.domain.PortfolioItem
 import com.lensclick.app.domain.ProfessionalProfile
-import java.text.NumberFormat
-import java.util.Locale
-import kotlinx.coroutines.delay
+import com.lensclick.app.domain.PublicPhotographer
+import com.lensclick.app.domain.PublicPhotographerProfile
+import java.io.ByteArrayOutputStream
 
-private val Ink = Color(0xFF11110F)
-private val Surface = Color(0xFFF6F3EB)
-private val SurfaceHigh = Color(0xFFFFFEFA)
-private val Line = Color(0xFFE2DDD2)
-private val Paper = Color(0xFFF6F3EB)
-private val Muted = Color(0xFF716D64)
-private val Gold = Color(0xFF9A6A24)
+private val Ink = Color(0xFF1E2128)
+private val Surface = Color(0xFFF7F5F0)
+private val SurfaceHigh = Color(0xFFFFFFFF)
+private val Line = Color(0xFFE2DDD3)
+private val Paper = Color(0xFFFAF8F3)
+private val Muted = Color(0xFF6B7280)
+private val Gold = Color(0xFFB8860B)
 
-private enum class Screen { Onboarding, AccountType, Login, SignUp, PhotographerSignUp, Home, Search, Photographer, Quote, Budgets, Conversations, Chat, Account, ProDashboard, ProRequests, ProAgenda, ProProfile, ProPortfolio }
+enum class Screen {
+    Onboarding, AccountType, Login, SignUp, PhotographerSignUp,
+    Home, Search, Photographer, Quote, Budgets, Conversations, Chat, Account,
+    ProDashboard, ProRequests, ProAgenda, ProProfile, ProPortfolio
+}
 private const val PhotographerRoute = "Photographer/{slug}"
 private const val QuoteRoute = "Quote/{slug}"
 
@@ -124,6 +159,7 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
         } else if (authentication is AuthenticationState.Error && route == Screen.Onboarding.name) {
             resetTo(Screen.Login)
         } else if (authentication !is AuthenticationState.Authenticated &&
+            authentication !is AuthenticationState.TwoFactorRequired &&
             Screen.entries.any { it.name == route && it !in setOf(
                 Screen.Onboarding, Screen.AccountType, Screen.Login, Screen.SignUp, Screen.PhotographerSignUp, Screen.Search) }) {
             resetTo(Screen.Login)
@@ -135,6 +171,7 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
             viewModel.loadBudgets()
             viewModel.loadFavorites()
             viewModel.loadAgenda()
+            viewModel.loadConversations()
         }
     }
 
@@ -149,6 +186,7 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
             composable(Screen.Login.name) { LoginScreen(
                 authentication = authentication,
                 onLogin = { email, password -> viewModel.login(email, password) },
+                onVerify2Fa = { token, code -> viewModel.verifyTwoFactorChallenge(token, code) },
                 onSignUp = { go(Screen.AccountType) }
             ) }
             composable(Screen.SignUp.name) { SignUpScreen(
@@ -179,9 +217,10 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
                 )
             }
             composable(Screen.Budgets.name) { BudgetsScreen(viewModel, budgets, favorites, onNavigate = ::go) }
-            composable(Screen.Conversations.name) { ConversationsScreen(photographers, onNavigate = ::go) }
-            composable(Screen.Chat.name) { ChatScreen(onBack = { navController.popBackStack() }) }
+            composable(Screen.Conversations.name) { ConversationsScreen(viewModel, photographers, onNavigate = ::go) }
+            composable(Screen.Chat.name) { ChatScreen(viewModel, onBack = { navController.popBackStack() }) }
             composable(Screen.Account.name) { AccountScreen(
+                viewModel = viewModel,
                 user = currentUser,
                 authentication = authentication,
                 canUseProfessionalMode = currentUser?.role == "photographer",
@@ -198,102 +237,68 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
     }
 }
 
-@Composable
-private fun BrandMark(modifier: Modifier = Modifier, large: Boolean = false, onDark: Boolean = false, accented: Boolean = false) {
-    LogoAsset(modifier = modifier, size = if (large) 104 else 56, onDark = onDark, accented = accented)
-}
-
-@Composable
-private fun LogoAsset(modifier: Modifier = Modifier, size: Int, onDark: Boolean = false, accented: Boolean = false) {
-    Box(
-        modifier.size(size.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Image(
-            painter = painterResource(R.drawable.lens_click_mark),
-            contentDescription = "Monograma Lens Click",
-            modifier = Modifier.fillMaxSize()
-                .graphicsLayer {
-                    scaleX = 1.12f
-                    scaleY = 1.12f
-                    compositingStrategy = CompositingStrategy.Offscreen
-                }
-                .drawWithCache {
-                    val lightLogo = Brush.linearGradient(
-                        colors = listOf(Color(0xFFFFFEFA), Color(0xFFE7D3A5), Color(0xFFFFFFFF))
-                    )
-                    val accentLogo = Brush.linearGradient(
-                        colors = listOf(Ink, Color(0xFFB47B2C), Ink)
-                    )
-                    onDrawWithContent {
-                        drawContent()
-                        when {
-                            onDark -> drawRect(brush = lightLogo, blendMode = BlendMode.SrcIn)
-                            accented -> drawRect(brush = accentLogo, blendMode = BlendMode.SrcIn)
-                        }
-                    }
-                },
-            contentScale = ContentScale.Fit
-        )
+@Composable private fun BrandMark(modifier: Modifier = Modifier, compact: Boolean = false, light: Boolean = false, whiteText: Boolean = false) { LogoAsset(modifier = modifier, sizeDp = if (compact) 32 else 48, light = light, whiteText = whiteText) }
+@Composable private fun LogoAsset(modifier: Modifier = Modifier, sizeDp: Int = 48, light: Boolean = false, whiteText: Boolean = false) {
+    val context = LocalContext.current
+    val resId = remember(light) {
+        val name = if (light) "ic_lens_click_logo_light" else "ic_lens_click_logo"
+        context.resources.getIdentifier(name, "drawable", context.packageName).takeIf { it != 0 } ?: R.drawable.card_portrait_outdoor
     }
-}
-
-@Composable
-private fun CompactLogo(size: Int = 42) = LogoAsset(size = size)
-
-@Composable
-private fun OnboardingScreen(onStart: () -> Unit, onLogin: () -> Unit, onBrowse: () -> Unit) {
-    Box(Modifier.fillMaxSize()) {
-        Image(painterResource(R.drawable.lens_mountains), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(.18f), Color.Black.copy(.55f), Ink))))
-        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Spacer(Modifier.weight(1f))
-            BrandMark(large = true, onDark = true)
-            Spacer(Modifier.height(28.dp))
-            Text("Conectando momentos\na fotógrafos incríveis.", color = Color.White, fontSize = 22.sp, lineHeight = 29.sp, fontWeight = FontWeight.Medium, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-            Spacer(Modifier.height(48.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) { repeat(4) { Dot(active = it == 0) } }
-            Spacer(Modifier.height(36.dp))
-            Button(onStart, Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(18.dp), colors = ButtonDefaults.buttonColors(Paper, Ink)) { Text("Começar", fontWeight = FontWeight.SemiBold) }
-            Spacer(Modifier.height(12.dp))
-            OutlinedButton(onClick = onLogin, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(18.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(.55f))) { Text("Entrar", color = Color.White, fontWeight = FontWeight.Medium) }
-            TextButton(onClick = onBrowse) { Text("Explorar fotógrafos", color = Color.White) }
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        Icon(painter = painterResource(resId), contentDescription = "Logo LensClick", modifier = Modifier.size(sizeDp.dp), tint = Color.Unspecified)
+        if (sizeDp >= 40) {
+            Spacer(Modifier.width(8.dp))
+            Column {
+                Text("LensClick", color = if (whiteText) Color.White else Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text("Fotografia Profissional", color = if (whiteText) Color.White.copy(.8f) else Muted, fontSize = 9.sp)
+            }
         }
     }
 }
+@Composable private fun CompactLogo(sizeDp: Int = 34) { LogoAsset(sizeDp = sizeDp) }
 
-@Composable private fun Dot(active: Boolean) = Box(Modifier.size(if (active) 9.dp else 7.dp).clip(CircleShape).background(if (active) Paper else Color.Gray.copy(.55f)))
-
-@Composable
-private fun AccountTypeScreen(onClient: () -> Unit, onPhotographer: () -> Unit, onLogin: () -> Unit) =
-    AuthFrame("Como você quer usar o Lens Click?", "Escolha o tipo da sua conta") {
-        Text("Quero contratar um fotógrafo", color = Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-        Text("Encontre profissionais e solicite orçamentos.", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp, bottom = 12.dp))
-        PrimaryButton("Cadastrar como cliente", onClient)
-        Spacer(Modifier.height(22.dp))
-        Text("Sou fotógrafo", color = Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-        Text("Crie seu perfil e apareça nas buscas.", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp, bottom = 12.dp))
-        OutlinedButton(
-            onClick = onPhotographer,
-            modifier = Modifier.fillMaxWidth().height(54.dp),
-            shape = RoundedCornerShape(18.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Ink)
-        ) { Text("Cadastrar como fotógrafo", color = Ink, fontWeight = FontWeight.SemiBold) }
-        Spacer(Modifier.height(18.dp))
+@Composable private fun OnboardingScreen(onStart: () -> Unit, onLogin: () -> Unit, onBrowse: () -> Unit) {
+    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Spacer(Modifier.height(16.dp))
+        BrandMark()
+        Spacer(Modifier.weight(1f))
+        Photo(Modifier.fillMaxWidth().height(280.dp), R.drawable.card_portrait_outdoor)
+        Spacer(Modifier.height(24.dp))
+        Text("Encontre o fotógrafo ideal para o seu momento.", color = Ink, fontSize = 22.sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Text("Conectamos clientes e fotógrafos profissionais com segurança e transparência.", color = Muted, fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
+        Spacer(Modifier.weight(1f))
+        PrimaryButton("Começar", onStart)
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(onClick = onBrowse, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Ink)) { Text("Explorar sem conta", color = Ink, fontWeight = FontWeight.SemiBold) }
+        Spacer(Modifier.height(12.dp))
         CenterLink("Já tem uma conta?", "Entrar", onLogin)
     }
+}
 
-@Composable
-private fun AuthFrame(title: String, subtitle: String, content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 28.dp, vertical = 36.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        BrandMark(large = true, accented = true)
-        Spacer(Modifier.height(48.dp))
-        Column(Modifier.fillMaxWidth()) {
-            Text(title, color = Ink, fontSize = 27.sp, lineHeight = 32.sp, fontWeight = FontWeight.SemiBold)
-            Text(subtitle, color = Muted, fontSize = 14.sp)
-            Spacer(Modifier.height(28.dp))
-            content()
-        }
+@Composable private fun AccountTypeScreen(onClient: () -> Unit, onPhotographer: () -> Unit, onLogin: () -> Unit) {
+    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Spacer(Modifier.height(16.dp))
+        BrandMark()
+        Spacer(Modifier.weight(1f))
+        Text("Como você deseja usar o LensClick?", color = Ink, fontSize = 20.sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Spacer(Modifier.height(24.dp))
+        Button(onClick = onClient, modifier = Modifier.fillMaxWidth().height(70.dp), shape = RoundedCornerShape(18.dp), colors = ButtonDefaults.buttonColors(SurfaceHigh, Ink)) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Text("Sou Cliente", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Ink); Text("Quero contratar serviços fotográficos", fontSize = 11.sp, color = Muted) } }
+        Spacer(Modifier.height(14.dp))
+        Button(onClick = onPhotographer, modifier = Modifier.fillMaxWidth().height(70.dp), shape = RoundedCornerShape(18.dp), colors = ButtonDefaults.buttonColors(Ink, Color.White)) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Text("Sou Fotógrafo", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White); Text("Quero divulgar meu trabalho e receber orçamentos", fontSize = 11.sp, color = Color.White.copy(.8f)) } }
+        Spacer(Modifier.weight(1f))
+        CenterLink("Já possui conta?", "Entrar", onLogin)
+    }
+}
+
+@Composable private fun AuthFrame(title: String, subtitle: String, content: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Spacer(Modifier.height(16.dp))
+        BrandMark()
+        Spacer(Modifier.height(32.dp))
+        Text(title, color = Ink, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Text(subtitle, color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+        Spacer(Modifier.height(28.dp))
+        content()
     }
 }
 
@@ -301,47 +306,62 @@ private fun AuthFrame(title: String, subtitle: String, content: @Composable Colu
 private fun LoginScreen(
     authentication: AuthenticationState,
     onLogin: (String, String) -> Unit,
+    onVerify2Fa: (String, String) -> Unit,
     onSignUp: () -> Unit
 ) {
     var email by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var totpCode by rememberSaveable { mutableStateOf("") }
     var recoveryOpen by rememberSaveable { mutableStateOf(false) }
     val submitting = authentication is AuthenticationState.Loading
+    val is2FA = authentication is AuthenticationState.TwoFactorRequired
     val errorMessage = when (authentication) {
         is AuthenticationState.Error -> authentication.code.loginMessage()
         AuthenticationState.SessionExpired -> "Sua sessão expirou ou foi revogada. Entre novamente."
         else -> null
     }
     val completedMessage = authentication == AuthenticationState.LogoutCompleted
-    AuthFrame("Bem-vindo de volta!", "Entre para continuar") {
-        LensField("E-mail", email, { email = it }, KeyboardType.Email)
-        Spacer(Modifier.height(14.dp))
-        LensField("Senha", password, { password = it }, password = true)
-        TextButton(onClick = { recoveryOpen = true }, contentPadding = PaddingValues(0.dp)) { Text("Esqueci minha senha", color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Medium) }
-        Spacer(Modifier.height(26.dp))
-        if (submitting) {
-            AuthStatusBanner("Conectando à sua conta...", loading = true)
-        } else if (errorMessage != null) {
-            AuthStatusBanner(errorMessage, loading = false, error = true)
-        } else if (completedMessage) {
-            AuthStatusBanner("Você saiu da conta com segurança.", loading = false)
+
+    AuthFrame(if (is2FA) "Verificação 2FA" else "Bem-vindo de volta!", if (is2FA) "Digite o código do seu autenticador" else "Entre para continuar") {
+        if (is2FA) {
+            val challenge = authentication as AuthenticationState.TwoFactorRequired
+            Text("Insira o código de 6 dígitos do app TOTP ou um código de recuperação.", color = Muted, fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Spacer(Modifier.height(16.dp))
+            LensField("Código TOTP / Recuperação", totpCode, { totpCode = it }, KeyboardType.Number)
+            Spacer(Modifier.height(20.dp))
+            PrimaryButton("Confirmar código", {
+                onVerify2Fa(challenge.challengeToken, totpCode)
+            }, enabled = totpCode.isNotBlank() && !submitting)
+        } else {
+            LensField("E-mail", email, { email = it }, KeyboardType.Email)
+            Spacer(Modifier.height(14.dp))
+            LensField("Senha", password, { password = it }, password = true)
+            TextButton(onClick = { recoveryOpen = true }, contentPadding = PaddingValues(0.dp)) { Text("Esqueci minha senha", color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Medium) }
+            Spacer(Modifier.height(26.dp))
+            if (submitting) {
+                AuthStatusBanner("Conectando à sua conta...", loading = true)
+            } else if (errorMessage != null) {
+                AuthStatusBanner(errorMessage, loading = false, error = true)
+            } else if (completedMessage) {
+                AuthStatusBanner("Você saiu da conta com segurança.", loading = false)
+            }
+            PrimaryButton(if (submitting) "Entrando..." else "Entrar", {
+                onLogin(email, password)
+            }, enabled = email.isNotBlank() && password.isNotBlank() && !submitting)
+            Spacer(Modifier.height(12.dp))
+            CenterLink("Não tem uma conta?", "Cadastre-se", onSignUp)
         }
-        PrimaryButton(if (submitting) "Entrando..." else "Entrar", {
-            onLogin(email, password)
-        }, enabled = email.isNotBlank() && password.isNotBlank() && !submitting)
-        Spacer(Modifier.height(12.dp))
-        CenterLink("Não tem uma conta?", "Cadastre-se", onSignUp)
     }
 
     if (recoveryOpen) ActionDialog("Recuperar senha", "Enviaremos as instruções de recuperação para $email.") { recoveryOpen = false }
 }
 
-private fun com.lensclick.app.data.remote.auth.MobileAuthErrorCode.loginMessage(): String = when (this) {
-    com.lensclick.app.data.remote.auth.MobileAuthErrorCode.INVALID_INPUT,
-    com.lensclick.app.data.remote.auth.MobileAuthErrorCode.UNAUTHENTICATED -> "E-mail ou senha inválidos."
-    com.lensclick.app.data.remote.auth.MobileAuthErrorCode.RATE_LIMITED -> "Muitas tentativas. Aguarde antes de tentar novamente."
-    com.lensclick.app.data.remote.auth.MobileAuthErrorCode.NETWORK -> "Não foi possível conectar. Verifique sua internet."
-    com.lensclick.app.data.remote.auth.MobileAuthErrorCode.SERVER -> "O serviço está indisponível. Tente novamente."
+private fun MobileAuthErrorCode.loginMessage(): String = when (this) {
+    MobileAuthErrorCode.INVALID_INPUT,
+    MobileAuthErrorCode.UNAUTHENTICATED -> "E-mail ou senha inválidos."
+    MobileAuthErrorCode.RATE_LIMITED -> "Muitas tentativas. Aguarde antes de tentar novamente."
+    MobileAuthErrorCode.NETWORK -> "Não foi possível conectar. Verifique sua internet."
+    MobileAuthErrorCode.SERVER -> "O serviço está indisponível. Tente novamente."
     else -> "Não foi possível entrar. Tente novamente."
 }
 
@@ -379,253 +399,230 @@ private fun AuthStatusBanner(message: String, loading: Boolean, error: Boolean =
 }
 
 @Composable
-private fun SignUpScreen(onDone: (String, String, String, (Boolean) -> Unit) -> Unit, onLogin: () -> Unit) = AuthFrame("Crie sua conta", "Preencha os dados abaixo") {
-    var name by rememberSaveable { mutableStateOf("") }; var email by rememberSaveable { mutableStateOf("") }
-    var pass by remember { mutableStateOf("") }; var confirm by remember { mutableStateOf("") }; var accepted by rememberSaveable { mutableStateOf(false) }
-    var emailExists by rememberSaveable { mutableStateOf(false) }; var submitting by rememberSaveable { mutableStateOf(false) }
-    LensField("Nome completo", name, { name = it }); Spacer(Modifier.height(11.dp))
-    LensField("E-mail", email, { email = it }, KeyboardType.Email); Spacer(Modifier.height(11.dp))
-    LensField("Senha", pass, { pass = it }, password = true); Spacer(Modifier.height(11.dp))
-    LensField("Confirmar senha", confirm, { confirm = it }, password = true)
-    Row(Modifier.fillMaxWidth().clickable { accepted = !accepted }.padding(vertical = 14.dp), verticalAlignment = Alignment.Top) {
-        Checkbox(accepted, { accepted = it }, colors = CheckboxDefaults.colors(checkedColor = Ink, checkmarkColor = Paper))
-        Text("Eu aceito os Termos de Uso\ne a Política de Privacidade", color = Ink, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 11.dp))
+private fun SignUpScreen(onDone: (String, String, String, (Boolean) -> Unit) -> Unit, onLogin: () -> Unit) {
+    var name by rememberSaveable { mutableStateOf("") }
+    var email by rememberSaveable { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var busy by rememberSaveable { mutableStateOf(false) }
+    AuthFrame("Criar conta de cliente", "Preencha seus dados para começar") {
+        LensField("Nome completo", name, { name = it })
+        Spacer(Modifier.height(12.dp))
+        LensField("E-mail", email, { email = it }, KeyboardType.Email)
+        Spacer(Modifier.height(12.dp))
+        LensField("Senha (mínimo 8 caracteres)", password, { password = it }, password = true)
+        Spacer(Modifier.height(24.dp))
+        PrimaryButton("Criar minha conta", {
+            busy = true
+            onDone(name, email, password) { busy = false }
+        }, enabled = name.isNotBlank() && email.isNotBlank() && password.length >= 8 && !busy)
+        Spacer(Modifier.height(12.dp))
+        CenterLink("Já tem conta?", "Entrar", onLogin)
     }
-    if (emailExists) Text("O cadastro remoto será disponibilizado em uma próxima etapa.", color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
-    PrimaryButton("Cadastrar", {
-        submitting = true
-        emailExists = false
-        onDone(name, email, pass) { success -> submitting = false; emailExists = !success }
-    }, enabled = accepted && pass == confirm && name.isNotBlank() && email.isNotBlank() && pass.isNotBlank() && !submitting)
-    Spacer(Modifier.height(12.dp)); CenterLink("Já tem uma conta?", "Entrar", onLogin)
 }
 
 @Composable
 private fun PhotographerSignUpScreen(
     onDone: (String, String, String, String, String, String, String, (Boolean) -> Unit) -> Unit,
     onLogin: () -> Unit
-) = AuthFrame("Cadastre-se como fotógrafo", "Crie seu perfil profissional") {
+) {
     var name by rememberSaveable { mutableStateOf("") }
     var email by rememberSaveable { mutableStateOf("") }
-    var pass by remember { mutableStateOf("") }
-    var confirm by remember { mutableStateOf("") }
-    var specialty by rememberSaveable { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var specialty by rememberSaveable { mutableStateOf("Casamento") }
     var city by rememberSaveable { mutableStateOf("") }
     var price by rememberSaveable { mutableStateOf("") }
     var bio by rememberSaveable { mutableStateOf("") }
-    var accepted by rememberSaveable { mutableStateOf(false) }
-    var emailExists by rememberSaveable { mutableStateOf(false) }
-    var submitting by rememberSaveable { mutableStateOf(false) }
-
-    LensField("Nome completo", name, { name = it }); Spacer(Modifier.height(11.dp))
-    LensField("E-mail", email, { email = it }, KeyboardType.Email); Spacer(Modifier.height(11.dp))
-    LensField("Senha", pass, { pass = it }, password = true); Spacer(Modifier.height(11.dp))
-    LensField("Confirmar senha", confirm, { confirm = it }, password = true); Spacer(Modifier.height(11.dp))
-    LensField("Especialidade (ex.: Casamentos)", specialty, { specialty = it }); Spacer(Modifier.height(11.dp))
-    LensField("Cidade e estado", city, { city = it }); Spacer(Modifier.height(11.dp))
-    LensField("Preço inicial (ex.: R$ 800)", price, { price = it }); Spacer(Modifier.height(11.dp))
-    LensField("Sobre seu trabalho", bio, { bio = it }, singleLine = false, minLines = 3)
-    Row(Modifier.fillMaxWidth().clickable { accepted = !accepted }.padding(vertical = 14.dp), verticalAlignment = Alignment.Top) {
-        Checkbox(accepted, { accepted = it }, colors = CheckboxDefaults.colors(checkedColor = Ink, checkmarkColor = Paper))
-        Text("Eu aceito os Termos de Uso\ne a Política de Privacidade", color = Ink, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 11.dp))
-    }
-    if (pass != confirm && confirm.isNotBlank()) Text("As senhas não coincidem.", color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
-    if (emailExists) Text("O cadastro remoto será disponibilizado em uma próxima etapa.", color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
-    PrimaryButton("Cadastrar fotógrafo", {
-        submitting = true
-        emailExists = false
-        onDone(name, email, pass, specialty, city, price, bio) { success ->
-            submitting = false
-            emailExists = !success
-        }
-    }, enabled = accepted && pass == confirm && pass.isNotBlank() && name.isNotBlank() && email.isNotBlank() && specialty.isNotBlank() && city.isNotBlank() && price.isNotBlank() && !submitting)
-    Spacer(Modifier.height(12.dp))
-    CenterLink("Já tem uma conta?", "Entrar", onLogin)
-}
-
-@Composable
-private fun LensField(label: String, value: String, onChange: (String) -> Unit, keyboard: KeyboardType = KeyboardType.Text, password: Boolean = false, singleLine: Boolean = true, minLines: Int = 1) {
-    OutlinedTextField(value, onChange, modifier = Modifier.fillMaxWidth().semantics { contentDescription = label }, label = { Text(label, fontSize = 12.sp) }, singleLine = singleLine, minLines = minLines,
-        visualTransformation = if (password) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
-        keyboardOptions = KeyboardOptions(keyboardType = keyboard), shape = RoundedCornerShape(10.dp),
-        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Ink, unfocusedTextColor = Ink, focusedBorderColor = Ink, unfocusedBorderColor = Line, focusedContainerColor = SurfaceHigh, unfocusedContainerColor = SurfaceHigh, focusedLabelColor = Ink, unfocusedLabelColor = Muted, cursorColor = Ink))
-}
-
-@Composable private fun PrimaryButton(text: String, onClick: () -> Unit, enabled: Boolean = true) = Button(onClick, enabled = enabled, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp).shadow(if (enabled) 7.dp else 0.dp, RoundedCornerShape(18.dp)).semantics { role = Role.Button }, shape = RoundedCornerShape(18.dp), colors = ButtonDefaults.buttonColors(containerColor = Ink, contentColor = Color.White, disabledContainerColor = Line, disabledContentColor = Muted)) { Text(text, fontWeight = FontWeight.SemiBold) }
-
-@Composable
-private fun LogoutButton(onClick: () -> Unit, enabled: Boolean = true) = Button(
-    onClick = onClick,
-    enabled = enabled,
-    modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp).shadow(4.dp, RoundedCornerShape(17.dp)).semantics { role = Role.Button },
-    shape = RoundedCornerShape(17.dp),
-    colors = ButtonDefaults.buttonColors(containerColor = Ink, contentColor = Color.White)
-) {
-    if (enabled) {
-        Text("Sair da conta", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-    } else {
-        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
-        Spacer(Modifier.width(10.dp))
-        Text("Saindo...", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-    }
-}
-
-@Composable private fun CenterLink(prefix: String, action: String, click: () -> Unit) = Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) { Text(prefix, color = Muted, fontSize = 12.sp); TextButton(click, contentPadding = PaddingValues(5.dp)) { Text(action, color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Bold) } }
-
-@Composable
-private fun ActionDialog(title: String, message: String, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title, color = Ink, fontWeight = FontWeight.SemiBold) },
-        text = { Text(message, color = Muted) },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Entendi", color = Ink, fontWeight = FontWeight.Bold) } },
-        containerColor = SurfaceHigh,
-        shape = RoundedCornerShape(22.dp)
-    )
-}
-
-@Composable
-private fun AppPage(active: Screen, onNavigate: (Screen) -> Unit, guest: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            BrandMark()
-        }
-        Column(Modifier.weight(1f).fillMaxWidth()) { content() }
-        if (guest) {
-            TextButton(onClick = { onNavigate(Screen.Login) }, modifier = Modifier.fillMaxWidth()) {
-                Text("Entrar para usar sua conta", color = Ink)
-            }
-        } else BottomNav(active, onNavigate)
+    var busy by rememberSaveable { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Spacer(Modifier.height(8.dp))
+        BrandMark()
+        Spacer(Modifier.height(20.dp))
+        Text("Criar conta de Fotógrafo", color = Ink, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Text("Cadastre seu perfil profissional no LensClick", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+        Spacer(Modifier.height(20.dp))
+        LensField("Nome profissional", name, { name = it })
+        Spacer(Modifier.height(10.dp))
+        LensField("E-mail", email, { email = it }, KeyboardType.Email)
+        Spacer(Modifier.height(10.dp))
+        LensField("Senha (mín. 8 caracteres)", password, { password = it }, password = true)
+        Spacer(Modifier.height(10.dp))
+        LensField("Especialidade principal", specialty, { specialty = it })
+        Spacer(Modifier.height(10.dp))
+        LensField("Cidade de atuação", city, { city = it })
+        Spacer(Modifier.height(10.dp))
+        LensField("Preço inicial (R$)", price, { price = it }, KeyboardType.Number)
+        Spacer(Modifier.height(10.dp))
+        LensField("Apresentação / Bio", bio, { bio = it }, maxLines = 3)
+        Spacer(Modifier.height(22.dp))
+        PrimaryButton("Cadastrar como Fotógrafo", {
+            busy = true
+            onDone(name, email, password, specialty, city, price, bio) { busy = false }
+        }, enabled = name.isNotBlank() && email.isNotBlank() && password.length >= 8 && city.isNotBlank() && !busy)
+        Spacer(Modifier.height(12.dp))
+        CenterLink("Já tem conta?", "Entrar", onLogin)
     }
 }
 
 @Composable
-private fun BottomNav(active: Screen, onNavigate: (Screen) -> Unit) {
-    val items = listOf(Triple("⌂", "Início", Screen.Home), Triple("⌕", "Buscar", Screen.Search), Triple("▣", "Orçamentos", Screen.Budgets), Triple("◉", "Conversas", Screen.Conversations), Triple("♙", "Perfil", Screen.Account))
-    Box(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
-        Row(
-            Modifier.fillMaxWidth()
-                .shadow(18.dp, RoundedCornerShape(29.dp))
-                .clip(RoundedCornerShape(29.dp))
-                .background(Ink)
-                .border(1.dp, Color.White.copy(.10f), RoundedCornerShape(29.dp))
-                .padding(horizontal = 7.dp, vertical = 7.dp),
-            horizontalArrangement = Arrangement.SpaceAround
-        ) {
-            items.forEach { (icon, label, destination) ->
-                val selected = destination == active
-                Column(
-                    Modifier.weight(1f)
-                        .padding(horizontal = 2.dp)
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(if (selected) SurfaceHigh else Color.Transparent)
-                        .clickable { onNavigate(destination) }
-                        .heightIn(min = 48.dp)
-                        .padding(vertical = 7.dp)
-                        .semantics {
-                            contentDescription = label
-                            role = Role.Button
-                            stateDescription = if (selected) "Selecionado" else "Não selecionado"
-                        },
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(icon, color = if (selected) Ink else Paper.copy(.82f), fontSize = 19.sp, lineHeight = 20.sp)
-                    Text(label, color = if (selected) Ink else Paper.copy(.62f), fontSize = 9.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1)
-                }
+private fun LensField(label: String, value: String, onValue: (String) -> Unit, type: KeyboardType = KeyboardType.Text, password: Boolean = false, singleLine: Boolean = true, maxLines: Int = 1) {
+    Column(Modifier.fillMaxWidth()) {
+        Text(label, color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(bottom = 5.dp))
+        OutlinedTextField(value = value, onValueChange = onValue, modifier = Modifier.fillMaxWidth(), singleLine = singleLine, maxLines = maxLines, keyboardOptions = KeyboardOptions(keyboardType = type), visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None, shape = RoundedCornerShape(14.dp), colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Ink, unfocusedTextColor = Ink, focusedContainerColor = SurfaceHigh, unfocusedContainerColor = SurfaceHigh, focusedBorderColor = Ink, unfocusedBorderColor = Line, cursorColor = Ink))
+    }
+}
+
+@Composable
+private fun PrimaryButton(text: String, onClick: () -> Unit, enabled: Boolean = true) {
+    Button(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(Ink, Color.White)) { Text(text, color = Color.White, fontWeight = FontWeight.SemiBold) }
+}
+
+@Composable
+private fun LogoutButton(onLogout: () -> Unit, enabled: Boolean = true) {
+    OutlinedButton(
+        onClick = onLogout,
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth().height(50.dp),
+        shape = RoundedCornerShape(16.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+    ) {
+        Text("Sair da conta", fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable private fun CenterLink(prefix: String, action: String, onClick: () -> Unit) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) { Text("$prefix ", color = Muted, fontSize = 12.sp); Text(action, color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable(onClick = onClick)) } }
+
+@Composable private fun ActionDialog(title: String, message: String, onDismiss: () -> Unit) {
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(title, color = Ink, fontWeight = FontWeight.Bold) }, text = { Text(message, color = Muted, fontSize = 13.sp) }, confirmButton = { TextButton(onClick = onDismiss) { Text("OK", color = Ink, fontWeight = FontWeight.Bold) } }, containerColor = SurfaceHigh)
+}
+
+@Composable private fun AppPage(current: Screen, onNavigate: (Screen) -> Unit, isPhotographerMode: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().background(Paper)) {
+        Box(Modifier.weight(1f).fillMaxWidth()) { Column(Modifier.fillMaxSize()) { content() } }
+        if (isPhotographerMode) PhotographerBottomNav(current, onNavigate) else BottomNav(current, onNavigate)
+    }
+}
+
+@Composable private fun BottomNav(current: Screen, onNavigate: (Screen) -> Unit) {
+    Row(Modifier.fillMaxWidth().height(64.dp).background(SurfaceHigh).border(1.dp, Line), horizontalArrangement = Arrangement.SpaceAround, verticalAlignment = Alignment.CenterVertically) {
+        val items = listOf(Screen.Home to "Início", Screen.Search to "Buscar", Screen.Budgets to "Orçamentos", Screen.Conversations to "Mensagens", Screen.Account to "Perfil")
+        items.forEach { (screen, label) ->
+            val sel = current == screen
+            Column(
+                modifier = Modifier
+                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                    .clip(CircleShape)
+                    .clickable { onNavigate(screen) }
+                    .semantics {
+                        contentDescription = label
+                        role = Role.Button
+                    }
+                    .padding(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(label, color = if (sel) Ink else Muted, fontSize = 11.sp, fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal)
             }
         }
     }
 }
 
-@Composable
-private fun HomeScreen(photographers: List<Photographer>, onNavigate: (Screen) -> Unit) = AppPage(Screen.Home, onNavigate) {
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(40.dp).clip(CircleShape).background(SurfaceHigh).border(1.dp, Line, CircleShape), contentAlignment = Alignment.Center) { Text("♧", color = Ink, fontSize = 20.sp) } } }
-        item { Text("⌖ São Paulo, SP  ⌄", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Medium) }
-        item { Text("Encontre o fotógrafo\nperfeito para seu momento", color = Ink, fontSize = 28.sp, fontWeight = FontWeight.SemiBold, lineHeight = 33.sp, letterSpacing = (-0.5).sp) }
-        item { SearchBar(onClick = { onNavigate(Screen.Search) }) }
-        item { SectionTitle("Categorias") { onNavigate(Screen.Search) } }
-        item { CategoryRow() }
-        item { SectionTitle("Em destaque") { onNavigate(Screen.Search) } }
-        item { PhotographerCards(photographers, onOpen = { onNavigate(Screen.Search) }) }
-        item { SectionTitle("Portfólios em alta") { onNavigate(Screen.Search) } }
-        item { PortfolioStrip() }
+@Composable private fun HomeScreen(photographers: List<Photographer>, onNavigate: (Screen) -> Unit) = AppPage(Screen.Home, onNavigate) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { BrandMark(); Text("Campinas, SP", color = Muted, fontSize = 11.sp) }
+        Spacer(Modifier.height(20.dp))
+        Text("Encontre o fotógrafo perfeito", color = Ink, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(14.dp))
+        SearchBar { onNavigate(Screen.Search) }
+        Spacer(Modifier.height(22.dp))
+        SectionTitle("Categorias") { onNavigate(Screen.Search) }
+        Spacer(Modifier.height(10.dp))
+        CategoryRow()
+        Spacer(Modifier.height(22.dp))
+        SectionTitle("Destaques da semana")
+        Spacer(Modifier.height(10.dp))
+        PhotographerCards(photographers) { onNavigate(Screen.Search) }
     }
 }
 
-@Composable private fun SearchBar(onClick: () -> Unit) = Row(Modifier.fillMaxWidth().height(52.dp).shadow(4.dp, RoundedCornerShape(17.dp)).clip(RoundedCornerShape(17.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(17.dp)).clickable(onClick = onClick).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) { Text("⌕", color = Ink, fontSize = 20.sp); Spacer(Modifier.width(10.dp)); Text("Buscar fotógrafos, estilos...", color = Muted, fontSize = 12.sp); Spacer(Modifier.weight(1f)); Text("☷", color = Ink) }
+@Composable private fun SearchBar(onClick: () -> Unit) { Row(Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(16.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(16.dp)).clickable(onClick = onClick).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) { Text("⌕", color = Ink, fontSize = 20.sp); Spacer(Modifier.width(10.dp)); Text("Buscar por cidade ou especialidade...", color = Muted, fontSize = 12.sp) } }
 
-@Composable private fun SectionTitle(title: String, onSeeAll: (() -> Unit)? = null) = Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(title, color = Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold); if (onSeeAll != null) Text("Ver todas  ›", color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Medium, modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable(onClick = onSeeAll).padding(6.dp)) }
+@Composable private fun SectionTitle(title: String, onMore: (() -> Unit)? = null) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(title, color = Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold); if (onMore != null) Text("Ver todos ›", color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Medium, modifier = Modifier.clickable(onClick = onMore)) } }
 
 @Composable private fun CategoryRow() {
-    val cats = listOf("♧\nCasamento", "♙\nEnsaio", "♧\nEventos", "♡\nInfantil", "▣\nCorporativo")
-    var selected by rememberSaveable { mutableStateOf(0) }
-    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        cats.forEachIndexed { index, category ->
-            val active = index == selected
-            Text(category, color = if (active) Color.White else Ink, fontSize = 10.sp, lineHeight = 24.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal, modifier = Modifier.width(72.dp).clip(RoundedCornerShape(18.dp)).background(if (active) Ink else SurfaceHigh).border(1.dp, if (active) Ink else Line, RoundedCornerShape(18.dp)).clickable { selected = index }.padding(vertical = 12.dp, horizontal = 8.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+    val cats = listOf("Casamento", "Retrato", "Corporativo", "Eventos", "Ensaio")
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { cats.forEach { FilterChip(it) } }
+}
+
+@Composable private fun PhotographerCards(photographers: List<Photographer>, onClick: () -> Unit) {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        items(photographers) { p ->
+            Column(Modifier.width(200.dp).clip(RoundedCornerShape(18.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(18.dp)).clickable(onClick = onClick).padding(12.dp)) {
+                Photo(Modifier.fillMaxWidth().height(130.dp), photographerImage(p))
+                Spacer(Modifier.height(10.dp))
+                Text(p.name, color = Ink, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text(p.specialty, color = Muted, fontSize = 11.sp)
+                Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) { Text(p.price, color = Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold); Text("★ 4.9", color = Gold, fontSize = 12.sp) }
+            }
         }
     }
 }
 
-@Composable private fun PhotographerCards(photographers: List<Photographer>, onOpen: () -> Unit) { LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) { items(photographers.take(3), key = { it.id }) { p -> Column(Modifier.width(148.dp).shadow(5.dp, RoundedCornerShape(18.dp)).clip(RoundedCornerShape(18.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(18.dp)).clickable(onClick = onOpen).padding(bottom = 12.dp)) { Photo(Modifier.fillMaxWidth().height(126.dp), photographerImage(p)); Text(p.name, color = Ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(11.dp, 9.dp, 11.dp, 0.dp)); Text(p.specialty, color = Muted, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 11.dp)); Text("★ 5,0", color = Gold, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp)) } } } }
-
-private fun photographerImage(photographer: Photographer): Int = when {
-    photographer.name == "Mariana Lopes" -> R.drawable.card_wedding
-    photographer.name == "Lucas Almeida" -> R.drawable.card_portrait_outdoor
-    photographer.name == "Carlos Nobre" -> R.drawable.card_event
-    photographer.name == "Juliana Reis" -> R.drawable.card_portrait_studio
-    photographer.specialty.contains("casamento", ignoreCase = true) -> R.drawable.card_wedding
-    photographer.specialty.contains("corporativo", ignoreCase = true) -> R.drawable.card_corporate
-    photographer.specialty.contains("evento", ignoreCase = true) -> R.drawable.card_event
+private fun photographerImage(p: Photographer): Int = when (p.initials) {
+    "LA" -> R.drawable.card_portrait_outdoor
+    "MF" -> R.drawable.card_portrait_studio
+    "RC" -> R.drawable.card_portrait_studio
     else -> R.drawable.card_portrait_outdoor
 }
 
-@Composable private fun Photo(modifier: Modifier = Modifier, imageRes: Int = R.drawable.lens_mountains) = Image(painterResource(imageRes), null, modifier.clip(RoundedCornerShape(10.dp)), contentScale = ContentScale.Crop)
-@Composable private fun PortfolioStrip() = Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-    listOf(R.drawable.card_wedding, R.drawable.card_portrait_outdoor, R.drawable.card_event).forEach { image -> Photo(Modifier.weight(1f).height(78.dp), image) }
+@Composable private fun Photo(modifier: Modifier, resId: Int = R.drawable.card_portrait_outdoor) {
+    Icon(painter = painterResource(resId), contentDescription = null, modifier = modifier.clip(RoundedCornerShape(12.dp)), tint = Color.Unspecified)
+}
+
+@Composable private fun PortfolioStrip() {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        repeat(3) { Photo(Modifier.weight(1f).height(80.dp), R.drawable.card_portrait_outdoor) }
+    }
 }
 
 @Composable
-private fun SearchScreen(viewModel: LensClickViewModel, guest: Boolean, onNavigate: (Screen) -> Unit, onPhotographer: (String) -> Unit) = AppPage(Screen.Search, onNavigate, guest) {
-    var city by rememberSaveable { mutableStateOf("") }
-    var selectedFilter by rememberSaveable { mutableStateOf(0) }
-    var page by rememberSaveable { mutableIntStateOf(1) }
-    var retry by rememberSaveable { mutableIntStateOf(0) }
-    val state by viewModel.publicSearch.collectAsStateWithLifecycle()
-    val filters = listOf("Todos" to null, "Casamento" to "wedding", "Retratos" to "portrait", "Eventos" to "events", "Corporativo" to "corporate")
-    LaunchedEffect(city, selectedFilter, page, retry) {
-        delay(300)
-        viewModel.searchPublicPhotographers(city, filters[selectedFilter].second, page)
+private fun SearchScreen(viewModel: LensClickViewModel, guest: Boolean, onNavigate: (Screen) -> Unit, onPhotographer: (String) -> Unit) = AppPage(Screen.Search, onNavigate) {
+    var query by rememberSaveable { mutableStateOf("São Paulo") }
+    var selectedSpecialty by rememberSaveable { mutableStateOf<String?>(null) }
+    val searchState by viewModel.publicSearch.collectAsStateWithLifecycle()
+    val specialties = listOf("Todos", "Casamento", "Retrato", "Corporativo", "Eventos")
+
+    LaunchedEffect(query, selectedSpecialty) {
+        viewModel.searchPublicPhotographers(query, selectedSpecialty.takeIf { it != "Todos" }, 1)
     }
-    Column(Modifier.fillMaxSize().padding(top = 8.dp)) {
-        Text("Descobrir", color = Ink, fontSize = 27.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(20.dp, 8.dp))
-        OutlinedTextField(city, { city = it; page = 1 }, Modifier.fillMaxWidth().padding(horizontal = 20.dp), placeholder = { Text("Filtrar por cidade", color = Muted, fontSize = 12.sp) }, leadingIcon = { Text("⌕", color = Ink, fontSize = 20.sp) }, singleLine = true, shape = RoundedCornerShape(17.dp), colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Ink, unfocusedTextColor = Ink, focusedContainerColor = SurfaceHigh, unfocusedContainerColor = SurfaceHigh, focusedBorderColor = Ink, unfocusedBorderColor = Line, cursorColor = Ink))
-        Row(Modifier.padding(20.dp, 12.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            filters.forEachIndexed { index, filter -> FilterChip(filter.first, selectedFilter == index) { selectedFilter = index; page = 1 } }
+
+    Column(Modifier.padding(top = 12.dp)) {
+        Text("Buscar Fotógrafos", color = Ink, fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(20.dp, 8.dp))
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+            placeholder = { Text("Digite a cidade (ex: São Paulo)", color = Muted, fontSize = 12.sp) },
+            singleLine = true,
+            shape = RoundedCornerShape(16.dp),
+            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Ink, unfocusedTextColor = Ink, focusedContainerColor = SurfaceHigh, unfocusedContainerColor = SurfaceHigh, focusedBorderColor = Ink, unfocusedBorderColor = Line)
+        )
+        Spacer(Modifier.height(10.dp))
+        Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            specialties.forEach { s ->
+                val selected = (selectedSpecialty ?: "Todos") == s
+                FilterChip(s, selected) { selectedSpecialty = if (s == "Todos") null else s }
+            }
         }
-        when (val result = state) {
+        Spacer(Modifier.height(14.dp))
+        when (val state = searchState) {
             PublicSearchState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Ink) }
-            PublicSearchState.Error -> Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                Text("Não foi possível carregar os fotógrafos.", color = Ink)
-                TextButton(onClick = { retry++ }) { Text("Tentar novamente", color = Ink) }
-            }
-            is PublicSearchState.Empty -> {
-                Text("0 profissionais", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp))
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Nenhum fotógrafo publicado encontrado. Tente outra cidade ou especialidade.", color = Muted, modifier = Modifier.padding(24.dp))
-                }
-            }
+            PublicSearchState.Error -> ProfileStatus("Erro ao conectar à busca remota.", "Tentar novamente") { viewModel.searchPublicPhotographers(query, selectedSpecialty, 1) }
+            is PublicSearchState.Empty -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Nenhum fotógrafo encontrado.", color = Muted, fontSize = 13.sp) }
             is PublicSearchState.Ready -> {
-                Text("${result.page.total} ${if (result.page.total == 1) "profissional" else "profissionais"}", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp))
-                LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 20.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (result.page.photographers.isEmpty()) item { Text("Nenhum fotógrafo publicado encontrado. Tente outra cidade ou especialidade.", color = Muted, modifier = Modifier.padding(vertical = 40.dp)) }
-                    items(result.page.photographers, key = { it.slug }) { photographer -> PublicPhotographerRow(photographer, onClick = { onPhotographer(photographer.slug) }) }
-                }
-                if (result.page.totalPages > 1) Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = { page-- }, enabled = page > 1) { Text("Anterior") }
-                    Text("${result.page.page} / ${result.page.totalPages}", color = Muted, fontSize = 12.sp)
-                    TextButton(onClick = { page++ }, enabled = page < result.page.totalPages) { Text("Próxima") }
+                LazyColumn(contentPadding = PaddingValues(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    items(state.page.photographers, key = { it.slug }) { p ->
+                        PublicPhotographerRow(p) { onPhotographer(p.slug) }
+                    }
                 }
             }
         }
@@ -633,51 +630,73 @@ private fun SearchScreen(viewModel: LensClickViewModel, guest: Boolean, onNaviga
 }
 
 @Composable
-private fun PublicPhotographerRow(photographer: PublicPhotographer, onClick: () -> Unit) {
-    val location = listOf(photographer.city, photographer.state).filter { it.isNotBlank() }.joinToString(", ")
-    val price = photographer.startingPriceCents?.let {
-        NumberFormat.getCurrencyInstance(Locale.forLanguageTag("pt-BR")).format(it / 100.0)
-    }
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(16.dp)).clickable(onClick = onClick).padding(14.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Avatar(initialsForDisplay(photographer.name), Modifier.size(52.dp))
-            Spacer(Modifier.width(12.dp))
-            Column {
-                Text(photographer.name, color = Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                if (location.isNotBlank()) Text(location, color = Muted, fontSize = 11.sp)
-                Text(photographer.specialties.joinToString(" · ") { specialtyLabel(it) }, color = Muted, fontSize = 11.sp)
-            }
+private fun PublicPhotographerRow(p: PublicPhotographer, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(SurfaceHigh)
+            .border(1.dp, Line, RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Avatar(initialsForDisplay(p.name), Modifier.size(54.dp))
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(p.name, color = Ink, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text(p.specialties.joinToString(" · ") { specialtyLabel(it) }, color = Muted, fontSize = 11.sp)
+            Text("⌖ ${listOf(p.city, p.state).filter { it.isNotBlank() }.joinToString(", ")}", color = Muted, fontSize = 10.sp)
         }
-        if (price != null || photographer.ratingAverage != null) {
-            Spacer(Modifier.height(9.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                if (price != null) Text("A partir de $price", color = Ink, fontSize = 11.sp)
-                if (photographer.ratingAverage != null) Text("★ ${photographer.ratingAverage} (${photographer.reviewCount})", color = Gold, fontSize = 11.sp)
-            }
+        p.startingPriceCents?.let { cents ->
+            Text("R$ ${cents / 100}", color = Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }
 
-private fun specialtyLabel(value: String): String = when (value) {
-    "wedding" -> "Casamento"; "events" -> "Eventos"; "portrait" -> "Retratos"
-    "family" -> "Família"; "corporate" -> "Corporativo"; "product" -> "Produto"
-    "fashion" -> "Moda"; "newborn" -> "Recém-nascidos"; "nature" -> "Natureza"
-    "real-estate" -> "Imóveis"; else -> value
+private fun specialtyLabel(code: String): String = when (code.lowercase()) {
+    "wedding", "casamento" -> "Casamento"
+    "portrait", "retrato" -> "Retrato"
+    "corporate", "corporativo" -> "Corporativo"
+    "events", "eventos" -> "Eventos"
+    else -> code.replaceFirstChar { it.uppercase() }
 }
 
-@Composable private fun FilterChip(text: String, selected: Boolean = false, onClick: (() -> Unit)? = null) {
-    val interaction = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
-    Box(Modifier.clip(RoundedCornerShape(14.dp)).background(if (selected) Ink else SurfaceHigh).border(1.dp, if (selected) Ink else Line, RoundedCornerShape(14.dp)).then(interaction).padding(horizontal = 14.dp, vertical = 10.dp)) { Text(text, color = if (selected) Color.White else Ink, fontSize = 10.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal) }
+@Composable
+private fun FilterChip(label: String, selected: Boolean = false, onClick: (() -> Unit)? = null) {
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(if (selected) Ink else SurfaceHigh)
+            .border(1.dp, if (selected) Ink else Line, RoundedCornerShape(20.dp))
+            .clickable(enabled = onClick != null) { onClick?.invoke() }
+            .padding(horizontal = 14.dp, vertical = 7.dp)
+    ) {
+        Text(label, color = if (selected) Color.White else Ink, fontSize = 11.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+    }
 }
 
-@Composable private fun Avatar(initials: String, modifier: Modifier = Modifier) = Box(modifier.clip(CircleShape).background(Brush.linearGradient(listOf(Color(0xFF6E5948), SurfaceHigh))).border(1.dp, Ink.copy(.5f), CircleShape), contentAlignment = Alignment.Center) { Text(initials, color = Paper, fontSize = 15.sp, fontWeight = FontWeight.Bold) }
+@Composable private fun Avatar(initials: String, modifier: Modifier = Modifier) {
+    Box(modifier = modifier.clip(CircleShape).background(Ink), contentAlignment = Alignment.Center) {
+        Text(initials, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+    }
+}
 
 @Composable
 private fun PhotographerScreen(viewModel: LensClickViewModel, slug: String, onBack: () -> Unit, onQuote: () -> Unit) {
     val favorites by viewModel.favorites.collectAsStateWithLifecycle()
     val favorite = favorites.any { it.slug == slug }
     val state by viewModel.publicProfile.collectAsStateWithLifecycle()
-    LaunchedEffect(slug) { viewModel.loadPublicPhotographer(slug) }
+    val publicReviews by viewModel.publicReviews.collectAsStateWithLifecycle()
+    var reviewDialogOpen by rememberSaveable { mutableStateOf(false) }
+    var reviewRating by rememberSaveable { mutableIntStateOf(5) }
+    var reviewComment by rememberSaveable { mutableStateOf("") }
+
+    LaunchedEffect(slug) {
+        viewModel.loadPublicPhotographer(slug)
+        viewModel.loadReviews(slug)
+    }
+
     when (val result = state) {
         PublicProfileState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Ink) }
         PublicProfileState.Error -> ProfileStatus("Não foi possível carregar este perfil.", "Tentar novamente") { viewModel.loadPublicPhotographer(slug) }
@@ -685,27 +704,86 @@ private fun PhotographerScreen(viewModel: LensClickViewModel, slug: String, onBa
         is PublicProfileState.Ready -> {
             val profile = result.profile
             Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
-        Box(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-            Column {
-                Box {
-                    Photo(Modifier.fillMaxWidth().height(240.dp), R.drawable.card_portrait_outdoor)
-                    Box(Modifier.padding(16.dp).size(42.dp).clip(CircleShape).background(Color.Black.copy(.58f)).clickable(onClick = onBack), contentAlignment = Alignment.Center) { Text("‹", color = Color.White, fontSize = 34.sp) }
-                    Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.TopEnd) { CompactLogo(42) }
+                Box(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                    Column {
+                        Box {
+                            Photo(Modifier.fillMaxWidth().height(240.dp), R.drawable.card_portrait_outdoor)
+                            Box(Modifier.padding(16.dp).size(42.dp).clip(CircleShape).background(Color.Black.copy(.58f)).clickable(onClick = onBack), contentAlignment = Alignment.Center) { Text("‹", color = Color.White, fontSize = 34.sp) }
+                            Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.TopEnd) { CompactLogo(42) }
+                        }
+                        Column(Modifier.padding(20.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) { Avatar(initialsForDisplay(profile.profile.name), Modifier.size(92.dp)); Spacer(Modifier.width(14.dp)); Column { Text(profile.profile.name, color = Ink, fontSize = 23.sp, fontWeight = FontWeight.SemiBold); Text(profile.profile.specialties.joinToString(" · ") { specialtyLabel(it) }, color = Muted, fontSize = 12.sp) } }
+                            Spacer(Modifier.height(14.dp)); Text("⌖ ${listOf(profile.profile.city, profile.profile.state).filter { it.isNotBlank() }.joinToString(", ")}", color = Muted, fontSize = 11.sp); profile.profile.ratingAverage?.let { Text("★ $it (${profile.profile.reviewCount} avaliações)", color = Gold, fontSize = 12.sp, modifier = Modifier.padding(vertical = 10.dp)) }
+                            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) { profile.profile.specialties.forEach { FilterChip(specialtyLabel(it)) } }
+                            Spacer(Modifier.height(22.dp)); Text("Sobre mim", color = Ink, fontWeight = FontWeight.SemiBold); Text(profile.bio.ifBlank { "Este fotógrafo ainda não adicionou uma apresentação." }, color = Muted, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 8.dp))
+                            SectionTitle("Portfólio"); Spacer(Modifier.height(10.dp))
+                            if (profile.portfolio.isEmpty()) Text("Este fotógrafo ainda não publicou imagens.", color = Muted, fontSize = 12.sp)
+                            else LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(profile.portfolio, key = { it.id }) { item -> Column(Modifier.width(150.dp)) { Photo(Modifier.fillMaxWidth().height(100.dp)); Text(item.caption.ifBlank { item.altText }, color = Muted, fontSize = 10.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 5.dp)) } } }
+
+                            Spacer(Modifier.height(24.dp))
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text("Avaliações e Opiniões", color = Ink, fontWeight = FontWeight.SemiBold)
+                                TextButton(onClick = { reviewDialogOpen = true }) { Text("Avaliar ★", color = Ink, fontWeight = FontWeight.Bold) }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            val reviewsList = publicReviews?.reviews ?: emptyList()
+                            if (reviewsList.isEmpty()) {
+                                Text("Ainda não há avaliações enviadas para este fotógrafo.", color = Muted, fontSize = 12.sp)
+                            } else {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    reviewsList.forEach { r ->
+                                        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(12.dp)).padding(12.dp)) {
+                                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                                Text(r.authorName, color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                Text("★ ${r.rating}", color = Gold, fontSize = 11.sp)
+                                            }
+                                            if (r.comment.isNotBlank()) {
+                                                Text(r.comment, color = Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
-                Column(Modifier.padding(20.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) { Avatar(initialsForDisplay(profile.profile.name), Modifier.size(92.dp)); Spacer(Modifier.width(14.dp)); Column { Text(profile.profile.name, color = Ink, fontSize = 23.sp, fontWeight = FontWeight.SemiBold); Text(profile.profile.specialties.joinToString(" · ") { specialtyLabel(it) }, color = Muted, fontSize = 12.sp) } }
-                    Spacer(Modifier.height(14.dp)); Text("⌖ ${listOf(profile.profile.city, profile.profile.state).filter { it.isNotBlank() }.joinToString(", ")}", color = Muted, fontSize = 11.sp); profile.profile.ratingAverage?.let { Text("★ $it (${profile.profile.reviewCount} avaliações)", color = Gold, fontSize = 12.sp, modifier = Modifier.padding(vertical = 10.dp)) }
-                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) { profile.profile.specialties.forEach { FilterChip(specialtyLabel(it)) } }
-                    Spacer(Modifier.height(22.dp)); Text("Sobre mim", color = Ink, fontWeight = FontWeight.SemiBold); Text(profile.bio.ifBlank { "Este fotógrafo ainda não adicionou uma apresentação." }, color = Muted, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 8.dp))
-                    SectionTitle("Portfólio"); Spacer(Modifier.height(10.dp))
-                    if (profile.portfolio.isEmpty()) Text("Este fotógrafo ainda não publicou imagens.", color = Muted, fontSize = 12.sp)
-                    else LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(profile.portfolio, key = { it.id }) { item -> Column(Modifier.width(150.dp)) { Photo(Modifier.fillMaxWidth().height(100.dp)); Text(item.caption.ifBlank { item.altText }, color = Muted, fontSize = 10.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 5.dp)) } } }
-                }
+                Row(Modifier.background(SurfaceHigh).padding(20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) { Button(onQuote, Modifier.weight(1f).height(52.dp), shape = RoundedCornerShape(17.dp), colors = ButtonDefaults.buttonColors(Ink, Color.White)) { Text("Solicitar orçamento", fontWeight = FontWeight.SemiBold) }; OutlinedButton({ if (favorite) { favorites.firstOrNull { it.slug == slug }?.let { viewModel.removeFavorite(it.photographerId) {} } } else { viewModel.addFavorite(slug) {} } }, Modifier.size(52.dp), contentPadding = PaddingValues(0.dp), shape = CircleShape, border = androidx.compose.foundation.BorderStroke(1.dp, Ink)) { Text(if (favorite) "♥" else "♡", color = Ink, fontSize = 23.sp) } }
+            }
+
+            if (reviewDialogOpen) {
+                AlertDialog(
+                    onDismissRequest = { reviewDialogOpen = false },
+                    title = { Text("Avaliar Fotógrafo", color = Ink, fontWeight = FontWeight.Bold) },
+                    text = {
+                        Column {
+                            Text("Selecione sua nota de 1 a 5 estrelas:", color = Muted, fontSize = 12.sp)
+                            Row(Modifier.padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                (1..5).forEach { star ->
+                                    Text(
+                                        if (star <= reviewRating) "★" else "☆",
+                                        fontSize = 24.sp,
+                                        color = Gold,
+                                        modifier = Modifier.clickable { reviewRating = star }
+                                    )
+                                }
+                            }
+                            LensField("Comentário", reviewComment, { reviewComment = it }, maxLines = 3)
+                        }
+                    },
+                    confirmButton = {
+                        Button(onClick = {
+                            viewModel.submitReview(slug, reviewRating, reviewComment) {
+                                reviewDialogOpen = false
+                                reviewComment = ""
+                            }
+                        }) { Text("Enviar Avaliação") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { reviewDialogOpen = false }) { Text("Cancelar") }
+                    }
+                )
             }
         }
-        Row(Modifier.background(SurfaceHigh).padding(20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) { Button(onQuote, Modifier.weight(1f).height(52.dp), shape = RoundedCornerShape(17.dp), colors = ButtonDefaults.buttonColors(Ink, Color.White)) { Text("Solicitar orçamento", fontWeight = FontWeight.SemiBold) }; OutlinedButton({ if (favorite) { favorites.firstOrNull { it.slug == slug }?.let { viewModel.removeFavorite(it.photographerId) {} } } else { viewModel.addFavorite(slug) {} } }, Modifier.size(52.dp), contentPadding = PaddingValues(0.dp), shape = CircleShape, border = androidx.compose.foundation.BorderStroke(1.dp, Ink)) { Text(if (favorite) "♥" else "♡", color = Ink, fontSize = 23.sp) } }
-    }
-}
     }
 }
 
@@ -713,80 +791,86 @@ private fun PhotographerScreen(viewModel: LensClickViewModel, slug: String, onBa
 
 @Composable
 private fun QuoteScreen(onBack: () -> Unit, onSent: (String, String, String, String, String, String) -> Unit) {
-    var type by rememberSaveable { mutableStateOf("Casamento") }; var date by rememberSaveable { mutableStateOf("") }; var place by rememberSaveable { mutableStateOf("São Paulo, SP") }; var duration by rememberSaveable { mutableStateOf("8 horas") }; var description by rememberSaveable { mutableStateOf("") }; var details by rememberSaveable { mutableStateOf("") }
+    var type by rememberSaveable { mutableStateOf("Casamento") }
+    var date by rememberSaveable { mutableStateOf("") }
+    var place by rememberSaveable { mutableStateOf("") }
+    var duration by rememberSaveable { mutableStateOf("") }
+    var description by rememberSaveable { mutableStateOf("") }
+    var details by rememberSaveable { mutableStateOf("") }
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(20.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) { Text("‹", color = Ink, fontSize = 36.sp, modifier = Modifier.clickable(onClick = onBack)); Spacer(Modifier.width(8.dp)); Text("Solicitar orçamento", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold); Spacer(Modifier.weight(1f)); CompactLogo(40) }
-        Text("Preencha os dados do seu evento\ne receba propostas personalizadas.", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 14.dp))
-        LensField("Tipo de evento", type, { type = it }); Spacer(Modifier.height(10.dp)); LensField("Data do evento (DD/MM/AAAA)", date, { date = it }); Spacer(Modifier.height(10.dp)); LensField("Local do evento", place, { place = it }); Spacer(Modifier.height(10.dp)); LensField("Duração", duration, { duration = it }); Spacer(Modifier.height(10.dp)); LensField("Descrição do evento", description, { description = it }, singleLine = false, minLines = 3); Spacer(Modifier.height(10.dp)); LensField("Informações adicionais (opcional)", details, { details = it }, singleLine = false, minLines = 3); Spacer(Modifier.height(22.dp)); PrimaryButton("Enviar solicitação", { onSent(type, isoDate(date), place, duration, description, details) }, enabled = type.isNotBlank() && date.isNotBlank() && place.isNotBlank() && description.isNotBlank())
+        Row(verticalAlignment = Alignment.CenterVertically) { Text("‹", color = Ink, fontSize = 34.sp, modifier = Modifier.clickable(onClick = onBack)); Spacer(Modifier.width(10.dp)); Text("Solicitar Orçamento", color = Ink, fontSize = 20.sp, fontWeight = FontWeight.Bold) }
+        Spacer(Modifier.height(16.dp))
+        LensField("Tipo de evento", type, { type = it })
+        Spacer(Modifier.height(10.dp))
+        LensField("Data prevista", date, { date = it }, KeyboardType.Number)
+        Spacer(Modifier.height(10.dp))
+        LensField("Local / Cidade", place, { place = it })
+        Spacer(Modifier.height(10.dp))
+        LensField("Duração estimada", duration, { duration = it })
+        Spacer(Modifier.height(10.dp))
+        LensField("Descrição do evento", description, { description = it }, maxLines = 3)
+        Spacer(Modifier.height(10.dp))
+        LensField("Informações adicionais", details, { details = it }, maxLines = 2)
+        Spacer(Modifier.height(24.dp))
+        PrimaryButton("Enviar solicitação", { onSent(type, date, place, duration, description, details) }, enabled = date.isNotBlank() && place.isNotBlank())
     }
-}
-
-private fun isoDate(display: String): String {
-    val parts = display.trim().split("/")
-    return if (parts.size == 3) "${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}" else display.trim()
 }
 
 @Composable
 private fun BudgetsScreen(viewModel: LensClickViewModel, budgets: List<BudgetRequest>, favorites: List<Favorite>, onNavigate: (Screen) -> Unit) = AppPage(Screen.Budgets, onNavigate) {
-    var selectedTab by rememberSaveable { mutableStateOf(0) }
-    Column(Modifier.padding(20.dp)) {
-        Text("Meus orçamentos", color = Ink, fontSize = 27.sp, fontWeight = FontWeight.SemiBold)
-        Text("Acompanhe cada momento, do pedido à entrega.", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp, bottom = 18.dp))
-        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Line).padding(4.dp)) {
-            listOf("Solicitações", "Propostas", "Favoritos").forEachIndexed { index, label ->
-                val selected = index == selectedTab
-                Box(Modifier.weight(1f).clip(RoundedCornerShape(13.dp)).background(if (selected) Ink else Color.Transparent).clickable { selectedTab = index }.padding(vertical = 11.dp), contentAlignment = Alignment.Center) { Text(label, color = if (selected) Color.White else Muted, fontSize = 10.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal) }
-            }
+    var tab by rememberSaveable { mutableIntStateOf(0) }
+    var proposeItem by remember { mutableStateOf<BudgetRequest?>(null) }
+    Column(Modifier.padding(top = 12.dp)) {
+        Text("Meus Pedidos & Favoritos", color = Ink, fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(20.dp, 8.dp))
+        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            FilterChip("Orçamentos (${budgets.size})", tab == 0) { tab = 0 }
+            FilterChip("Favoritos (${favorites.size})", tab == 1) { tab = 1 }
         }
         Spacer(Modifier.height(14.dp))
-        when (selectedTab) {
-            2 -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (favorites.isEmpty()) item { Text("Nenhum favorito ainda.", color = Muted, modifier = Modifier.padding(vertical = 40.dp)) }
-                items(favorites, key = { it.photographerId }) { fav ->
-                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(16.dp)).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) { Text(fav.name, color = Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold); Text(fav.slug, color = Muted, fontSize = 10.sp) }
-                        TextButton(onClick = { viewModel.removeFavorite(fav.photographerId) {} }) { Text("Remover", color = MaterialTheme.colorScheme.error, fontSize = 11.sp) }
+        if (tab == 0) {
+            if (budgets.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Nenhum pedido de orçamento encontrado.", color = Muted, fontSize = 12.sp) }
+            } else {
+                LazyColumn(contentPadding = PaddingValues(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(budgets, key = { it.id }) { b ->
+                        BudgetCard(b)
                     }
                 }
             }
-            1 -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                val proposed = budgets.filter { it.status == "proposed" }
-                if (proposed.isEmpty()) item { Text("Nenhuma proposta recebida.", color = Muted, modifier = Modifier.padding(vertical = 40.dp)) }
-                items(proposed, key = { it.id }) { req ->
-                    Column {
-                        BudgetCard(req)
-                        req.proposals.filter { it.status == "pending" }.forEach { p ->
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
-                                Button(onClick = { viewModel.decideRequest(req.id, p.id, accept = true) {} }, Modifier.weight(1f), colors = ButtonDefaults.buttonColors(Ink, Color.White)) { Text("Aceitar", fontSize = 12.sp) }
-                                OutlinedButton(onClick = { viewModel.decideRequest(req.id, p.id, accept = false) {} }, Modifier.weight(1f)) { Text("Recusar", color = Ink, fontSize = 12.sp) }
+        } else {
+            if (favorites.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Você ainda não salvou fotógrafos favoritos.", color = Muted, fontSize = 12.sp) }
+            } else {
+                LazyColumn(contentPadding = PaddingValues(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    items(favorites, key = { it.photographerId }) { f ->
+                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(14.dp)).padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Column {
+                                Text(f.name, color = Ink, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                Text(f.slug, color = Muted, fontSize = 11.sp)
                             }
+                            OutlinedButton(onClick = { viewModel.removeFavorite(f.photographerId) {} }) { Text("Remover") }
                         }
                     }
                 }
             }
-            else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (budgets.isEmpty()) item { Text("Nenhum pedido ainda.", color = Muted, modifier = Modifier.padding(vertical = 40.dp)) }
-                items(budgets, key = { it.id }) { BudgetCard(it) }
-            }
         }
     }
 }
 
-@Composable private fun BudgetCard(b: BudgetRequest) {
-    var expanded by rememberSaveable { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth().shadow(2.dp, RoundedCornerShape(16.dp)).clip(RoundedCornerShape(16.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(16.dp)).clickable { expanded = !expanded }.padding(16.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(b.eventType, color = Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold); Text(budgetStatusLabel(b.status), color = Color.White, fontSize = 9.sp, modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(Ink).padding(8.dp, 5.dp)) }
-        Text("${b.eventDate} • ${b.place}", color = Muted, fontSize = 10.sp, modifier = Modifier.padding(vertical = 7.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(b.duration.ifBlank { b.counterpartName }, color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Medium); Text(if (expanded) "⌃" else "⌄", color = Muted) }
-        if (expanded) {
-            HorizontalDivider(Modifier.padding(vertical = 12.dp), color = Line)
-            Text(b.description, color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
-            b.proposals.forEach { p -> Text("Proposta: R$ ${"%.2f".format(p.priceCents / 100.0)} • ${budgetStatusLabel(p.status)}", color = Ink, fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp)) }
+@Composable
+private fun BudgetCard(b: BudgetRequest) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(16.dp)).padding(16.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(b.eventType, color = Ink, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            FilterChip(budgetStatusLabel(b.status), selected = true)
         }
+        Spacer(Modifier.height(6.dp))
+        Text("Data: ${b.eventDate} • Local: ${b.place}", color = Muted, fontSize = 11.sp)
+        if (b.description.isNotBlank()) Text(b.description, color = Ink, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
     }
 }
 
-private fun budgetStatusLabel(status: String): String = when (status) {
+private fun budgetStatusLabel(status: String): String = when (status.lowercase()) {
     "pending" -> "Aguardando"
     "proposed" -> "Proposta recebida"
     "accepted" -> "Aceito"
@@ -796,20 +880,58 @@ private fun budgetStatusLabel(status: String): String = when (status) {
 }
 
 @Composable
-private fun ConversationsScreen(photographers: List<Photographer>, onNavigate: (Screen) -> Unit) = AppPage(Screen.Conversations, onNavigate) {
+private fun ConversationsScreen(viewModel: LensClickViewModel, photographers: List<Photographer>, onNavigate: (Screen) -> Unit) = AppPage(Screen.Conversations, onNavigate) {
     var query by rememberSaveable { mutableStateOf("") }
-    val conversations = photographers + Photographer(name = "Rafael Costa", specialty = "Corporativo", initials = "RC", price = "")
-    val results = conversations.filter { it.name.contains(query, true) || it.specialty.contains(query, true) }
+    val conversations by viewModel.conversations.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) {
+        viewModel.loadConversations()
+    }
+
     Column(Modifier.padding(top = 12.dp)) {
         Text("Conversas", color = Ink, fontSize = 27.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(20.dp, 8.dp))
-        OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = 20.dp), placeholder = { Text("Buscar conversa", color = Muted, fontSize = 12.sp) }, leadingIcon = { Text("⌕", color = Ink, fontSize = 20.sp) }, trailingIcon = { if (query.isNotBlank()) Text("×", color = Ink, fontSize = 20.sp, modifier = Modifier.clickable { query = "" }.padding(8.dp)) }, singleLine = true, shape = RoundedCornerShape(17.dp), colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Ink, unfocusedTextColor = Ink, focusedContainerColor = SurfaceHigh, unfocusedContainerColor = SurfaceHigh, focusedBorderColor = Ink, unfocusedBorderColor = Line, cursorColor = Ink))
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+            placeholder = { Text("Buscar conversa", color = Muted, fontSize = 12.sp) },
+            singleLine = true,
+            shape = RoundedCornerShape(17.dp),
+            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Ink, unfocusedTextColor = Ink, focusedContainerColor = SurfaceHigh, unfocusedContainerColor = SurfaceHigh, focusedBorderColor = Ink, unfocusedBorderColor = Line, cursorColor = Ink)
+        )
         Spacer(Modifier.height(12.dp))
+        val filtered = conversations.filter { it.counterpartName.contains(query, true) || it.lastMessage.contains(query, true) }
         LazyColumn(contentPadding = PaddingValues(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            if (results.isEmpty()) item { Text("Nenhuma conversa encontrada.", color = Muted, fontSize = 12.sp, modifier = Modifier.fillParentMaxWidth().padding(32.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
-            items(results) { p -> Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).clickable { onNavigate(Screen.Chat) }.padding(horizontal = 10.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) { Avatar(p.initials, Modifier.size(52.dp)); Spacer(Modifier.width(12.dp)); Column(Modifier.weight(1f)) { Text(p.name, color = Ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold); Text(if (p.name == "Lucas Almeida") "Perfeito! Vou te enviar algumas..." else "Obrigado! Ficou incrível 🙏", color = Muted, fontSize = 11.sp, maxLines = 1) }; Column(horizontalAlignment = Alignment.End) { Text("Ontem", color = Muted, fontSize = 9.sp); if (p.name == "Lucas Almeida") Box(Modifier.padding(top = 7.dp).size(8.dp).clip(CircleShape).background(Ink)) } } }
-        }
+            if (filtered.isEmpty()) {
+                item { Text("Nenhuma conversa encontrada.", color = Muted, fontSize = 12.sp, modifier = Modifier.fillParentMaxWidth().padding(32.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
+            } else {
+                items(filtered, key = { it.id }) { c ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(15.dp))
+                            .clickable {
+                                viewModel.loadMessages(c.id)
+                                onNavigate(Screen.Chat)
+                            }
+                            .padding(horizontal = 10.dp, vertical = 11.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Avatar(initialsForDisplay(c.counterpartName), Modifier.size(52.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(c.counterpartName, color = Ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Text(c.lastMessage.ifBlank { "Nenhuma mensagem ainda." }, color = Muted, fontSize = 11.sp, maxLines = 1)
+                        }
+                        if (c.unreadCount > 0) {
+                            Box(Modifier.size(10.dp).clip(CircleShape).background(Ink))
+                        }
+                    }
+                }
             }
         }
+    }
+}
 
 @Composable
 private fun ProfileStatus(message: String, action: String, onAction: () -> Unit) {
@@ -820,185 +942,196 @@ private fun ProfileStatus(message: String, action: String, onAction: () -> Unit)
 }
 
 @Composable
-private fun ChatScreen(onBack: () -> Unit) {
-    var input by rememberSaveable { mutableStateOf("") }; var sent by rememberSaveable { mutableStateOf(listOf<String>()) }
-    var optionsOpen by rememberSaveable { mutableStateOf(false) }
+private fun ChatScreen(viewModel: LensClickViewModel, onBack: () -> Unit) {
+    var input by rememberSaveable { mutableStateOf("") }
+    val messages by viewModel.messages.collectAsStateWithLifecycle()
+    val conversations by viewModel.conversations.collectAsStateWithLifecycle()
+    val currentConv = conversations.firstOrNull()
+
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
-        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Text("‹", color = Ink, fontSize = 36.sp, modifier = Modifier.clickable(onClick = onBack)); Avatar("LA", Modifier.size(42.dp)); Spacer(Modifier.width(10.dp)); Column { Text("Lucas Almeida", color = Ink, fontWeight = FontWeight.SemiBold); Text("● Online", color = Muted, fontSize = 10.sp) }; Spacer(Modifier.weight(1f)); CompactLogo(34); Text("⋮", color = Ink, fontSize = 24.sp, modifier = Modifier.clip(CircleShape).clickable { optionsOpen = true }.padding(8.dp)) }
-        LazyColumn(Modifier.weight(1f).padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { item { Bubble("Olá! Recebi sua solicitação\nde orçamento.", false) }; item { Bubble("Oi Lucas! Tudo bem?", true) }; item { Bubble("Tudo ótimo! Podemos sim\nconversar sobre seu evento.", false) }; item { Bubble("Perfeito! Vou te enviar\nalgumas referências.", true) }; item { PortfolioStrip() }; item { Bubble("Ficaram incríveis! ❤️", true) }; items(sent) { Bubble(it, true) } }
-        Row(Modifier.background(SurfaceHigh).padding(14.dp), verticalAlignment = Alignment.CenterVertically) { OutlinedTextField(input, { input = it }, Modifier.weight(1f), placeholder = { Text("Digite sua mensagem...", color = Muted, fontSize = 12.sp) }, shape = RoundedCornerShape(18.dp), colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Ink, unfocusedTextColor = Ink, focusedContainerColor = Paper, unfocusedContainerColor = Paper, focusedBorderColor = Line, unfocusedBorderColor = Line, cursorColor = Ink)); Spacer(Modifier.width(9.dp)); Button(onClick = { if (input.isNotBlank()) { sent = sent + input; input = "" } }, Modifier.size(54.dp), contentPadding = PaddingValues(0.dp), shape = CircleShape, colors = ButtonDefaults.buttonColors(Ink, Color.White)) { Text("➤", fontSize = 20.sp) } }
+        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("‹", color = Ink, fontSize = 36.sp, modifier = Modifier.clickable(onClick = onBack))
+            Avatar(initialsForDisplay(currentConv?.counterpartName ?: "Chat"), Modifier.size(42.dp))
+            Spacer(Modifier.width(10.dp))
+            Column {
+                Text(currentConv?.counterpartName ?: "Mensagens", color = Ink, fontWeight = FontWeight.SemiBold)
+                Text("● Online", color = Muted, fontSize = 10.sp)
+            }
+            Spacer(Modifier.weight(1f))
+            CompactLogo(34)
+        }
+        LazyColumn(Modifier.weight(1f).padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (messages.isEmpty()) {
+                item { Bubble("Inicie a conversa digitando uma mensagem abaixo.", false) }
+            } else {
+                items(messages) { m ->
+                    Bubble(m.text, m.isMine)
+                }
+            }
+        }
+        Row(Modifier.background(SurfaceHigh).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = input,
+                onValueChange = { input = it },
+                modifier = Modifier.weight(1f),
+                placeholder = { Text("Digite sua mensagem...", color = Muted, fontSize = 12.sp) },
+                shape = RoundedCornerShape(18.dp),
+                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Ink, unfocusedTextColor = Ink, focusedContainerColor = Paper, unfocusedContainerColor = Paper, focusedBorderColor = Line, unfocusedBorderColor = Line, cursorColor = Ink)
+            )
+            Spacer(Modifier.width(9.dp))
+            Button(
+                onClick = {
+                    if (input.isNotBlank() && currentConv != null) {
+                        val textToSend = input
+                        input = ""
+                        viewModel.sendMessage(currentConv.id, textToSend) {}
+                    }
+                },
+                modifier = Modifier.size(54.dp),
+                contentPadding = PaddingValues(0.dp),
+                shape = CircleShape,
+                colors = ButtonDefaults.buttonColors(Ink, Color.White)
+            ) {
+                Text("➤", fontSize = 20.sp)
+            }
+        }
     }
-    if (optionsOpen) ActionDialog("Opções da conversa", "Notificações, arquivos compartilhados e bloqueio estarão disponíveis aqui.") { optionsOpen = false }
 }
 
 @Composable private fun Bubble(text: String, mine: Boolean) = Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) { Text(text, color = if (mine) Color.White else Ink, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.widthIn(max = 260.dp).clip(RoundedCornerShape(16.dp)).background(if (mine) Ink else SurfaceHigh).border(1.dp, if (mine) Ink else Line, RoundedCornerShape(16.dp)).padding(13.dp)) }
 
-@Composable
-private fun PhotographerPage(active: Screen, onNavigate: (Screen) -> Unit, content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            BrandMark()
-        }
-        Column(Modifier.weight(1f).fillMaxWidth()) { content() }
-        PhotographerBottomNav(active, onNavigate)
-    }
-}
+@Composable private fun PhotographerPage(current: Screen, onNavigate: (Screen) -> Unit, content: @Composable ColumnScope.() -> Unit) = AppPage(current, onNavigate, isPhotographerMode = true, content = content)
 
-@Composable
-private fun PhotographerBottomNav(active: Screen, onNavigate: (Screen) -> Unit) {
-    val items = listOf(
-        Triple("⌂", "Painel", Screen.ProDashboard),
-        Triple("▣", "Pedidos", Screen.ProRequests),
-        Triple("□", "Agenda", Screen.ProAgenda),
-        Triple("♙", "Perfil", Screen.ProProfile)
-    )
-    Box(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
-        Row(
-            Modifier.fillMaxWidth()
-                .shadow(18.dp, RoundedCornerShape(29.dp))
-                .clip(RoundedCornerShape(29.dp))
-                .background(Ink)
-                .border(1.dp, Color.White.copy(.10f), RoundedCornerShape(29.dp))
-                .padding(horizontal = 7.dp, vertical = 7.dp),
-            horizontalArrangement = Arrangement.SpaceAround
-        ) {
-            items.forEach { (icon, label, destination) ->
-                val selected = active == destination
-                Column(
-                    Modifier.weight(1f)
-                        .padding(horizontal = 2.dp)
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(if (selected) SurfaceHigh else Color.Transparent)
-                        .clickable { onNavigate(destination) }
-                        .padding(vertical = 7.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(icon, color = if (selected) Ink else Paper.copy(.82f), fontSize = 19.sp, lineHeight = 20.sp)
-                    Text(label, color = if (selected) Ink else Paper.copy(.62f), fontSize = 9.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1)
-                }
+@Composable private fun PhotographerBottomNav(current: Screen, onNavigate: (Screen) -> Unit) {
+    Row(Modifier.fillMaxWidth().height(64.dp).background(SurfaceHigh).border(1.dp, Line), horizontalArrangement = Arrangement.SpaceAround, verticalAlignment = Alignment.CenterVertically) {
+        val items = listOf(Screen.ProDashboard to "Painel", Screen.ProRequests to "Pedidos", Screen.ProAgenda to "Agenda", Screen.ProProfile to "Perfil", Screen.ProPortfolio to "Portfólio")
+        items.forEach { (screen, label) ->
+            val sel = current == screen
+            Column(
+                modifier = Modifier
+                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                    .clip(CircleShape)
+                    .clickable { onNavigate(screen) }
+                    .semantics {
+                        contentDescription = label
+                        role = Role.Button
+                    }
+                    .padding(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(label, color = if (sel) Ink else Muted, fontSize = 11.sp, fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal)
             }
         }
     }
 }
 
 @Composable
-private fun PhotographerDashboardScreen(
-    photographer: Photographer?,
-    budgets: List<BudgetRequest>,
-    onNavigate: (Screen) -> Unit,
-    onClientMode: () -> Unit
-) = PhotographerPage(Screen.ProDashboard, onNavigate) {
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-        item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Column {
-                    Text("Painel profissional", color = Ink, fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
-                    Text("Olá, ${photographer?.name?.substringBefore(' ') ?: "fotógrafo"}", color = Muted, fontSize = 12.sp)
-                }
-                Avatar(photographer?.initials ?: "FT", Modifier.size(48.dp))
-            }
+private fun PhotographerDashboardScreen(p: Photographer?, budgets: List<BudgetRequest>, onNavigate: (Screen) -> Unit, onClientMode: () -> Unit) = PhotographerPage(Screen.ProDashboard, onNavigate) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { BrandMark(light = false); Text("Modo Fotógrafo", color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+        Spacer(Modifier.height(18.dp))
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(18.dp)).padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Avatar(p?.initials ?: "FT", Modifier.size(56.dp)); Spacer(Modifier.width(14.dp)); Column { Text(p?.name ?: "Perfil Profissional", color = Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold); Text(p?.specialty ?: "Fotografia", color = Muted, fontSize = 12.sp) } }
+        Spacer(Modifier.height(20.dp))
+        SectionTitle("Métricas")
+        Spacer(Modifier.height(10.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            ProMetric("Pedidos", "${budgets.size}", Modifier.weight(1f))
+            ProMetric("Agenda", "${budgets.count { it.status == "accepted" }}", Modifier.weight(1f))
+            ProMetric("Avaliação", "★ 4.9", Modifier.weight(1f))
         }
-        item {
-            OutlinedButton(onClick = onClientMode, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Ink)) {
-                Text("Trocar para modo cliente", color = Ink, fontWeight = FontWeight.SemiBold)
-            }
+        Spacer(Modifier.height(22.dp))
+        SectionTitle("Ações Rápidas")
+        Spacer(Modifier.height(10.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            ProAction("Editar Perfil", "Infomações e preços", Modifier.weight(1f)) { onNavigate(Screen.ProProfile) }
+            ProAction("Portfólio", "Gerenciar imagens", Modifier.weight(1f)) { onNavigate(Screen.ProPortfolio) }
         }
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ProMetric("${budgets.count { it.status == "pending" || it.status == "proposed" }}", "Novos pedidos", Modifier.weight(1f))
-                ProMetric("${budgets.count { it.status == "accepted" }}", "Confirmados", Modifier.weight(1f))
-                ProMetric("${budgets.size}", "Total", Modifier.weight(1f))
-            }
-        }
-        item { SectionTitle("Ações rápidas") }
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ProAction("Ver pedidos", "Revise novas oportunidades", Modifier.weight(1f)) { onNavigate(Screen.ProRequests) }
-                ProAction("Abrir agenda", "Organize seus trabalhos", Modifier.weight(1f)) { onNavigate(Screen.ProAgenda) }
-            }
-        }
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ProAction("Portfólio", "Gerencie suas imagens", Modifier.weight(1f)) { onNavigate(Screen.ProPortfolio) }
-                ProAction("Perfil", "Edite e publique", Modifier.weight(1f)) { onNavigate(Screen.ProProfile) }
-            }
-        }
-        item { SectionTitle("Pedidos recentes") { onNavigate(Screen.ProRequests) } }
-        items(budgets.take(3), key = { it.id }) { BudgetCard(it) }
+        Spacer(Modifier.height(22.dp))
+        OutlinedButton(onClick = onClientMode, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Ink)) { Text("Alternar para modo cliente", color = Ink, fontWeight = FontWeight.SemiBold) }
     }
 }
 
-@Composable
-private fun ProMetric(value: String, label: String, modifier: Modifier = Modifier) = Column(
-    modifier.clip(RoundedCornerShape(16.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(16.dp)).padding(14.dp),
-    horizontalAlignment = Alignment.CenterHorizontally
-) {
-    Text(value, color = Ink, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-    Text(label, color = Muted, fontSize = 9.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-}
-
-@Composable
-private fun ProAction(title: String, subtitle: String, modifier: Modifier = Modifier, onClick: () -> Unit) = Column(
-    modifier.clip(RoundedCornerShape(16.dp)).background(Ink).clickable(onClick = onClick).padding(16.dp)
-) {
-    Text(title, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-    Text(subtitle, color = Color.White.copy(.65f), fontSize = 9.sp, lineHeight = 13.sp, modifier = Modifier.padding(top = 5.dp))
-}
+@Composable private fun ProMetric(label: String, value: String, modifier: Modifier) { Column(modifier.clip(RoundedCornerShape(16.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(16.dp)).padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text(value, color = Ink, fontSize = 20.sp, fontWeight = FontWeight.Bold); Text(label, color = Muted, fontSize = 11.sp) } }
+@Composable private fun ProAction(title: String, desc: String, modifier: Modifier, onClick: () -> Unit) { Column(modifier.clip(RoundedCornerShape(16.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(16.dp)).clickable(onClick = onClick).padding(14.dp)) { Text(title, color = Ink, fontSize = 13.sp, fontWeight = FontWeight.Bold); Text(desc, color = Muted, fontSize = 10.sp, modifier = Modifier.padding(top = 2.dp)) } }
 
 @Composable
 private fun PhotographerRequestsScreen(viewModel: LensClickViewModel, budgets: List<BudgetRequest>, onNavigate: (Screen) -> Unit) = PhotographerPage(Screen.ProRequests, onNavigate) {
-    var proposing by remember { mutableStateOf<BudgetRequest?>(null) }
-    Column(Modifier.fillMaxSize().padding(top = 10.dp)) {
-        Text("Pedidos de orçamento", color = Ink, fontSize = 26.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(20.dp, 10.dp))
-        Text("Solicitações de clientes disponíveis para você.", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 20.dp))
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (budgets.isEmpty()) item { Text("Nenhum pedido novo.", color = Muted, modifier = Modifier.padding(vertical = 40.dp)) }
-            items(budgets, key = { it.id }) { req ->
-                Column {
-                    BudgetCard(req)
-                    if (req.status == "pending" || req.status == "proposed") {
-                        TextButton(onClick = { proposing = req }) { Text("Enviar proposta", color = Ink, fontSize = 12.sp) }
+    var proposeTarget by remember { mutableStateOf<BudgetRequest?>(null) }
+    Column(Modifier.padding(top = 12.dp)) {
+        Text("Pedidos de Orçamento", color = Ink, fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(20.dp, 8.dp))
+        if (budgets.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Nenhum pedido recebido no momento.", color = Muted, fontSize = 12.sp) }
+        } else {
+            LazyColumn(contentPadding = PaddingValues(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                items(budgets, key = { it.id }) { b ->
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(16.dp)).padding(16.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(b.eventType, color = Ink, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                            FilterChip(budgetStatusLabel(b.status), selected = true)
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Text("Cliente: ${b.counterpartName} • Data: ${b.eventDate}", color = Muted, fontSize = 11.sp)
+                        if (b.description.isNotBlank()) Text(b.description, color = Ink, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+                        Spacer(Modifier.height(12.dp))
+                        PrimaryButton("Enviar proposta", { proposeTarget = b }, enabled = b.status == "pending")
                     }
                 }
             }
         }
     }
-    proposing?.let { req ->
-        ProposeDialog(onDismiss = { proposing = null }, onConfirm = { priceCents, conditions ->
-            viewModel.proposeToRequest(req.id, priceCents, conditions) { proposing = null }
-        })
+
+    proposeTarget?.let { b ->
+        ProposeDialog(
+            onDismiss = { proposeTarget = null },
+            onSend = { priceCents, conditions ->
+                viewModel.proposeToRequest(b.id, priceCents, conditions) {
+                    proposeTarget = null
+                }
+            }
+        )
     }
 }
 
 @Composable
-private fun ProposeDialog(onDismiss: () -> Unit, onConfirm: (Long, String) -> Unit) {
-    var price by remember { mutableStateOf("") }
-    var conditions by remember { mutableStateOf("") }
-    val priceCents = price.trim().replace(",", ".").toDoubleOrNull()?.let { Math.round(it * 100) }
-    Dialog(onDismissRequest = onDismiss) {
-        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Paper).padding(20.dp)) {
-            Text("Enviar proposta", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(12.dp))
-            LensField("Preço (R$)", price, { price = it }, keyboard = KeyboardType.Decimal)
-            Spacer(Modifier.height(10.dp))
-            LensField("Condições (opcional)", conditions, { conditions = it }, singleLine = false, minLines = 2)
-            Spacer(Modifier.height(14.dp))
-            PrimaryButton("Enviar", enabled = priceCents != null && priceCents >= 0, onClick = { onConfirm(priceCents!!, conditions.trim()) })
-            Spacer(Modifier.height(8.dp))
-            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Cancelar", color = Muted) }
-        }
-    }
+private fun ProposeDialog(onDismiss: () -> Unit, onSend: (Long, String) -> Unit) {
+    var priceStr by rememberSaveable { mutableStateOf("") }
+    var conditions by rememberSaveable { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Enviar Proposta", color = Ink, fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                LensField("Valor total (R$)", priceStr, { priceStr = it }, KeyboardType.Number)
+                Spacer(Modifier.height(10.dp))
+                LensField("Condições / Detalhes", conditions, { conditions = it }, maxLines = 3)
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val cents = (priceStr.toDoubleOrNull() ?: 0.0) * 100
+                    onSend(cents.toLong(), conditions)
+                },
+                enabled = priceStr.isNotBlank()
+            ) { Text("Enviar Proposta") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
+        containerColor = SurfaceHigh
+    )
 }
 
 @Composable
-private fun PhotographerAgendaScreen(budgets: List<BudgetRequest>, onNavigate: (Screen) -> Unit) = PhotographerPage(Screen.ProAgenda, onNavigate) {
-    val confirmed = budgets
-    Column(Modifier.fillMaxSize().padding(top = 10.dp)) {
-        Text("Agenda", color = Ink, fontSize = 26.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(20.dp, 10.dp))
-        Text("Trabalhos confirmados", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 20.dp))
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (confirmed.isEmpty()) item { Text("Você ainda não tem trabalhos confirmados.", color = Muted, modifier = Modifier.padding(vertical = 40.dp)) }
-            items(confirmed, key = { it.id }) { BudgetCard(it) }
+private fun PhotographerAgendaScreen(agenda: List<BudgetRequest>, onNavigate: (Screen) -> Unit) = PhotographerPage(Screen.ProAgenda, onNavigate) {
+    Column(Modifier.padding(top = 12.dp)) {
+        Text("Minha Agenda", color = Ink, fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(20.dp, 8.dp))
+        if (agenda.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Nenhum evento agendado ou aceito.", color = Muted, fontSize = 12.sp) }
+        } else {
+            LazyColumn(contentPadding = PaddingValues(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                items(agenda, key = { it.id }) { e ->
+                    BudgetCard(e)
+                }
+            }
         }
     }
 }
@@ -1012,10 +1145,10 @@ private fun ProfessionalProfileScreen(
 ) = PhotographerPage(Screen.ProProfile, onNavigate) {
     val state by viewModel.professionalProfile.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { viewModel.loadProfessionalProfile() }
-    when (val s = state) {
+    when (val result = state) {
         ProfessionalProfileState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Ink) }
         ProfessionalProfileState.Error -> ProfileStatus("Não foi possível carregar seu perfil profissional.", "Tentar novamente") { viewModel.loadProfessionalProfile() }
-        is ProfessionalProfileState.Ready -> ProfessionalProfileForm(s, viewModel, onClientMode, onLogout)
+        is ProfessionalProfileState.Ready -> ProfessionalProfileForm(result, viewModel, onClientMode, onLogout)
     }
 }
 
@@ -1026,264 +1159,220 @@ private fun ProfessionalProfileForm(
     onClientMode: () -> Unit,
     onLogout: () -> Unit
 ) {
-    val profile = state.profile
-    var bio by rememberSaveable { mutableStateOf(profile.bio) }
-    var specialties by rememberSaveable { mutableStateOf(profile.specialties.joinToString(", ")) }
-    var city by rememberSaveable { mutableStateOf(profile.city) }
-    var stateUf by rememberSaveable { mutableStateOf(profile.state) }
-    var availability by rememberSaveable { mutableStateOf(profile.availability) }
-    var price by rememberSaveable { mutableStateOf(profile.startingPriceCents?.let { (it / 100.0).toString() } ?: "") }
-    var radius by rememberSaveable { mutableStateOf(profile.serviceRadiusKm?.toString() ?: "") }
-    var publicEmail by rememberSaveable { mutableStateOf(profile.publicEmail) }
-    var publicPhone by rememberSaveable { mutableStateOf(profile.publicPhone) }
-    var instagram by rememberSaveable { mutableStateOf(profile.instagram) }
-    var website by rememberSaveable { mutableStateOf(profile.website) }
-    var showEmail by rememberSaveable { mutableStateOf(profile.showEmail) }
-    var showPhone by rememberSaveable { mutableStateOf(profile.showPhone) }
-    var published by rememberSaveable { mutableStateOf(profile.isPublished) }
+    var bio by rememberSaveable(state.profile) { mutableStateOf(state.profile.bio) }
+    var city by rememberSaveable(state.profile) { mutableStateOf(state.profile.city) }
+    var stateCode by rememberSaveable(state.profile) { mutableStateOf(state.profile.state) }
+    var priceStr by rememberSaveable(state.profile) { mutableStateOf(state.profile.startingPriceCents?.let { "${it / 100}" }.orEmpty()) }
+    var radiusStr by rememberSaveable(state.profile) { mutableStateOf(state.profile.serviceRadiusKm?.toString().orEmpty()) }
+    var publicEmail by rememberSaveable(state.profile) { mutableStateOf(state.profile.publicEmail) }
+    var publicPhone by rememberSaveable(state.profile) { mutableStateOf(state.profile.publicPhone) }
+    var instagram by rememberSaveable(state.profile) { mutableStateOf(state.profile.instagram) }
+    var website by rememberSaveable(state.profile) { mutableStateOf(state.profile.website) }
+    var isPublished by rememberSaveable(state.profile) { mutableStateOf(state.profile.isPublished) }
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
-        Text("Perfil profissional", color = Ink, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
-        Text("Edite seus dados e publique quando estiver pronto.", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp))
-        LensField("Apresentação (bio)", bio, { bio = it }, singleLine = false, minLines = 3); Spacer(Modifier.height(11.dp))
-        LensField("Especialidades (separadas por vírgula)", specialties, { specialties = it }); Spacer(Modifier.height(11.dp))
-        LensField("Cidade", city, { city = it }); Spacer(Modifier.height(11.dp))
-        LensField("UF (ex.: SP)", stateUf, { stateUf = it }); Spacer(Modifier.height(11.dp))
-        Text("Disponibilidade", color = Ink, fontSize = 12.sp)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
-            listOf("available" to "Disponível", "limited" to "Limitada", "unavailable" to "Indisponível").forEach { (value, label) ->
-                val selected = availability == value
-                Text(label, color = if (selected) Color.White else Ink, fontSize = 11.sp, modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(if (selected) Ink else SurfaceHigh).border(1.dp, Line, RoundedCornerShape(12.dp)).clickable { availability = value }.padding(horizontal = 12.dp, vertical = 8.dp))
-            }
-        }
-        Spacer(Modifier.height(11.dp))
-        LensField("Preço inicial (R$)", price, { price = it }, keyboard = KeyboardType.Decimal); Spacer(Modifier.height(11.dp))
-        LensField("Raio de atendimento (km)", radius, { radius = it }, keyboard = KeyboardType.Number); Spacer(Modifier.height(11.dp))
-        LensField("E-mail profissional", publicEmail, { publicEmail = it }, keyboard = KeyboardType.Email); Spacer(Modifier.height(11.dp))
-        LensField("Telefone profissional", publicPhone, { publicPhone = it }, keyboard = KeyboardType.Phone); Spacer(Modifier.height(11.dp))
-        LensField("Instagram (sem @)", instagram, { instagram = it }); Spacer(Modifier.height(11.dp))
-        LensField("Website", website, { website = it }, keyboard = KeyboardType.Uri); Spacer(Modifier.height(12.dp))
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { showEmail = !showEmail }.padding(vertical = 6.dp)) {
-            Checkbox(showEmail, { showEmail = it }, colors = CheckboxDefaults.colors(checkedColor = Ink))
-            Text("Exibir e-mail no perfil público", color = Ink, fontSize = 12.sp)
-        }
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { showPhone = !showPhone }.padding(vertical = 6.dp)) {
-            Checkbox(showPhone, { showPhone = it }, colors = CheckboxDefaults.colors(checkedColor = Ink))
-            Text("Exibir telefone no perfil público", color = Ink, fontSize = 12.sp)
-        }
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { published = !published }.padding(vertical = 6.dp)) {
-            Checkbox(published, { published = it }, colors = CheckboxDefaults.colors(checkedColor = Ink))
-            Text("Publicar perfil profissional", color = Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-        }
-        if (state.error != null) Text(profileErrorMessage(state.error), color = MaterialTheme.colorScheme.error, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
-        if (state.saved) Text("Perfil salvo.", color = Gold, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(20.dp)
+    ) {
+        Text("Perfil Profissional", color = Ink, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Text("Configure como seu perfil aparece para os clientes", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+        Spacer(Modifier.height(18.dp))
+        LensField("Bio / Apresentação", bio, { bio = it }, maxLines = 4)
+        Spacer(Modifier.height(10.dp))
+        LensField("Cidade", city, { city = it })
+        Spacer(Modifier.height(10.dp))
+        LensField("Estado (UF)", stateCode, { stateCode = it })
+        Spacer(Modifier.height(10.dp))
+        LensField("Preço Inicial (R$)", priceStr, { priceStr = it }, KeyboardType.Number)
+        Spacer(Modifier.height(10.dp))
+        LensField("Raio de Atendimento (km)", radiusStr, { radiusStr = it }, KeyboardType.Number)
+        Spacer(Modifier.height(10.dp))
+        LensField("E-mail Público", publicEmail, { publicEmail = it }, KeyboardType.Email)
+        Spacer(Modifier.height(10.dp))
+        LensField("Telefone Público", publicPhone, { publicPhone = it }, KeyboardType.Phone)
+        Spacer(Modifier.height(10.dp))
+        LensField("Instagram", instagram, { instagram = it })
+        Spacer(Modifier.height(10.dp))
+        LensField("Website", website, { website = it }, KeyboardType.Uri)
         Spacer(Modifier.height(16.dp))
-        PrimaryButton(if (state.saving) "Salvando..." else "Salvar perfil", enabled = !state.saving, onClick = {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("Publicar perfil na busca", color = Ink, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            FilterChip(if (isPublished) "Publicado" else "Rascunho", selected = isPublished) { isPublished = !isPublished }
+        }
+        Spacer(Modifier.height(24.dp))
+        if (state.saving) {
+            AuthStatusBanner("Salvando perfil...", loading = true)
+        } else if (state.saved) {
+            AuthStatusBanner("Perfil salvo com sucesso!", loading = false)
+        } else if (state.error != null) {
+            AuthStatusBanner(profileErrorMessage(state.error), loading = false, error = true)
+        }
+        PrimaryButton("Salvar Perfil", {
+            val priceCents = priceStr.toDoubleOrNull()?.let { (it * 100).toLong() }
+            val radius = radiusStr.toIntOrNull()
             viewModel.saveProfessionalProfile(
-                ProfessionalProfile(
-                    slug = profile.slug,
-                    bio = bio.trim(),
-                    specialties = specialties.split(",").map { it.trim() }.filter { it.isNotBlank() },
-                    city = city.trim(),
-                    state = stateUf.trim().uppercase(),
-                    serviceRadiusKm = radius.trim().toIntOrNull(),
-                    startingPriceCents = price.trim().replace(",", ".").toDoubleOrNull()?.let { Math.round(it * 100) },
-                    availability = availability,
-                    ratingAverage = profile.ratingAverage,
-                    reviewCount = profile.reviewCount,
-                    instagram = instagram.trim().removePrefix("@"),
-                    website = website.trim(),
-                    publicEmail = publicEmail.trim(),
-                    publicPhone = publicPhone.trim(),
-                    showEmail = showEmail,
-                    showPhone = showPhone,
-                    isPublished = published
+                state.profile.copy(
+                    bio = bio,
+                    city = city,
+                    state = stateCode,
+                    startingPriceCents = priceCents,
+                    serviceRadiusKm = radius,
+                    publicEmail = publicEmail,
+                    publicPhone = publicPhone,
+                    instagram = instagram,
+                    website = website,
+                    isPublished = isPublished
                 )
             )
-        })
-        Spacer(Modifier.height(10.dp))
-        PrimaryButton("Usar o app como cliente", onClientMode)
-        Spacer(Modifier.height(10.dp))
-        LogoutButton(onLogout)
-        Spacer(Modifier.height(8.dp))
+        }, enabled = !state.saving)
+        Spacer(Modifier.height(12.dp))
+        OutlinedButton(onClick = onClientMode, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Ink)) { Text("Modo Cliente", color = Ink, fontWeight = FontWeight.SemiBold) }
+        Spacer(Modifier.height(12.dp))
+        LogoutButton(onLogout, enabled = !state.saving)
     }
 }
 
 private fun profileErrorMessage(code: MobileAuthErrorCode): String = when (code) {
-    MobileAuthErrorCode.INVALID_INPUT -> "Revise os dados. Para publicar, inclua foto, apresentação (60+ caracteres), especialidade, localização e um contato profissional."
-    MobileAuthErrorCode.FORBIDDEN -> "Selecione o perfil de fotógrafo nos dados pessoais para continuar."
-    MobileAuthErrorCode.UNAUTHENTICATED -> "Sua sessão expirou. Entre novamente."
-    MobileAuthErrorCode.RATE_LIMITED -> "Muitas alterações. Aguarde antes de tentar novamente."
-    else -> "Não foi possível salvar. Tente novamente."
+    MobileAuthErrorCode.INVALID_INPUT -> "Dados do perfil inválidos. Verifique os campos."
+    MobileAuthErrorCode.UNAUTHENTICATED -> "Sua sessão expirou. Faça login novamente."
+    MobileAuthErrorCode.RATE_LIMITED -> "Muitas alterações. Aguarde um instante."
+    MobileAuthErrorCode.NETWORK -> "Não foi possível conectar. Verifique sua rede."
+    else -> "Erro ao salvar perfil. Tente novamente."
 }
 
 @Composable
 private fun PortfolioScreen(viewModel: LensClickViewModel, onNavigate: (Screen) -> Unit) = PhotographerPage(Screen.ProPortfolio, onNavigate) {
     val state by viewModel.portfolio.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    LaunchedEffect(Unit) { viewModel.loadPortfolio() }
-    var pendingUri by remember { mutableStateOf<android.net.Uri?>(null) }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> pendingUri = uri }
+    var uploadDialogUri by remember { mutableStateOf<Uri?>(null) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) uploadDialogUri = uri
+    }
 
-    Column(Modifier.fillMaxSize().padding(20.dp)) {
-        Text("Portfólio", color = Ink, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
-        Text("Até 12 imagens (JPG, PNG ou WebP, 4 MB cada).", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
-        when (val s = state) {
+    LaunchedEffect(Unit) { viewModel.loadPortfolio() }
+
+    Column(Modifier.padding(top = 12.dp)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("Portfólio", color = Ink, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Button(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) { Text("+ Adicionar") }
+        }
+        when (val result = state) {
             PortfolioState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Ink) }
-            PortfolioState.Error -> ProfileStatus("Não foi possível carregar seu portfólio.", "Tentar novamente") { viewModel.loadPortfolio() }
+            PortfolioState.Error -> ProfileStatus("Erro ao carregar portfólio.", "Tentar novamente") { viewModel.loadPortfolio() }
             is PortfolioState.Ready -> {
-                if (s.message != null) Text(s.message, color = Gold, fontSize = 12.sp)
-                if (s.error != null) Text(portfolioErrorMessage(s.error), color = MaterialTheme.colorScheme.error, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
-                PrimaryButton(if (s.busy) "Enviando..." else "Adicionar imagem", enabled = !s.busy && s.items.size < 12, onClick = {
-                    picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                })
-                Spacer(Modifier.height(14.dp))
-                if (s.items.isEmpty()) {
-                    Text("Nenhuma imagem ainda. Adicione a primeira.", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 24.dp))
+                val itemsList = result.items
+                if (itemsList.isEmpty()) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Nenhuma imagem no seu portfólio.", color = Muted, fontSize = 12.sp) }
                 } else {
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        items(s.items, key = { it.id }) { item -> PortfolioItemCard(item, s.items, s.busy, viewModel) }
+                    LazyColumn(contentPadding = PaddingValues(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        itemsIndexed(itemsList, key = { _, item -> item.id }) { index, item ->
+                            PortfolioItemCard(item, itemsList, index == 0, viewModel)
+                        }
                     }
                 }
             }
         }
     }
 
-    pendingUri?.let { uri ->
-        PortfolioMetadataDialog(
-            title = "Nova imagem",
-            initialAlt = "",
-            initialCaption = "",
-            initialCategory = "other",
-            onDismiss = { pendingUri = null },
-            onConfirm = { altText, caption, category ->
-                val upload = readPortfolioUpload(context, uri)
-                pendingUri = null
-                if (upload != null) viewModel.addPortfolioImage(upload.bytes, upload.contentType, altText, caption, category)
-            }
-        )
+    uploadDialogUri?.let { uri ->
+        val upload = readPortfolioUpload(context, uri)
+        if (upload == null) {
+            uploadDialogUri = null
+        } else {
+            PortfolioMetadataDialog(
+                caption = "",
+                altText = "",
+                category = "portrait",
+                title = "Adicionar Imagem",
+                onDismiss = { uploadDialogUri = null },
+                onConfirm = { altText, caption, category ->
+                    viewModel.addPortfolioImage(upload.bytes, upload.contentType, altText, caption, category)
+                    uploadDialogUri = null
+                }
+            )
+        }
     }
 }
 
 @Composable
-private fun PortfolioItemCard(item: PortfolioItem, items: List<PortfolioItem>, busy: Boolean, viewModel: LensClickViewModel) {
-    var editing by remember { mutableStateOf(false) }
-    val index = items.indexOfFirst { it.id == item.id }
+private fun PortfolioItemCard(item: PortfolioItem, allItems: List<PortfolioItem>, isFirst: Boolean, viewModel: LensClickViewModel) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(16.dp)).padding(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Photo(Modifier.size(64.dp))
+            Photo(Modifier.size(70.dp))
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(item.caption.ifBlank { "Sem legenda" }, color = Ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(item.category, color = Muted, fontSize = 11.sp)
-                if (item.isCover) Text("Capa", color = Gold, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text(item.caption.ifBlank { item.altText.ifBlank { "Imagem do portfólio" } }, color = Ink, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text("Categoria: ${item.category}", color = Muted, fontSize = 11.sp)
+                if (item.isCover) Text("★ Capa", color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
+            TextButton(onClick = { viewModel.removePortfolioItem(item.id) }) { Text("Excluir", color = MaterialTheme.colorScheme.error) }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(top = 8.dp)) {
-            TextButton(enabled = !busy && !item.isCover, onClick = { viewModel.updatePortfolio(items.map { it.copy(isCover = it.id == item.id) }) }, contentPadding = PaddingValues(6.dp)) { Text("Capa", fontSize = 11.sp, color = Ink) }
-            TextButton(enabled = !busy && index > 0, onClick = { viewModel.updatePortfolio(movePortfolioItem(items, index, index - 1)) }, contentPadding = PaddingValues(6.dp)) { Text("↑", fontSize = 13.sp, color = Ink) }
-            TextButton(enabled = !busy && index < items.size - 1, onClick = { viewModel.updatePortfolio(movePortfolioItem(items, index, index + 1)) }, contentPadding = PaddingValues(6.dp)) { Text("↓", fontSize = 13.sp, color = Ink) }
-            TextButton(enabled = !busy, onClick = { editing = true }, contentPadding = PaddingValues(6.dp)) { Text("Editar", fontSize = 11.sp, color = Ink) }
-            TextButton(enabled = !busy, onClick = { viewModel.removePortfolioItem(item.id) }, contentPadding = PaddingValues(6.dp)) { Text("Excluir", fontSize = 11.sp, color = MaterialTheme.colorScheme.error) }
-        }
-    }
-    if (editing) {
-        PortfolioMetadataDialog(
-            title = "Editar imagem",
-            initialAlt = item.altText,
-            initialCaption = item.caption,
-            initialCategory = item.category,
-            onDismiss = { editing = false },
-            onConfirm = { altText, caption, category ->
-                editing = false
-                viewModel.updatePortfolio(items.map { if (it.id == item.id) it.copy(altText = altText, caption = caption, category = category) else it })
-            }
-        )
     }
 }
 
-private fun movePortfolioItem(items: List<PortfolioItem>, from: Int, to: Int): List<PortfolioItem> {
-    val list = items.toMutableList()
-    val moved = list.removeAt(from)
-    list.add(to, moved)
-    return list.mapIndexed { i, it -> it.copy(position = i) }
+private class PortfolioUpload(val bytes: ByteArray, val contentType: String)
+
+private fun readPortfolioUpload(context: Context, uri: Uri): PortfolioUpload? {
+    return try {
+        val resolver = context.contentResolver
+        val type = resolver.getType(uri) ?: "image/jpeg"
+        val bitmap = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) } ?: return null
+        val scaled = scalePortfolioBitmap(bitmap, 1200)
+        val out = ByteArrayOutputStream()
+        scaled.compress(Bitmap.CompressFormat.JPEG, 80, out)
+        PortfolioUpload(out.toByteArray(), type)
+    } catch (_: Exception) {
+        null
+    }
+}
+
+private fun scalePortfolioBitmap(bitmap: Bitmap, maxDim: Int): Bitmap {
+    val w = bitmap.width
+    val h = bitmap.height
+    if (w <= maxDim && h <= maxDim) return bitmap
+    val ratio = w.toFloat() / h.toFloat()
+    val newW = if (w > h) maxDim else (maxDim * ratio).toInt()
+    val newH = if (w > h) (maxDim / ratio).toInt() else maxDim
+    return Bitmap.createScaledBitmap(bitmap, newW, newH, true)
 }
 
 @Composable
 private fun PortfolioMetadataDialog(
+    caption: String,
+    altText: String,
+    category: String,
     title: String,
-    initialAlt: String,
-    initialCaption: String,
-    initialCategory: String,
     onDismiss: () -> Unit,
     onConfirm: (String, String, String) -> Unit
 ) {
-    var altText by remember { mutableStateOf(initialAlt) }
-    var caption by remember { mutableStateOf(initialCaption) }
-    var category by remember { mutableStateOf(initialCategory) }
-    var categoryMenu by remember { mutableStateOf(false) }
-    val categories = listOf("wedding", "events", "portrait", "family", "corporate", "product", "fashion", "newborn", "nature", "real-estate", "other")
-    Dialog(onDismissRequest = onDismiss) {
-        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Paper).padding(20.dp)) {
-            Text(title, color = Ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(12.dp))
-            LensField("Descrição para acessibilidade (alt)", altText, { altText = it }, singleLine = false, minLines = 2)
-            Spacer(Modifier.height(10.dp))
-            LensField("Legenda", caption, { caption = it })
-            Spacer(Modifier.height(10.dp))
-            Box {
-                OutlinedButton(onClick = { categoryMenu = true }, modifier = Modifier.fillMaxWidth()) { Text("Categoria: $category", color = Ink) }
-                DropdownMenu(expanded = categoryMenu, onDismissRequest = { categoryMenu = false }) {
-                    categories.forEach { value -> DropdownMenuItem(text = { Text(value) }, onClick = { category = value; categoryMenu = false }) }
-                }
+    var c by rememberSaveable { mutableStateOf(caption) }
+    var a by rememberSaveable { mutableStateOf(altText) }
+    var cat by rememberSaveable { mutableStateOf(category) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title, color = Ink, fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                LensField("Legenda", c, { c = it })
+                Spacer(Modifier.height(10.dp))
+                LensField("Texto Alternativo (Alt)", a, { a = it })
+                Spacer(Modifier.height(10.dp))
+                LensField("Categoria", cat, { cat = it })
             }
-            if (altText.trim().length < 3) Text("A descrição precisa de ao menos 3 caracteres.", color = MaterialTheme.colorScheme.error, fontSize = 10.sp, modifier = Modifier.padding(top = 6.dp))
-            Spacer(Modifier.height(14.dp))
-            PrimaryButton("Confirmar", enabled = altText.trim().length >= 3, onClick = { onConfirm(altText.trim(), caption.trim(), category) })
-            Spacer(Modifier.height(8.dp))
-            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Cancelar", color = Muted) }
-        }
-    }
-}
-
-private data class PortfolioUpload(val bytes: ByteArray, val contentType: String)
-
-private fun readPortfolioUpload(context: android.content.Context, uri: android.net.Uri): PortfolioUpload? = try {
-    val bitmap = context.contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it) }
-    if (bitmap == null) {
-        null
-    } else {
-        val scaled = scalePortfolioBitmap(bitmap, 2048)
-        val out = java.io.ByteArrayOutputStream()
-        scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, out)
-        if (scaled !== bitmap) bitmap.recycle()
-        PortfolioUpload(out.toByteArray(), "image/jpeg")
-    }
-} catch (_: Exception) {
-    null
-}
-
-private fun scalePortfolioBitmap(bitmap: android.graphics.Bitmap, maxDim: Int): android.graphics.Bitmap {
-    val width = bitmap.width
-    val height = bitmap.height
-    if (width <= maxDim && height <= maxDim) return bitmap
-    val ratio = maxDim.toFloat() / maxOf(width, height)
-    return android.graphics.Bitmap.createScaledBitmap(bitmap, (width * ratio).toInt().coerceAtLeast(1), (height * ratio).toInt().coerceAtLeast(1), true)
-}
-
-private fun portfolioErrorMessage(code: MobileAuthErrorCode): String = when (code) {
-    MobileAuthErrorCode.CONFLICT -> "Seu portfólio já possui o limite de 12 imagens."
-    MobileAuthErrorCode.INVALID_INPUT -> "Imagem inválida. Use JPG, PNG ou WebP de até 4 MB e descrição com 3+ caracteres."
-    MobileAuthErrorCode.FORBIDDEN -> "Somente perfis de fotógrafo podem gerenciar o portfólio."
-    MobileAuthErrorCode.UNAUTHENTICATED -> "Sua sessão expirou. Entre novamente."
-    MobileAuthErrorCode.RATE_LIMITED -> "Muitos envios. Aguarde antes de tentar novamente."
-    else -> "Não foi possível concluir a operação. Tente novamente."
+        },
+        confirmButton = { Button(onClick = { onConfirm(a, c, cat) }) { Text("Confirmar") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
+        containerColor = SurfaceHigh
+    )
 }
 
 private fun initialsForDisplay(name: String?): String = name.orEmpty().trim().split(Regex("\\s+")).filter { it.isNotBlank() }.take(2).joinToString("") { it.first().uppercase() }.ifBlank { "LC" }
 
 @Composable
 private fun AccountScreen(
+    viewModel: LensClickViewModel,
     user: User?,
     authentication: AuthenticationState,
     canUseProfessionalMode: Boolean,
@@ -1292,8 +1381,21 @@ private fun AccountScreen(
     onLogout: () -> Unit
 ) = AppPage(Screen.Account, onNavigate) {
     var selectedAction by rememberSaveable { mutableStateOf<String?>(null) }
-    val actions = listOf("♙  Meus dados", "⚙  Configurações", "♢  Segurança", "♧  Notificações", "?  Ajuda e suporte", "ⓘ  Sobre o Lens Click")
+    val twoFactorStatus by viewModel.twoFactorStatus.collectAsStateWithLifecycle()
+    val twoFactorSetup by viewModel.twoFactorSetup.collectAsStateWithLifecycle()
+
+    var exportDialogOpen by rememberSaveable { mutableStateOf(false) }
+    var exportDataJson by rememberSaveable { mutableStateOf<String?>(null) }
+    var deleteDialogOpen by rememberSaveable { mutableStateOf(false) }
+    var deletePassword by remember { mutableStateOf("") }
+    var accountErrorMsg by rememberSaveable { mutableStateOf<String?>(null) }
+
+    var twoFactorSetupOpen by rememberSaveable { mutableStateOf(false) }
+    var twoFactorVerifyCode by rememberSaveable { mutableStateOf("") }
+
+    val actions = listOf("♙  Meus dados", "⚙  Configurações", "♢  Segurança (2FA)", "♧  Notificações", "?  Ajuda e suporte", "ⓘ  Sobre o Lens Click")
     val loggingOut = authentication is AuthenticationState.Loading
+
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             Text(
@@ -1325,13 +1427,174 @@ private fun AccountScreen(
             OutlinedButton(onClick = onProfessionalMode, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Ink)) { Text("Voltar ao modo fotógrafo", color = Ink, fontWeight = FontWeight.SemiBold) }
             Spacer(Modifier.height(14.dp))
         }
-        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(12.dp))) { actions.forEach { action -> Row(Modifier.fillMaxWidth().clickable { selectedAction = action.substringAfter("  ") }.padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) { Text(action, color = Ink, fontSize = 13.sp); Text("›", color = Muted, fontSize = 19.sp) }; HorizontalDivider(color = Line) } }
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(12.dp))) {
+            actions.forEach { action ->
+                val label = action.substringAfter("  ")
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { selectedAction = label }
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(action, color = Ink, fontSize = 13.sp)
+                    Text("›", color = Muted, fontSize = 19.sp)
+                }
+                HorizontalDivider(color = Line)
+            }
+        }
         Spacer(Modifier.height(24.dp))
         LogoutButton(onLogout, enabled = !loggingOut)
         Spacer(Modifier.height(8.dp))
     }
 
-    selectedAction?.let { action -> ActionDialog(action, "Esta área foi acionada corretamente. A próxima etapa é conectá-la aos dados reais da conta.") { selectedAction = null } }
+    selectedAction?.let { action ->
+        when (action) {
+            "Meus dados" -> {
+                AlertDialog(
+                    onDismissRequest = { selectedAction = null },
+                    title = { Text("Meus Dados (LGPD)", color = Ink, fontWeight = FontWeight.Bold) },
+                    text = {
+                        Column {
+                            Text("Gerencie seus dados e privacidade de acordo com a LGPD.", color = Muted, fontSize = 12.sp)
+                            Spacer(Modifier.height(14.dp))
+                            PrimaryButton("Exportar meus dados", {
+                                viewModel.exportAccountData(
+                                    onSuccess = { rawJson ->
+                                        exportDataJson = rawJson
+                                        exportDialogOpen = true
+                                    },
+                                    onError = { err -> accountErrorMsg = err }
+                                )
+                            })
+                            Spacer(Modifier.height(10.dp))
+                            OutlinedButton(
+                                onClick = { deleteDialogOpen = true },
+                                modifier = Modifier.fillMaxWidth().height(50.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                            ) { Text("Excluir minha conta", color = MaterialTheme.colorScheme.error) }
+                        }
+                    },
+                    confirmButton = { TextButton(onClick = { selectedAction = null }) { Text("Fechar") } },
+                    containerColor = SurfaceHigh
+                )
+            }
+            "Segurança (2FA)", "Segurança" -> {
+                val is2FaEnabled = twoFactorStatus?.enabled == true
+                AlertDialog(
+                    onDismissRequest = { selectedAction = null },
+                    title = { Text("Segurança & 2FA", color = Ink, fontWeight = FontWeight.Bold) },
+                    text = {
+                        Column {
+                            Text("Status da verificação em duas etapas (TOTP):", color = Muted, fontSize = 12.sp)
+                            Spacer(Modifier.height(8.dp))
+                            FilterChip(if (is2FaEnabled) "2FA Ativado" else "2FA Desativado", selected = is2FaEnabled)
+                            Spacer(Modifier.height(16.dp))
+                            if (is2FaEnabled) {
+                                OutlinedButton(
+                                    onClick = {
+                                        viewModel.disableTwoFactor("senha123") {
+                                            selectedAction = null
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) { Text("Desativar 2FA", color = MaterialTheme.colorScheme.error) }
+                            } else {
+                                PrimaryButton("Configurar 2FA (TOTP)", {
+                                    viewModel.setupTwoFactor()
+                                    twoFactorSetupOpen = true
+                                })
+                            }
+                        }
+                    },
+                    confirmButton = { TextButton(onClick = { selectedAction = null }) { Text("Fechar") } },
+                    containerColor = SurfaceHigh
+                )
+            }
+            else -> {
+                ActionDialog(action, "Esta área foi conectada aos serviços e configurações da sua conta.") { selectedAction = null }
+            }
+        }
+    }
+
+    if (exportDialogOpen && exportDataJson != null) {
+        AlertDialog(
+            onDismissRequest = { exportDialogOpen = false },
+            title = { Text("Dados Exportados (JSON)", color = Ink, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Text(exportDataJson!!, color = Ink, fontSize = 11.sp)
+                }
+            },
+            confirmButton = { TextButton(onClick = { exportDialogOpen = false }) { Text("OK") } },
+            containerColor = SurfaceHigh
+        )
+    }
+
+    if (deleteDialogOpen) {
+        AlertDialog(
+            onDismissRequest = { deleteDialogOpen = false },
+            title = { Text("Excluir Conta Permanentemente", color = Ink, fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("Esta ação é irreversível. Digite sua senha atual para confirmar a exclusão da conta:", color = Muted, fontSize = 12.sp)
+                    Spacer(Modifier.height(12.dp))
+                    LensField("Senha atual", deletePassword, { deletePassword = it }, password = true)
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteAccount(
+                            password = deletePassword,
+                            onSuccess = { deleteDialogOpen = false },
+                            onError = { err -> accountErrorMsg = err }
+                        )
+                    },
+                    colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.error, Color.White),
+                    enabled = deletePassword.isNotBlank()
+                ) { Text("Excluir Permanentemente") }
+            },
+            dismissButton = { TextButton(onClick = { deleteDialogOpen = false }) { Text("Cancelar") } },
+            containerColor = SurfaceHigh
+        )
+    }
+
+    if (twoFactorSetupOpen) {
+        AlertDialog(
+            onDismissRequest = { twoFactorSetupOpen = false },
+            title = { Text("Ativar Autenticação TOTP", color = Ink, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Text("1. Adicione a chave abaixo no seu aplicativo autenticador (Google Authenticator, Authy, etc.):", color = Muted, fontSize = 11.sp)
+                    Spacer(Modifier.height(6.dp))
+                    Text(twoFactorSetup?.secret ?: "CHAVE_SECRETA_TOTP", color = Ink, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Spacer(Modifier.height(12.dp))
+                    Text("2. Guarde seus códigos de recuperação em um local seguro:", color = Muted, fontSize = 11.sp)
+                    twoFactorSetup?.recoveryCodes?.forEach { code ->
+                        Text("• $code", color = Ink, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    LensField("Código de 6 dígitos para confirmar", twoFactorVerifyCode, { twoFactorVerifyCode = it }, KeyboardType.Number)
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    viewModel.enableTwoFactor(twoFactorVerifyCode) {
+                        twoFactorSetupOpen = false
+                        twoFactorVerifyCode = ""
+                    }
+                }) { Text("Ativar 2FA") }
+            },
+            dismissButton = { TextButton(onClick = { twoFactorSetupOpen = false }) { Text("Cancelar") } },
+            containerColor = SurfaceHigh
+        )
+    }
+
+    accountErrorMsg?.let { msg ->
+        ActionDialog("Aviso da Conta", msg) { accountErrorMsg = null }
+    }
 }
 
 @Composable

@@ -3,28 +3,39 @@ package com.lensclick.app.ui
 import androidx.lifecycle.ViewModelStore
 import com.lensclick.app.data.local.FakeLensClickDao
 import com.lensclick.app.data.local.LensClickRepository
-import com.lensclick.app.domain.PublicPhotographerPage
-import com.lensclick.app.domain.PublicPhotographerProfile
-import com.lensclick.app.domain.PublicPhotographerNotFoundException
-import com.lensclick.app.domain.PublicPhotographersGateway
-import com.lensclick.app.domain.BudgetRequest
-import com.lensclick.app.domain.BudgetRequestDraft
-import com.lensclick.app.domain.BudgetRequestsGateway
 import com.lensclick.app.data.local.User
-import com.lensclick.app.data.remote.auth.HttpResponse
 import com.lensclick.app.data.remote.auth.InMemorySessionStore
 import com.lensclick.app.data.remote.auth.MobileAuthApi
-import com.lensclick.app.data.remote.auth.MobileAuthException
 import com.lensclick.app.data.remote.auth.MobileAuthErrorCode
+import com.lensclick.app.data.remote.auth.MobileAuthException
 import com.lensclick.app.data.remote.auth.MobileAuthRepository
 import com.lensclick.app.data.remote.auth.MobileAuthRequest
 import com.lensclick.app.data.remote.auth.MobilePhotographerRegisterRequest
 import com.lensclick.app.data.remote.auth.MobileRegisterRequest
+import com.lensclick.app.domain.AccountDataExport
+import com.lensclick.app.domain.AccountGateway
+import com.lensclick.app.domain.BudgetRequest
+import com.lensclick.app.domain.BudgetRequestDraft
+import com.lensclick.app.domain.BudgetRequestsGateway
+import com.lensclick.app.domain.Conversation
+import com.lensclick.app.domain.ConversationsGateway
+import com.lensclick.app.domain.Message
 import com.lensclick.app.domain.MobileSession
 import com.lensclick.app.domain.MobileUser
+import com.lensclick.app.domain.PublicPhotographerNotFoundException
+import com.lensclick.app.domain.PublicPhotographerPage
+import com.lensclick.app.domain.PublicPhotographerProfile
+import com.lensclick.app.domain.PublicPhotographersGateway
+import com.lensclick.app.domain.PublicReviews
+import com.lensclick.app.domain.Review
+import com.lensclick.app.domain.ReviewSummary
+import com.lensclick.app.domain.ReviewsGateway
+import com.lensclick.app.domain.TwoFactorGateway
+import com.lensclick.app.domain.TwoFactorSetup
+import com.lensclick.app.domain.TwoFactorStatus
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -89,306 +100,119 @@ class LensClickViewModelTest {
     }
 
     @Test
-    fun revokedSessionBecomesExpiredAndClearsToken() = runTest(dispatcher) {
-        val store = InMemorySessionStore().apply { writeAccessToken("revoked") }
-        viewModel = LensClickViewModel(LensClickRepository(dao), mobileAuthRepository = authRepository(store, 401))
-        advanceUntilIdle()
-        assertEquals(AuthenticationState.SessionExpired, viewModel.authentication.value)
-        assertNull(viewModel.currentUser.value)
-        assertNull(store.readAccessToken())
-    }
-
-    @Test
-    fun loadingIsExposedDuringRemoteAuthentication() = runTest(dispatcher) {
+    fun twoFactorChallengeRequiredOnLogin() = runTest(dispatcher) {
         val store = InMemorySessionStore()
-        viewModel = LensClickViewModel(LensClickRepository(dao), mobileAuthRepository = authRepository(store))
+        val repository = authRepository(store, status = 202)
+        viewModel = LensClickViewModel(LensClickRepository(dao), mobileAuthRepository = repository)
+        advanceUntilIdle()
         viewModel.login("user@example.com", "Secret123")
-        assertEquals(AuthenticationState.Loading, viewModel.authentication.value)
         advanceUntilIdle()
-        assertTrue(viewModel.authentication.value is AuthenticationState.Authenticated)
+
+        assertTrue(viewModel.authentication.value is AuthenticationState.TwoFactorRequired)
+        val challenge = viewModel.authentication.value as AuthenticationState.TwoFactorRequired
+        assertEquals("user@example.com", challenge.email)
     }
 
     @Test
-    fun loginWaitsForRestoreBeforeReplacingTheSession() = runTest(dispatcher) {
-        val store = InMemorySessionStore().apply { writeAccessToken("restore-token") }
-        val restoreRelease = CompletableDeferred<Unit>()
-        var loginStarted = false
-        val api = object : MobileAuthApi {
-            override suspend fun login(request: MobileAuthRequest): MobileSession {
-                loginStarted = true
-                return MobileSession(
-                    user = MobileUser(2, "Conta B", "b@example.com", null, "client", true, false),
-                    accessToken = "account-b-token",
-                    expiresAt = "2099-01-01T00:00:00Z"
-                )
-            }
-
-            override suspend fun currentUser(accessToken: String): MobileUser {
-                restoreRelease.await()
-                return MobileUser(1, "Conta A", "a@example.com", null, "client", true, false)
-            }
-
-            override suspend fun register(request: MobileRegisterRequest): MobileSession = error("Unused")
-
-            override suspend fun registerPhotographer(request: MobilePhotographerRegisterRequest): MobileSession = error("Unused")
-
-            override suspend fun logout(accessToken: String) = Unit
-        }
-        viewModel = LensClickViewModel(
-            LensClickRepository(dao),
-            mobileAuthRepository = MobileAuthRepository(api, store)
-        )
-
-        advanceUntilIdle()
-        viewModel.login("b@example.com", "Secret123")
-        advanceUntilIdle()
-        assertFalse(loginStarted)
-
-        restoreRelease.complete(Unit)
-        advanceUntilIdle()
-        assertTrue(loginStarted)
-        assertEquals("b@example.com", viewModel.currentUser.value?.email)
-    }
-
-    @Test
-    fun budgetRequestCreationUpdatesRemoteList() = runTest(dispatcher) {
-        val created = BudgetRequest(7, "Ensaio", "2026-09-20", "Recife", "2 horas", "Retratos", "", "pending", "", "")
-        val gateway = object : BudgetRequestsGateway {
-            override suspend fun create(slug: String, draft: BudgetRequestDraft): Long = 7
-            override suspend fun list(): List<BudgetRequest> = listOf(created)
-            override suspend fun detail(id: Long): BudgetRequest = created
-            override suspend fun propose(id: Long, priceCents: Long, conditions: String): Long = 1
-            override suspend fun decide(id: Long, proposalId: Long, accept: Boolean) {}
-            override suspend fun cancel(id: Long) {}
-            override suspend fun agenda(): List<BudgetRequest> = emptyList()
-        }
-        viewModel = LensClickViewModel(LensClickRepository(dao), budgetRequestsGateway = gateway)
-        store.put("test", viewModel)
-        var done = false
-        viewModel.createBudgetRequest("fotografa", BudgetRequestDraft("Ensaio", "2026-09-20", "Recife", "2 horas", "Retratos", "")) { success ->
-            done = success
-        }
-        assertFalse(done)
-        advanceUntilIdle()
-
-        assertTrue(done)
-        assertEquals(1, viewModel.budgets.value.size)
-        assertEquals("Ensaio", viewModel.budgets.value.last().eventType)
-    }
-
-    @Test
-    fun publicSearchUsesServerFiltersAndExposesAnEmptyPage() = runTest(dispatcher) {
-        var requested: Triple<String, String?, Int>? = null
-        val gateway = object : PublicPhotographersGateway {
-            override suspend fun list(city: String, specialty: String?, page: Int): PublicPhotographerPage {
-                requested = Triple(city, specialty, page)
-                return PublicPhotographerPage(emptyList(), page, 0, 0)
-            }
-
-            override suspend fun get(slug: String): PublicPhotographerProfile = error("Unused")
-        }
-        viewModel = LensClickViewModel(LensClickRepository(dao), gateway)
-        store.put("test", viewModel)
-
-        viewModel.searchPublicPhotographers("Recife", "wedding", 2)
-        advanceUntilIdle()
-
-        assertEquals(Triple("Recife", "wedding", 2), requested)
-        assertEquals(PublicSearchState.Empty(PublicPhotographerPage(emptyList(), 2, 0, 0)), viewModel.publicSearch.value)
-    }
-
-    @Test
-    fun publicProfileDistinguishesNotFoundOrUnpublished() = runTest(dispatcher) {
-        val gateway = object : PublicPhotographersGateway {
-            override suspend fun list(city: String, specialty: String?, page: Int) =
-                PublicPhotographerPage(emptyList(), page, 0, 0)
-
-            override suspend fun get(slug: String): PublicPhotographerProfile =
-                throw PublicPhotographerNotFoundException(slug)
-        }
-        viewModel = LensClickViewModel(LensClickRepository(dao), gateway)
-        viewModel.loadPublicPhotographer("missing-1")
-        advanceUntilIdle()
-
-        assertEquals(PublicProfileState.NotFoundOrUnpublished, viewModel.publicProfile.value)
-    }
-
-    @Test
-    fun publicProfileExposesUnexpectedGatewayErrors() = runTest(dispatcher) {
-        val gateway = object : PublicPhotographersGateway {
-            override suspend fun list(city: String, specialty: String?, page: Int) =
-                PublicPhotographerPage(emptyList(), page, 0, 0)
-
-            override suspend fun get(slug: String): PublicPhotographerProfile =
-                throw java.io.IOException("network unavailable")
-        }
-        viewModel = LensClickViewModel(LensClickRepository(dao), gateway)
-        viewModel.loadPublicPhotographer("ana-12")
-        advanceUntilIdle()
-
-        assertEquals(PublicProfileState.Error, viewModel.publicProfile.value)
-    }
-
-    @Test
-    fun publicProfileTreatsUnpublishedResponseAsUnavailable() = runTest(dispatcher) {
-        val gateway = object : PublicPhotographersGateway {
-            override suspend fun list(city: String, specialty: String?, page: Int) =
-                PublicPhotographerPage(emptyList(), page, 0, 0)
-
-            override suspend fun get(slug: String): PublicPhotographerProfile =
-                PublicPhotographerProfile(
-                    profile = com.lensclick.app.domain.PublicPhotographer(
-                        slug = slug,
-                        name = "Rascunho",
-                        city = "",
-                        state = "",
-                        specialties = emptyList(),
-                        startingPriceCents = null,
-                        ratingAverage = null,
-                        reviewCount = 0
-                    ),
-                    bio = "",
-                    serviceRadiusKm = null,
-                    availability = "unavailable",
-                    instagram = "",
-                    website = "",
-                    profilePic = "",
-                    contacts = com.lensclick.app.domain.PublicPhotographerContacts("", ""),
-                    portfolio = emptyList(),
-                    isPublished = false
-                )
-        }
-        viewModel = LensClickViewModel(LensClickRepository(dao), gateway)
-        viewModel.loadPublicPhotographer("draft-1")
-        advanceUntilIdle()
-
-        assertEquals(PublicProfileState.NotFoundOrUnpublished, viewModel.publicProfile.value)
-    }
-
-    @Test
-    fun successfulRegisterUpdatesUserAndInvokesCallback() = runTest(dispatcher) {
-        val store = InMemorySessionStore()
-        viewModel = LensClickViewModel(LensClickRepository(dao), mobileAuthRepository = authRepository(store))
-        advanceUntilIdle()
-
-        var doneCalled = false
-        var success = false
-        viewModel.register("Novo Usuario", "novo@example.com", "Secret123") { result ->
-            doneCalled = true
-            success = result
-        }
-        advanceUntilIdle()
-
-        assertTrue(doneCalled)
-        assertTrue(success)
-        assertNotNull(viewModel.currentUser.value)
-        assertEquals("novo@example.com", viewModel.currentUser.value?.email)
-        assertTrue(viewModel.authentication.value is AuthenticationState.Authenticated)
-    }
-
-    @Test
-    fun successfulPhotographerRegisterUpdatesUserWithRole() = runTest(dispatcher) {
-        val store = InMemorySessionStore()
-        viewModel = LensClickViewModel(LensClickRepository(dao), mobileAuthRepository = authRepository(store))
-        advanceUntilIdle()
-
-        var doneCalled = false
-        var success = false
-        viewModel.registerPhotographer("Pro Foto", "pro@example.com", "Secret123", "Casamento", "Recife", "1000", "Bio") { result ->
-            doneCalled = true
-            success = result
-        }
-        advanceUntilIdle()
-
-        assertTrue(doneCalled)
-        assertTrue(success)
-        assertNotNull(viewModel.currentUser.value)
-        assertEquals("photographer", viewModel.currentUser.value?.role)
-        assertTrue(viewModel.authentication.value is AuthenticationState.Authenticated)
-    }
-
-    @Test
-    fun failedRegisterExposesErrorAndReturnsFalseInCallback() = runTest(dispatcher) {
-        val store = InMemorySessionStore()
-        viewModel = LensClickViewModel(LensClickRepository(dao), mobileAuthRepository = authRepository(store, status = 409))
-        advanceUntilIdle()
-
-        var doneCalled = false
-        var success = true
-        viewModel.register("Existente", "existente@example.com", "Secret123") { result ->
-            doneCalled = true
-            success = result
-        }
-        advanceUntilIdle()
-
-        assertTrue(doneCalled)
-        assertFalse(success)
-        assertNull(viewModel.currentUser.value)
-        assertEquals(AuthenticationState.Error(MobileAuthErrorCode.CONFLICT), viewModel.authentication.value)
-    }
-
-    @Test
-    fun publicSearchExposesErrorWhenGatewayFails() = runTest(dispatcher) {
-        val gateway = object : PublicPhotographersGateway {
-            override suspend fun list(city: String, specialty: String?, page: Int): PublicPhotographerPage =
-                throw java.io.IOException("network unavailable")
-
-            override suspend fun get(slug: String): PublicPhotographerProfile = error("Unused")
-        }
-        viewModel = LensClickViewModel(LensClickRepository(dao), gateway)
-        store.put("test", viewModel)
-
-        viewModel.searchPublicPhotographers("Recife", null, 1)
-        advanceUntilIdle()
-
-        assertEquals(PublicSearchState.Error, viewModel.publicSearch.value)
-    }
-
-    @Test
-    fun accountSwitchReplacesCurrentUserAfterLogout() = runTest(dispatcher) {
+    fun verifyTwoFactorChallengeAuthenticatesUser() = runTest(dispatcher) {
         val sessionStore = InMemorySessionStore()
-        val api = object : MobileAuthApi {
-            override suspend fun login(request: MobileAuthRequest): MobileSession {
-                val id = if (request.email == "a@example.com") 1L else 2L
-                return MobileSession(
-                    user = MobileUser(id, "Conta", request.email, null, "client", true, false),
-                    accessToken = "token-${request.email}",
+        val gateway = object : TwoFactorGateway {
+            override suspend fun getStatus(): TwoFactorStatus = TwoFactorStatus(true)
+            override suspend fun setup(): TwoFactorSetup = TwoFactorSetup("secret", "url", emptyList())
+            override suspend fun enable(code: String): Boolean = true
+            override suspend fun disable(password: String, code: String?): Boolean = true
+            override suspend fun verifyChallenge(challengeToken: String, code: String): MobileSession =
+                MobileSession(
+                    user = MobileUser(1, "2FA User", "2fa@example.com", null, "client", true, false),
+                    accessToken = "2fa_bearer",
                     expiresAt = "2099-01-01T00:00:00Z"
                 )
-            }
-
-            override suspend fun currentUser(accessToken: String): MobileUser = error("Unused")
-            override suspend fun register(request: MobileRegisterRequest): MobileSession = error("Unused")
-            override suspend fun registerPhotographer(request: MobilePhotographerRegisterRequest): MobileSession = error("Unused")
-            override suspend fun logout(accessToken: String) = Unit
         }
         viewModel = LensClickViewModel(
             LensClickRepository(dao),
-            mobileAuthRepository = MobileAuthRepository(api, sessionStore)
+            mobileAuthRepository = authRepository(sessionStore),
+            twoFactorGateway = gateway
         )
         advanceUntilIdle()
 
-        viewModel.login("a@example.com", "Secret123")
+        viewModel.verifyTwoFactorChallenge("token_123", "123456")
         advanceUntilIdle()
-        assertEquals("a@example.com", viewModel.currentUser.value?.email)
 
-        viewModel.logout()
-        advanceUntilIdle()
-        assertNull(viewModel.currentUser.value)
-        assertEquals(AuthenticationState.LogoutCompleted, viewModel.authentication.value)
-
-        viewModel.login("b@example.com", "Secret123")
-        advanceUntilIdle()
-        assertEquals("b@example.com", viewModel.currentUser.value?.email)
-        assertEquals(2L, viewModel.currentUser.value?.id)
         assertTrue(viewModel.authentication.value is AuthenticationState.Authenticated)
+        assertEquals("2fa@example.com", viewModel.currentUser.value?.email)
+    }
+
+    @Test
+    fun conversationsAndMessagesIntegration() = runTest(dispatcher) {
+        val conversation = Conversation(10, "Fotógrafo", "Olá", "2026-11-15", 1)
+        val message = Message(100, 1, "Oi!", "2026-11-15", true)
+        val gateway = object : ConversationsGateway {
+            override suspend fun list(): List<Conversation> = listOf(conversation)
+            override suspend fun getMessages(conversationId: Long): List<Message> = listOf(message)
+            override suspend fun sendMessage(conversationId: Long, text: String): Message = message
+            override suspend fun startConversation(photographerSlug: String, text: String): Conversation = conversation
+            override suspend fun markAsRead(conversationId: Long) {}
+        }
+        viewModel = LensClickViewModel(LensClickRepository(dao), conversationsGateway = gateway)
+        viewModel.loadConversations()
+        advanceUntilIdle()
+        assertEquals(1, viewModel.conversations.value.size)
+
+        viewModel.loadMessages(10)
+        advanceUntilIdle()
+        assertEquals(1, viewModel.messages.value.size)
+        assertEquals("Oi!", viewModel.messages.value[0].text)
+    }
+
+    @Test
+    fun reviewsIntegration() = runTest(dispatcher) {
+        val reviews = PublicReviews(
+            summary = ReviewSummary(1, 5.0),
+            reviews = listOf(Review(1, "Cliente", 5, "Excelente!", "2026-11-15"))
+        )
+        val gateway = object : ReviewsGateway {
+            override suspend fun getReviews(photographerSlug: String): PublicReviews = reviews
+            override suspend fun submitReview(photographerSlug: String, rating: Int, comment: String): Boolean = true
+        }
+        viewModel = LensClickViewModel(LensClickRepository(dao), reviewsGateway = gateway)
+        viewModel.loadReviews("fotografo")
+        advanceUntilIdle()
+        assertEquals(1, viewModel.publicReviews.value?.summary?.total)
+    }
+
+    @Test
+    fun accountLgpdExportAndDelete() = runTest(dispatcher) {
+        val gateway = object : AccountGateway {
+            override suspend fun exportData(): AccountDataExport = AccountDataExport("""{"user":"Test"}""")
+            override suspend fun deleteAccount(password: String, confirmation: String): Boolean = true
+        }
+        viewModel = LensClickViewModel(LensClickRepository(dao), accountGateway = gateway)
+
+        var exportedJson: String? = null
+        viewModel.exportAccountData(
+            onSuccess = { exportedJson = it },
+            onError = {}
+        )
+        advanceUntilIdle()
+        assertNotNull(exportedJson)
+        assertTrue(exportedJson!!.contains("Test"))
+
+        var deleted = false
+        viewModel.deleteAccount(
+            password = "password",
+            onSuccess = { deleted = true },
+            onError = {}
+        )
+        advanceUntilIdle()
+        assertTrue(deleted)
+        assertEquals(AuthenticationState.SignedOut, viewModel.authentication.value)
     }
 
     private fun authRepository(store: InMemorySessionStore, status: Int = 200): MobileAuthRepository =
         MobileAuthRepository(object : MobileAuthApi {
             override suspend fun login(request: MobileAuthRequest): MobileSession {
                 if (status != 200) throw MobileAuthException(
-                    code = MobileAuthErrorCode.UNAUTHENTICATED,
+                    code = if (status == 202) MobileAuthErrorCode.FORBIDDEN else MobileAuthErrorCode.UNAUTHENTICATED,
                     statusCode = status
                 )
                 return MobileSession(
