@@ -31,7 +31,7 @@ class LensClickNavigationTest {
     }
 
     @Test fun backFromPublicDiscoveryReturnsToOnboarding() {
-        rule.onNodeWithText("Explorar fotógrafos").performClick()
+        rule.onNodeWithText("Explorar fotógrafos").performScrollTo().performClick()
         awaitText("Buscar Fotógrafos")
         rule.onNodeWithText("Entrar para usar sua conta").assertIsDisplayed()
         rule.waitForIdle()
@@ -41,11 +41,11 @@ class LensClickNavigationTest {
             Espresso.pressBack() // A primeira ação pode apenas fechar o teclado.
         }
         awaitText("Explorar fotógrafos")
-        rule.onNodeWithText("Explorar fotógrafos").assertIsDisplayed()
+        rule.onNodeWithText("Explorar fotógrafos").performScrollTo().assertIsDisplayed()
     }
 
     @Test fun loginStartsSignedOutAndDoesNotUseDemoCredentials() {
-        rule.onNodeWithText("Entrar").performClick()
+        rule.onNodeWithText("Entrar").performScrollTo().performClick()
         awaitText("Bem-vindo de volta!")
         rule.onNodeWithText("Bem-vindo de volta!").assertIsDisplayed()
         rule.onNodeWithContentDescription("E-mail").assertIsDisplayed()

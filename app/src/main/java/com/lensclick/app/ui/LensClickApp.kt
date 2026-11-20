@@ -258,20 +258,29 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
 @Composable private fun CompactLogo(sizeDp: Int = 34) { LogoAsset(sizeDp = sizeDp) }
 
 @Composable private fun OnboardingScreen(onStart: () -> Unit, onLogin: () -> Unit, onBrowse: () -> Unit) {
-    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
         Spacer(Modifier.height(16.dp))
         BrandMark()
-        Spacer(Modifier.weight(1f))
-        Photo(Modifier.fillMaxWidth().height(280.dp), R.drawable.card_portrait_outdoor)
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(16.dp))
+        Photo(Modifier.fillMaxWidth().height(200.dp), R.drawable.card_portrait_outdoor)
+        Spacer(Modifier.height(16.dp))
         Text("Encontre o fotógrafo ideal para o seu momento.", color = Ink, fontSize = 22.sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         Text("Conectamos clientes e fotógrafos profissionais com segurança e transparência.", color = Muted, fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(20.dp))
         PrimaryButton("Começar", onStart)
         Spacer(Modifier.height(8.dp))
         OutlinedButton(onClick = onBrowse, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Ink)) { Text("Explorar fotógrafos", color = Ink, fontWeight = FontWeight.SemiBold) }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(8.dp))
         CenterLink("Já tem uma conta?", "Entrar", onLogin)
+        Spacer(Modifier.height(16.dp))
     }
 }
 
@@ -490,7 +499,21 @@ private fun LogoutButton(onLogout: () -> Unit, enabled: Boolean = true) {
     }
 }
 
-@Composable private fun CenterLink(prefix: String, action: String, onClick: () -> Unit) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) { Text("$prefix ", color = Muted, fontSize = 12.sp); Text(action, color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable(onClick = onClick)) } }
+@Composable
+private fun CenterLink(prefix: String, action: String, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .sizeIn(minHeight = 48.dp)
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("$prefix ", color = Muted, fontSize = 12.sp)
+        Text(action, color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+    }
+}
 
 @Composable private fun ActionDialog(title: String, message: String, onDismiss: () -> Unit) {
     AlertDialog(onDismissRequest = onDismiss, title = { Text(title, color = Ink, fontWeight = FontWeight.Bold) }, text = { Text(message, color = Muted, fontSize = 13.sp) }, confirmButton = { TextButton(onClick = onDismiss) { Text("OK", color = Ink, fontWeight = FontWeight.Bold) } }, containerColor = SurfaceHigh)

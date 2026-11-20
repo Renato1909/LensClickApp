@@ -10,42 +10,25 @@
 - Aplicativo Android nativo em Kotlin e Jetpack Compose (módulo único `:app`).
 - Gradle 9.3.1, AGP 9.1.1, Kotlin 2.2.10, JDK 21.
 - `compileSdk`/`targetSdk` 36, `minSdk` 24, `applicationId`: `com.lensclick.app`.
-- Navegação declarativa por `Navigation Compose` cobrindo todas as telas.
-- Armazenamento de sessão seguro via Android Keystore; Room para cache sem credenciais (migração 2→3 removeu senhas).
-- **Integração de Recursos:**
-  - **Autenticação & Sessão:** Login, cadastro móvel, restauração via `/me`, logout e revogação via Bearer opaco.
-  - **Descoberta & Perfil Público:** Filtro de fotógrafos por cidade/especialidade e leitura de perfil público por `slug`.
-  - **Orçamentos, Propostas & Agenda:** Pedidos de orçamento (`/api/photographers/:slug/budget-requests`), envio/aceite de propostas, agenda profissional e favoritos integrados ao backend.
-  - **Conversas & Mensagens Remotas:** Integrado às rotas Bearer reais (`/api/account/conversations`, mensagens e envio).
-  - **Avaliações Verificadas:** Leitura de avaliações públicas e formulário de avaliação integrados às rotas de produção (`/api/photographers/:slug/reviews`).
-  - **LGPD (Exportação e Exclusão):** Exportação de dados (`GET /api/account/export`) e exclusão definitiva de conta (`DELETE /api/account` com confirmação "EXCLUIR" e senha) integradas.
-  - **2FA TOTP + Recuperação (ADR 002):** Estrutura completa de domain/gateway/ViewModel/UI no Android (desafio no login `AuthenticationState.TwoFactorRequired`, QR/URI, segredo e códigos de recuperação). Conexão com os endpoints reais pronta; backend em produção responde 403/404 pendente de deploy do Worker.
+- Navegação declarativa por `Navigation Compose`.
+- Sessão persistida de forma segura com Android Keystore; Room sem credenciais (migração 2→3 removeu senhas).
+- **Estado atual das integrações:**
+  - **Autenticação básica & Descoberta:** Login, cadastro móvel, restauração via `/me`, logout e descoberta por filtros/paginação operam contra o backend de produção.
+  - **Orçamentos, Propostas & Agenda:** Pedidos de orçamento, propostas, agenda e favoritos integrados ao backend (LensClick #153).
+  - **2FA TOTP (ADR 002):** Camada de domínio, gateway, desafio no login (`TwoFactorRequired`) e telas implementadas no app; testes de sondagem indicam que os endpoints em `/api/account/2fa/*` retornam 403/404 em produção, aguardando deploy do contrato no Worker backend.
+  - **Conversas, Avaliações & LGPD:** Gateways e telas implementados para conversas, avaliações e exportação/exclusão de conta (LGPD), porém pendentes de validação end-to-end em ambiente operacional e staging/dispositivo real.
 
 ## Fundação entregue e CI
 
 - **CI Android** em `.github/workflows/android.yml`:
-  - Build/lint/testes JVM (Ubuntu, JDK 21, SDK 36.1) com **85 testes JVM passando com 100% de sucesso**.
-  - Testes instrumentados em emuladores API 24 e 36 cobrindo fluxo de navegação, Keystore real e autenticação.
-  - Correção de seletores e semântica de UI integrados (commit `3ea7890`).
+  - Build, lint e 85 testes JVM passando com 100% de sucesso.
+  - Testes instrumentados cobrindo navegação (com rolagem em telas pequenas), Keystore e migração do Room.
 
-## Instruções para Geração do APK Release Assinado (Feira Tecnológica)
+## Geração do APK Release Assinado (Sideload para Feira)
 
-1. Para a demo/feira tecnológica, o APK release deve ser gerado via sideload apontando para a API de produção: `https://lensclick.renato-aparecido-business.workers.dev`.
-2. A Keystore e senhas de release **NUNCA** devem ser commitadas no repositório.
-3. Para gerar o APK assinado via GUI do Android Studio:
-   - Menu: **Build → Generate Signed Bundle / APK...**
-   - Selecione **APK** → Escolha/Crie uma Keystore fora da pasta do projeto (ex.: `~/keystores/release.jks`).
-   - Preencha alias e senhas, selecione a variante **release** (`:app:release`) e clique em **Create**.
-   - O artefato final assinado estará em `app/build/outputs/apk/release/app-release.apk`.
-4. Alternativamente via linha de comando (Gradle):
-   ```bash
-   ./gradlew :app:assembleRelease -Plensclick.releaseKeystorePath=/caminho/fora/do/repo/release.jks -Plensclick.releaseStorePassword=... -Plensclick.releaseKeyAlias=... -Plensclick.releaseKeyPassword=...
-   ```
-
-## Próximos passos
-
-1. Acompanhar a liberação/deploy do 2FA no backend (`Renato1909/LensClick`).
-2. Validar no dispositivo físico de teste a instalação do APK release via sideload.
-3. Reativar domínios e conta Google Play quando a publicação pública for iniciada.
+1. O projeto compila a variante `release` limpa (`:app:assembleRelease`), gerando `app-release-unsigned.apk`.
+2. Para assinar o APK para sideload (sem versionar chaves ou senhas no Git):
+   - Via assistente do Android Studio: **Build → Generate Signed Bundle / APK...** (criando ou selecionando a Keystore fora da pasta do projeto).
+   - Via Gradle CLI: fornecendo as propriedades `lensclick.releaseKeystorePath`, `lensclick.releaseStorePassword`, `lensclick.releaseKeyAlias` e `lensclick.releaseKeyPassword`.
 
 **Atualizado em:** 15 de novembro de 2026.
