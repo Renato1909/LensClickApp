@@ -32,12 +32,12 @@ class LensClickNavigationTest {
 
     @Test fun backFromPublicDiscoveryReturnsToOnboarding() {
         rule.onNodeWithText("Explorar fotógrafos").performClick()
-        awaitText("Descobrir")
+        awaitText("Buscar Fotógrafos")
         rule.onNodeWithText("Entrar para usar sua conta").assertIsDisplayed()
         rule.waitForIdle()
         Espresso.pressBack()
         rule.waitForIdle()
-        if (rule.onAllNodes(hasText("Descobrir")).fetchSemanticsNodes().isNotEmpty()) {
+        if (rule.onAllNodes(hasText("Buscar Fotógrafos")).fetchSemanticsNodes().isNotEmpty()) {
             Espresso.pressBack() // A primeira ação pode apenas fechar o teclado.
         }
         awaitText("Explorar fotógrafos")

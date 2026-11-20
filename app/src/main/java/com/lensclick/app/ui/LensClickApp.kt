@@ -269,7 +269,7 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
         Spacer(Modifier.weight(1f))
         PrimaryButton("Começar", onStart)
         Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = onBrowse, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Ink)) { Text("Explorar sem conta", color = Ink, fontWeight = FontWeight.SemiBold) }
+        OutlinedButton(onClick = onBrowse, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Ink)) { Text("Explorar fotógrafos", color = Ink, fontWeight = FontWeight.SemiBold) }
         Spacer(Modifier.height(12.dp))
         CenterLink("Já tem uma conta?", "Entrar", onLogin)
     }
@@ -467,7 +467,7 @@ private fun PhotographerSignUpScreen(
 private fun LensField(label: String, value: String, onValue: (String) -> Unit, type: KeyboardType = KeyboardType.Text, password: Boolean = false, singleLine: Boolean = true, maxLines: Int = 1) {
     Column(Modifier.fillMaxWidth()) {
         Text(label, color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(bottom = 5.dp))
-        OutlinedTextField(value = value, onValueChange = onValue, modifier = Modifier.fillMaxWidth(), singleLine = singleLine, maxLines = maxLines, keyboardOptions = KeyboardOptions(keyboardType = type), visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None, shape = RoundedCornerShape(14.dp), colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Ink, unfocusedTextColor = Ink, focusedContainerColor = SurfaceHigh, unfocusedContainerColor = SurfaceHigh, focusedBorderColor = Ink, unfocusedBorderColor = Line, cursorColor = Ink))
+        OutlinedTextField(value = value, onValueChange = onValue, modifier = Modifier.fillMaxWidth().semantics { contentDescription = label }, singleLine = singleLine, maxLines = maxLines, keyboardOptions = KeyboardOptions(keyboardType = type), visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None, shape = RoundedCornerShape(14.dp), colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Ink, unfocusedTextColor = Ink, focusedContainerColor = SurfaceHigh, unfocusedContainerColor = SurfaceHigh, focusedBorderColor = Ink, unfocusedBorderColor = Line, cursorColor = Ink))
     }
 }
 
@@ -597,6 +597,23 @@ private fun SearchScreen(viewModel: LensClickViewModel, guest: Boolean, onNaviga
 
     Column(Modifier.padding(top = 12.dp)) {
         Text("Buscar Fotógrafos", color = Ink, fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(20.dp, 8.dp))
+        if (guest) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 4.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(SurfaceHigh)
+                    .border(1.dp, Line, RoundedCornerShape(12.dp))
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Entrar para usar sua conta", color = Muted, fontSize = 12.sp)
+                Text("Modo visitante", color = Gold, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            }
+            Spacer(Modifier.height(8.dp))
+        }
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },
