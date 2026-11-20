@@ -1432,6 +1432,8 @@ private fun AccountScreen(
 
     var twoFactorSetupOpen by rememberSaveable { mutableStateOf(false) }
     var twoFactorVerifyCode by rememberSaveable { mutableStateOf("") }
+    var disable2FaOpen by rememberSaveable { mutableStateOf(false) }
+    var disable2FaPassword by remember { mutableStateOf("") }
 
     val actions = listOf("♙  Meus dados", "⚙  Configurações", "♢  Segurança (2FA)", "♧  Notificações", "?  Ajuda e suporte", "ⓘ  Sobre o Lens Click")
     val loggingOut = authentication is AuthenticationState.Loading
@@ -1534,9 +1536,7 @@ private fun AccountScreen(
                             if (is2FaEnabled) {
                                 OutlinedButton(
                                     onClick = {
-                                        viewModel.disableTwoFactor("senha123") {
-                                            selectedAction = null
-                                        }
+                                        disable2FaOpen = true
                                     },
                                     modifier = Modifier.fillMaxWidth()
                                 ) { Text("Desativar 2FA", color = MaterialTheme.colorScheme.error) }
@@ -1628,6 +1628,39 @@ private fun AccountScreen(
                 }) { Text("Ativar 2FA") }
             },
             dismissButton = { TextButton(onClick = { twoFactorSetupOpen = false }) { Text("Cancelar") } },
+            containerColor = SurfaceHigh
+        )
+    }
+
+    if (disable2FaOpen) {
+        AlertDialog(
+            onDismissRequest = { disable2FaOpen = false },
+            title = { Text("Desativar 2FA", color = Ink, fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("Digite sua senha atual para confirmar a desativação da verificação em duas etapas:", color = Muted, fontSize = 12.sp)
+                    Spacer(Modifier.height(12.dp))
+                    LensField("Senha atual", disable2FaPassword, { disable2FaPassword = it }, password = true)
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.disableTwoFactor(disable2FaPassword) { ok ->
+                            if (ok) {
+                                disable2FaOpen = false
+                                disable2FaPassword = ""
+                                selectedAction = null
+                            } else {
+                                accountErrorMsg = "Falha ao desativar 2FA. Verifique sua senha."
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.error, Color.White),
+                    enabled = disable2FaPassword.isNotBlank()
+                ) { Text("Confirmar Desativação") }
+            },
+            dismissButton = { TextButton(onClick = { disable2FaOpen = false }) { Text("Cancelar") } },
             containerColor = SurfaceHigh
         )
     }

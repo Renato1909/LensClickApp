@@ -217,23 +217,23 @@ class LensClickViewModel(
             authenticationMutex.withLock {
                 _authentication.value = AuthenticationState.Loading
                 try {
-                    val session = requireMobileAuthRepository().login(
+                    when (val result = requireMobileAuthRepository().login(
                         email = email,
                         password = password,
                         deviceName = "Android",
                         appVersion = BuildConfig.VERSION_NAME
-                    )
-                    setAuthenticated(session.user)
-                } catch (error: MobileAuthException) {
-                    if (error.code == MobileAuthErrorCode.FORBIDDEN && error.statusCode == 202) {
-                        _authentication.value = AuthenticationState.TwoFactorRequired(
-                            email = email,
-                            challengeToken = "challenge_" + System.currentTimeMillis()
-                        )
-                    } else {
-                        _currentUser.value = null
-                        _authentication.value = AuthenticationState.Error(error.code)
+                    )) {
+                        is com.lensclick.app.data.remote.auth.MobileLoginResult.Success -> setAuthenticated(result.session.user)
+                        is com.lensclick.app.data.remote.auth.MobileLoginResult.TwoFactorRequired -> {
+                            _authentication.value = AuthenticationState.TwoFactorRequired(
+                                email = email,
+                                challengeToken = result.challengeToken
+                            )
+                        }
                     }
+                } catch (error: MobileAuthException) {
+                    _currentUser.value = null
+                    _authentication.value = AuthenticationState.Error(error.code)
                 }
             }
         }

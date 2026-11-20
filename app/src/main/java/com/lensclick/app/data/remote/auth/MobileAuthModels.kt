@@ -1,5 +1,7 @@
 package com.lensclick.app.data.remote.auth
 
+import com.lensclick.app.domain.MobileSession
+
 data class MobileAuthRequest(
     val email: String,
     val password: String,
@@ -28,6 +30,11 @@ data class MobilePhotographerRegisterRequest(
     val deviceName: String = "Android",
     val appVersion: String = "1.0"
 )
+
+sealed interface MobileLoginResult {
+    data class Success(val session: MobileSession) : MobileLoginResult
+    data class TwoFactorRequired(val challengeToken: String, val expiresAt: String) : MobileLoginResult
+}
 
 data class HttpRequest(
     val method: String,

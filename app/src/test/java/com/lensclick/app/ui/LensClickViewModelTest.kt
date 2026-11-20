@@ -10,6 +10,7 @@ import com.lensclick.app.data.remote.auth.MobileAuthErrorCode
 import com.lensclick.app.data.remote.auth.MobileAuthException
 import com.lensclick.app.data.remote.auth.MobileAuthRepository
 import com.lensclick.app.data.remote.auth.MobileAuthRequest
+import com.lensclick.app.data.remote.auth.MobileLoginResult
 import com.lensclick.app.data.remote.auth.MobilePhotographerRegisterRequest
 import com.lensclick.app.data.remote.auth.MobileRegisterRequest
 import com.lensclick.app.domain.AccountDataExport
@@ -210,15 +211,20 @@ class LensClickViewModelTest {
 
     private fun authRepository(store: InMemorySessionStore, status: Int = 200): MobileAuthRepository =
         MobileAuthRepository(object : MobileAuthApi {
-            override suspend fun login(request: MobileAuthRequest): MobileSession {
+            override suspend fun login(request: MobileAuthRequest): MobileLoginResult {
+                if (status == 202) {
+                    return MobileLoginResult.TwoFactorRequired("challenge_token_real", "2099-01-01T00:00:00Z")
+                }
                 if (status != 200) throw MobileAuthException(
-                    code = if (status == 202) MobileAuthErrorCode.FORBIDDEN else MobileAuthErrorCode.UNAUTHENTICATED,
+                    code = MobileAuthErrorCode.UNAUTHENTICATED,
                     statusCode = status
                 )
-                return MobileSession(
-                    user = MobileUser(42, "Pessoa", "user@example.com", null, "client", true, false),
-                    accessToken = "access-token",
-                    expiresAt = "2099-01-01T00:00:00Z"
+                return MobileLoginResult.Success(
+                    MobileSession(
+                        user = MobileUser(42, "Pessoa", "user@example.com", null, "client", true, false),
+                        accessToken = "access-token",
+                        expiresAt = "2099-01-01T00:00:00Z"
+                    )
                 )
             }
 

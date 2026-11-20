@@ -10,7 +10,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 interface MobileAuthApi {
-    suspend fun login(request: MobileAuthRequest): MobileSession
+    suspend fun login(request: MobileAuthRequest): MobileLoginResult
 
     suspend fun register(request: MobileRegisterRequest): MobileSession
 
@@ -59,7 +59,7 @@ class UrlConnectionTransport(
 class HttpMobileAuthApi(
     private val transport: HttpTransport
 ) : MobileAuthApi {
-    override suspend fun login(request: MobileAuthRequest): MobileSession {
+    override suspend fun login(request: MobileAuthRequest): MobileLoginResult {
         val response = transport.execute(
             HttpRequest(
                 method = "POST",
@@ -76,14 +76,26 @@ class HttpMobileAuthApi(
                     .toString()
             )
         )
+        if (response.statusCode == 202) {
+            return try {
+                val root = JSONObject(response.body)
+                val challengeToken = root.getString("challengeToken")
+                val expiresAt = root.optString("expiresAt", "")
+                MobileLoginResult.TwoFactorRequired(challengeToken, expiresAt)
+            } catch (error: Exception) {
+                throw MobileAuthException(MobileAuthErrorCode.MALFORMED_RESPONSE, cause = error)
+            }
+        }
         ensureSuccess(response, 200)
         return try {
             val root = JSONObject(response.body)
             val session = root.getJSONObject("session")
-            MobileSession(
-                user = parseUser(root.getJSONObject("user")),
-                accessToken = session.getString("accessToken"),
-                expiresAt = session.getString("expiresAt")
+            MobileLoginResult.Success(
+                MobileSession(
+                    user = parseUser(root.getJSONObject("user")),
+                    accessToken = session.getString("accessToken"),
+                    expiresAt = session.getString("expiresAt")
+                )
             )
         } catch (error: Exception) {
             throw MobileAuthException(MobileAuthErrorCode.MALFORMED_RESPONSE, cause = error)

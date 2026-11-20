@@ -14,7 +14,9 @@ class MobileAuthRepositoryTest {
         val store = InMemorySessionStore()
         val repository = MobileAuthRepository(HttpMobileAuthApi(transport), store)
 
-        val session = repository.login(" User@Example.com ", "Secret123", "Android", "1.0")
+        val result = repository.login(" User@Example.com ", "Secret123", "Android", "1.0")
+        assertTrue(result is MobileLoginResult.Success)
+        val session = (result as MobileLoginResult.Success).session
 
         assertEquals(42L, session.user.id)
         assertEquals("access-token", session.accessToken)
@@ -23,6 +25,20 @@ class MobileAuthRepositoryTest {
         assertEquals("/api/mobile/auth/login", transport.lastRequest?.path)
         assertTrue(transport.lastRequest?.headers?.get("Cookie") == null)
         assertTrue(transport.lastRequest?.body?.contains("\"password\":\"Secret123\"") == true)
+    }
+
+    @Test
+    fun loginMapsTwoFactorRequiredResponseWhenStatus202() = runTest {
+        val twoFactorBody = """{"status":"twoFactorRequired","challengeToken":"ch_real_123","expiresAt":"2026-11-15T12:00:00Z"}"""
+        val transport = FakeTransport(HttpResponse(202, body = twoFactorBody))
+        val store = InMemorySessionStore()
+        val repository = MobileAuthRepository(HttpMobileAuthApi(transport), store)
+
+        val result = repository.login("user@example.com", "Secret123", "Android", "1.0")
+
+        assertTrue(result is MobileLoginResult.TwoFactorRequired)
+        assertEquals("ch_real_123", (result as MobileLoginResult.TwoFactorRequired).challengeToken)
+        assertNull(store.readAccessToken())
     }
 
     @Test

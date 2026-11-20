@@ -12,8 +12,8 @@ class MobileAuthRepository(
         password: String,
         deviceName: String,
         appVersion: String
-    ): MobileSession {
-        val session = api.login(
+    ): MobileLoginResult {
+        val result = api.login(
             MobileAuthRequest(
                 email = email.trim().lowercase(),
                 password = password,
@@ -21,12 +21,14 @@ class MobileAuthRepository(
                 appVersion = appVersion
             )
         )
-        try {
-            sessionStore.writeAccessToken(session.accessToken)
-        } catch (error: MobileAuthException) {
-            throw error
+        if (result is MobileLoginResult.Success) {
+            try {
+                sessionStore.writeAccessToken(result.session.accessToken)
+            } catch (error: MobileAuthException) {
+                throw error
+            }
         }
-        return session
+        return result
     }
 
     suspend fun register(
