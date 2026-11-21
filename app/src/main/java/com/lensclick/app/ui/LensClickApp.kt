@@ -7,6 +7,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -37,6 +38,21 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -60,7 +76,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -72,6 +91,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -100,13 +120,14 @@ import com.lensclick.app.domain.PublicPhotographer
 import com.lensclick.app.domain.PublicPhotographerProfile
 import java.io.ByteArrayOutputStream
 
-private val Ink = Color(0xFF1E2128)
-private val Surface = Color(0xFFF7F5F0)
-private val SurfaceHigh = Color(0xFFFFFFFF)
-private val Line = Color(0xFFE2DDD3)
-private val Paper = Color(0xFFFAF8F3)
-private val Muted = Color(0xFF6B7280)
-private val Gold = Color(0xFFB8860B)
+/**_tokens da identidade LensClick — mesma paleta do tema e da plataforma web._*/
+private val Ink = Color(0xFF11110F)
+private val OnInk = Color(0xFFFFFEFA)
+private val SurfaceHigh = Color(0xFFFFFEFA)
+private val Line = Color(0xFFE2DDD2)
+private val Paper = Color(0xFFF6F3EB)
+private val Muted = Color(0xFF716D64)
+private val Gold = Color(0xFF9A6A24)
 
 enum class Screen {
     Onboarding, AccountType, Login, SignUp, PhotographerSignUp,
@@ -237,25 +258,98 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
     }
 }
 
-@Composable private fun BrandMark(modifier: Modifier = Modifier, compact: Boolean = false, light: Boolean = false, whiteText: Boolean = false) { LogoAsset(modifier = modifier, sizeDp = if (compact) 32 else 48, light = light, whiteText = whiteText) }
-@Composable private fun LogoAsset(modifier: Modifier = Modifier, sizeDp: Int = 48, light: Boolean = false, whiteText: Boolean = false) {
-    val context = LocalContext.current
-    val resId = remember(light) {
-        val name = if (light) "ic_lens_click_logo_light" else "ic_lens_click_logo"
-        context.resources.getIdentifier(name, "drawable", context.packageName).takeIf { it != 0 } ?: R.drawable.card_portrait_outdoor
-    }
+@Composable private fun BrandMark(modifier: Modifier = Modifier, compact: Boolean = false, light: Boolean = false, whiteText: Boolean = false) {
+    LogoAsset(modifier = modifier, sizeDp = if (compact) 34 else 44, light = light, whiteText = whiteText)
+}
+
+@Composable private fun LogoAsset(modifier: Modifier = Modifier, sizeDp: Int = 44, light: Boolean = false, whiteText: Boolean = false) {
+    val onDark = light || whiteText
+    val markColor = if (onDark) OnInk else Ink
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
-        Icon(painter = painterResource(resId), contentDescription = "Logo LensClick", modifier = Modifier.size(sizeDp.dp), tint = Color.Unspecified)
+        Image(
+            painter = painterResource(R.drawable.lens_click_mark),
+            contentDescription = "Logo LensClick",
+            modifier = Modifier.size(sizeDp.dp),
+            contentScale = ContentScale.Fit,
+            colorFilter = ColorFilter.tint(markColor)
+        )
         if (sizeDp >= 40) {
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(10.dp))
             Column {
-                Text("LensClick", color = if (whiteText) Color.White else Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                Text("Fotografia Profissional", color = if (whiteText) Color.White.copy(.8f) else Muted, fontSize = 9.sp)
+                Text(
+                    "LensClick",
+                    color = markColor,
+                    fontSize = 18.sp,
+                    fontFamily = FontFamily.Serif,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "FOTOGRAFIA PROFISSIONAL",
+                    color = if (onDark) OnInk.copy(0.78f) else Muted,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Medium,
+                    letterSpacing = 1.sp
+                )
             }
         }
     }
 }
 @Composable private fun CompactLogo(sizeDp: Int = 34) { LogoAsset(sizeDp = sizeDp) }
+
+/** Placeholder de marca usado onde ainda não há foto real do fotógrafo/portfólio. */
+@Composable
+private fun BrandPhoto(modifier: Modifier, label: String? = null, dark: Boolean = true) {
+    val gradient = if (dark) {
+        listOf(Ink, Color(0xFF3B352F), Gold)
+    } else {
+        listOf(LensStoneFallback, SurfaceHigh, Ink)
+    }
+    Box(
+        modifier.clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(gradient)),
+        contentAlignment = Alignment.Center
+    ) {
+        Image(
+            painter = painterResource(R.drawable.lens_click_mark),
+            contentDescription = null,
+            modifier = Modifier.size(52.dp),
+            contentScale = ContentScale.Fit,
+            colorFilter = ColorFilter.tint(OnInk.copy(0.32f))
+        )
+        if (label != null) {
+            Text(
+                label,
+                color = OnInk.copy(0.88f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.align(Alignment.BottomStart).padding(12.dp)
+            )
+        }
+    }
+}
+
+private val LensStoneFallback = Color(0xFFD8D1C4)
+
+/** Hero editorial com a baner oficial da marca (fotografia real, não gerada por IA). */
+@Composable
+private fun BrandHero(modifier: Modifier) {
+    Box(modifier.clip(RoundedCornerShape(20.dp))) {
+        Image(
+            painter = painterResource(R.drawable.brand_banner),
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop
+        )
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.verticalGradient(listOf(Color.Transparent, Ink.copy(0.82f)))
+            )
+        )
+        Column(Modifier.align(Alignment.BottomStart).padding(18.dp)) {
+            Text("LensClick", color = OnInk, fontSize = 24.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold)
+            Text("Fotografia com propósito", color = OnInk.copy(0.86f), fontSize = 12.sp)
+        }
+    }
+}
 
 @Composable private fun OnboardingScreen(onStart: () -> Unit, onLogin: () -> Unit, onBrowse: () -> Unit) {
     Column(
@@ -267,17 +361,17 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(12.dp))
         BrandMark()
-        Spacer(Modifier.height(16.dp))
-        Photo(Modifier.fillMaxWidth().height(200.dp), R.drawable.card_portrait_outdoor)
-        Spacer(Modifier.height(16.dp))
-        Text("Encontre o fotógrafo ideal para o seu momento.", color = Ink, fontSize = 22.sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-        Text("Conectamos clientes e fotógrafos profissionais com segurança e transparência.", color = Muted, fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
         Spacer(Modifier.height(20.dp))
+        BrandHero(Modifier.fillMaxWidth().height(196.dp))
+        Spacer(Modifier.height(20.dp))
+        Text("Encontre o fotógrafo ideal para o seu momento.", color = Ink, fontSize = 24.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Text("Conectamos clientes e fotógrafos profissionais com segurança e transparência.", color = Muted, fontSize = 13.sp, lineHeight = 19.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(top = 10.dp))
+        Spacer(Modifier.height(24.dp))
         PrimaryButton("Começar", onStart)
-        Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = onBrowse, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Ink)) { Text("Explorar fotógrafos", color = Ink, fontWeight = FontWeight.SemiBold) }
+        Spacer(Modifier.height(10.dp))
+        OutlinedButton(onClick = onBrowse, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(14.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Ink)) { Text("Explorar fotógrafos", color = Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
         Spacer(Modifier.height(8.dp))
         CenterLink("Já tem uma conta?", "Entrar", onLogin)
         Spacer(Modifier.height(16.dp))
@@ -291,9 +385,9 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
         Spacer(Modifier.weight(1f))
         Text("Como você deseja usar o LensClick?", color = Ink, fontSize = 20.sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         Spacer(Modifier.height(24.dp))
-        Button(onClick = onClient, modifier = Modifier.fillMaxWidth().height(70.dp), shape = RoundedCornerShape(18.dp), colors = ButtonDefaults.buttonColors(SurfaceHigh, Ink)) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Text("Sou Cliente", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Ink); Text("Quero contratar serviços fotográficos", fontSize = 11.sp, color = Muted) } }
+        Button(onClick = onClient, modifier = Modifier.fillMaxWidth().height(64.dp), shape = RoundedCornerShape(16.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Ink), colors = ButtonDefaults.buttonColors(SurfaceHigh, Ink)) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Text("Sou Cliente", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Ink); Text("Quero contratar serviços fotográficos", fontSize = 12.sp, color = Muted) } }
         Spacer(Modifier.height(14.dp))
-        Button(onClick = onPhotographer, modifier = Modifier.fillMaxWidth().height(70.dp), shape = RoundedCornerShape(18.dp), colors = ButtonDefaults.buttonColors(Ink, Color.White)) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Text("Sou Fotógrafo", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White); Text("Quero divulgar meu trabalho e receber orçamentos", fontSize = 11.sp, color = Color.White.copy(.8f)) } }
+        Button(onClick = onPhotographer, modifier = Modifier.fillMaxWidth().height(64.dp), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(Ink, OnInk)) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Text("Sou Fotógrafo", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = OnInk); Text("Quero divulgar meu trabalho e receber orçamentos", fontSize = 12.sp, color = OnInk.copy(.8f)) } }
         Spacer(Modifier.weight(1f))
         CenterLink("Já possui conta?", "Entrar", onLogin)
     }
@@ -303,9 +397,9 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Spacer(Modifier.height(16.dp))
         BrandMark()
-        Spacer(Modifier.height(32.dp))
-        Text(title, color = Ink, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-        Text(subtitle, color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+        Spacer(Modifier.height(26.dp))
+        Text(title, color = Ink, fontSize = 24.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold)
+        Text(subtitle, color = Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
         Spacer(Modifier.height(28.dp))
         content()
     }
@@ -475,14 +569,14 @@ private fun PhotographerSignUpScreen(
 @Composable
 private fun LensField(label: String, value: String, onValue: (String) -> Unit, type: KeyboardType = KeyboardType.Text, password: Boolean = false, singleLine: Boolean = true, maxLines: Int = 1) {
     Column(Modifier.fillMaxWidth()) {
-        Text(label, color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(bottom = 5.dp))
-        OutlinedTextField(value = value, onValueChange = onValue, modifier = Modifier.fillMaxWidth().semantics { contentDescription = label }, singleLine = singleLine, maxLines = maxLines, keyboardOptions = KeyboardOptions(keyboardType = type), visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None, shape = RoundedCornerShape(14.dp), colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Ink, unfocusedTextColor = Ink, focusedContainerColor = SurfaceHigh, unfocusedContainerColor = SurfaceHigh, focusedBorderColor = Ink, unfocusedBorderColor = Line, cursorColor = Ink))
+        Text(label, color = Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 7.dp))
+        OutlinedTextField(value = value, onValueChange = onValue, modifier = Modifier.fillMaxWidth().semantics { contentDescription = label }, singleLine = singleLine, maxLines = maxLines, keyboardOptions = KeyboardOptions(keyboardType = type), visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None, shape = RoundedCornerShape(12.dp), colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Ink, unfocusedTextColor = Ink, focusedContainerColor = SurfaceHigh, unfocusedContainerColor = SurfaceHigh, focusedBorderColor = Ink, unfocusedBorderColor = Line, cursorColor = Gold, focusedLabelColor = Gold))
     }
 }
 
 @Composable
 private fun PrimaryButton(text: String, onClick: () -> Unit, enabled: Boolean = true) {
-    Button(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(Ink, Color.White)) { Text(text, color = Color.White, fontWeight = FontWeight.SemiBold) }
+    Button(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(Ink, OnInk)) { Text(text, color = OnInk, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
 }
 
 @Composable
@@ -521,29 +615,48 @@ private fun CenterLink(prefix: String, action: String, onClick: () -> Unit) {
 
 @Composable private fun AppPage(current: Screen, onNavigate: (Screen) -> Unit, isPhotographerMode: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().background(Paper)) {
+        Row(
+            Modifier.fillMaxWidth().height(60.dp).padding(horizontal = 20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            BrandMark(compact = true)
+            Spacer(Modifier.weight(1f))
+            Text("LensClick", color = Ink, fontSize = 14.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold)
+        }
+        HorizontalDivider(thickness = 1.dp, color = Line)
         Box(Modifier.weight(1f).fillMaxWidth()) { Column(Modifier.fillMaxSize()) { content() } }
         if (isPhotographerMode) PhotographerBottomNav(current, onNavigate) else BottomNav(current, onNavigate)
     }
 }
 
 @Composable private fun BottomNav(current: Screen, onNavigate: (Screen) -> Unit) {
-    Row(Modifier.fillMaxWidth().height(64.dp).background(SurfaceHigh).border(1.dp, Line), horizontalArrangement = Arrangement.SpaceAround, verticalAlignment = Alignment.CenterVertically) {
-        val items = listOf(Screen.Home to "Início", Screen.Search to "Buscar", Screen.Budgets to "Orçamentos", Screen.Conversations to "Mensagens", Screen.Account to "Perfil")
-        items.forEach { (screen, label) ->
+    val items = listOf(
+        Triple(Screen.Home, "Início", Icons.Default.Home),
+        Triple(Screen.Search, "Buscar", Icons.Default.Search),
+        Triple(Screen.Budgets, "Orçamentos", Icons.AutoMirrored.Filled.List),
+        Triple(Screen.Conversations, "Mensagens", Icons.Default.Email),
+        Triple(Screen.Account, "Perfil", Icons.Default.Person)
+    )
+    Row(Modifier.fillMaxWidth().height(72.dp).background(SurfaceHigh).border(1.dp, Line), horizontalArrangement = Arrangement.SpaceAround, verticalAlignment = Alignment.CenterVertically) {
+        items.forEach { (screen, label, icon) ->
             val sel = current == screen
+            val tint = if (sel) Gold else Muted
             Column(
                 modifier = Modifier
-                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                    .clip(CircleShape)
+                    .sizeIn(minWidth = 56.dp, minHeight = 56.dp)
+                    .clip(RoundedCornerShape(14.dp))
                     .clickable { onNavigate(screen) }
                     .semantics {
                         contentDescription = label
                         role = Role.Button
                     }
-                    .padding(8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .padding(horizontal = 6.dp, vertical = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
-                Text(label, color = if (sel) Ink else Muted, fontSize = 11.sp, fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal)
+                Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.height(3.dp))
+                Text(label, color = tint, fontSize = 11.sp, fontWeight = if (sel) FontWeight.Bold else FontWeight.Medium)
             }
         }
     }
@@ -551,7 +664,7 @@ private fun CenterLink(prefix: String, action: String, onClick: () -> Unit) {
 
 @Composable private fun HomeScreen(photographers: List<Photographer>, onNavigate: (Screen) -> Unit) = AppPage(Screen.Home, onNavigate) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { BrandMark(); Text("Campinas, SP", color = Muted, fontSize = 11.sp) }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { BrandMark(); Text("Campinas, SP", color = Muted, fontSize = 12.sp) }
         Spacer(Modifier.height(20.dp))
         Text("Encontre o fotógrafo perfeito", color = Ink, fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(14.dp))
@@ -567,9 +680,33 @@ private fun CenterLink(prefix: String, action: String, onClick: () -> Unit) {
     }
 }
 
-@Composable private fun SearchBar(onClick: () -> Unit) { Row(Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(16.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(16.dp)).clickable(onClick = onClick).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) { Text("⌕", color = Ink, fontSize = 20.sp); Spacer(Modifier.width(10.dp)); Text("Buscar por cidade ou especialidade...", color = Muted, fontSize = 12.sp) } }
+@Composable private fun SearchBar(onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(14.dp)).background(SurfaceHigh)
+            .border(1.dp, Line, RoundedCornerShape(14.dp)).clickable(onClick = onClick).padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(Icons.Default.Search, contentDescription = null, tint = Gold, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(12.dp))
+        Text("Buscar por cidade ou especialidade...", color = Muted, fontSize = 13.sp)
+    }
+}
 
-@Composable private fun SectionTitle(title: String, onMore: (() -> Unit)? = null) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(title, color = Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold); if (onMore != null) Text("Ver todos ›", color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Medium, modifier = Modifier.clickable(onClick = onMore)) } }
+@Composable private fun SectionTitle(title: String, onMore: (() -> Unit)? = null) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Text(title, color = Ink, fontSize = 18.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold)
+        if (onMore != null) {
+            Text(
+                "Ver todos",
+                color = Gold,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.sizeIn(minHeight = 48.dp).clip(RoundedCornerShape(10.dp)).clickable(onClick = onMore).padding(horizontal = 8.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+        }
+    }
+}
 
 @Composable private fun CategoryRow() {
     val cats = listOf("Casamento", "Retrato", "Corporativo", "Eventos", "Ensaio")
@@ -580,31 +717,19 @@ private fun CenterLink(prefix: String, action: String, onClick: () -> Unit) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         items(photographers) { p ->
             Column(Modifier.width(200.dp).clip(RoundedCornerShape(18.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(18.dp)).clickable(onClick = onClick).padding(12.dp)) {
-                Photo(Modifier.fillMaxWidth().height(130.dp), photographerImage(p))
+                BrandPhoto(Modifier.fillMaxWidth().height(130.dp), label = p.specialty)
                 Spacer(Modifier.height(10.dp))
-                Text(p.name, color = Ink, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                Text(p.specialty, color = Muted, fontSize = 11.sp)
-                Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) { Text(p.price, color = Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold); Text("★ 4.9", color = Gold, fontSize = 12.sp) }
+                Text(p.name, color = Ink, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Text(p.specialty, color = Muted, fontSize = 12.sp)
+                Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) { Text(p.price, color = Ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
             }
         }
     }
 }
 
-private fun photographerImage(p: Photographer): Int = when (p.initials) {
-    "LA" -> R.drawable.card_portrait_outdoor
-    "MF" -> R.drawable.card_portrait_studio
-    "RC" -> R.drawable.card_portrait_studio
-    else -> R.drawable.card_portrait_outdoor
-}
-
-@Composable private fun Photo(modifier: Modifier, resId: Int = R.drawable.card_portrait_outdoor) {
-    Icon(painter = painterResource(resId), contentDescription = null, modifier = modifier.clip(RoundedCornerShape(12.dp)), tint = Color.Unspecified)
-}
-
-@Composable private fun PortfolioStrip() {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        repeat(3) { Photo(Modifier.weight(1f).height(80.dp), R.drawable.card_portrait_outdoor) }
-    }
+/** Mantém a assinatura antiga para os chamadores, mas exibe apenas marca (sem fotos fictícias). */
+@Composable private fun Photo(modifier: Modifier, resId: Int = R.drawable.lens_click_mark) {
+    BrandPhoto(modifier)
 }
 
 @Composable
@@ -748,7 +873,12 @@ private fun PhotographerScreen(viewModel: LensClickViewModel, slug: String, onBa
                     Column {
                         Box {
                             Photo(Modifier.fillMaxWidth().height(240.dp), R.drawable.card_portrait_outdoor)
-                            Box(Modifier.padding(16.dp).size(42.dp).clip(CircleShape).background(Color.Black.copy(.58f)).clickable(onClick = onBack), contentAlignment = Alignment.Center) { Text("‹", color = Color.White, fontSize = 34.sp) }
+                            Box(
+                                Modifier.padding(16.dp).size(44.dp).clip(CircleShape).background(Color.Black.copy(.58f))
+                                    .clickable(onClick = onBack)
+                                    .semantics { contentDescription = "Voltar" },
+                                contentAlignment = Alignment.Center
+                            ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp)) }
                             Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.TopEnd) { CompactLogo(42) }
                         }
                         Column(Modifier.padding(20.dp)) {
@@ -763,7 +893,11 @@ private fun PhotographerScreen(viewModel: LensClickViewModel, slug: String, onBa
                             Spacer(Modifier.height(24.dp))
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                 Text("Avaliações e Opiniões", color = Ink, fontWeight = FontWeight.SemiBold)
-                                TextButton(onClick = { reviewDialogOpen = true }) { Text("Avaliar ★", color = Ink, fontWeight = FontWeight.Bold) }
+                                TextButton(onClick = { reviewDialogOpen = true }) {
+                                    Icon(Icons.Default.Star, contentDescription = null, tint = Gold, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Avaliar", color = Ink, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
                             Spacer(Modifier.height(8.dp))
                             val reviewsList = publicReviews?.reviews ?: emptyList()
@@ -787,7 +921,25 @@ private fun PhotographerScreen(viewModel: LensClickViewModel, slug: String, onBa
                         }
                     }
                 }
-                Row(Modifier.background(SurfaceHigh).padding(20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) { Button(onQuote, Modifier.weight(1f).height(52.dp), shape = RoundedCornerShape(17.dp), colors = ButtonDefaults.buttonColors(Ink, Color.White)) { Text("Solicitar orçamento", fontWeight = FontWeight.SemiBold) }; OutlinedButton({ if (favorite) { favorites.firstOrNull { it.slug == slug }?.let { viewModel.removeFavorite(it.photographerId) {} } } else { viewModel.addFavorite(slug) {} } }, Modifier.size(52.dp), contentPadding = PaddingValues(0.dp), shape = CircleShape, border = androidx.compose.foundation.BorderStroke(1.dp, Ink)) { Text(if (favorite) "♥" else "♡", color = Ink, fontSize = 23.sp) } }
+                Row(Modifier.background(SurfaceHigh).padding(20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(onQuote, Modifier.weight(1f).height(54.dp), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(Ink, OnInk)) {
+                        Text("Solicitar orçamento", color = OnInk, fontWeight = FontWeight.SemiBold)
+                    }
+                    OutlinedButton(
+                        { if (favorite) { favorites.firstOrNull { it.slug == slug }?.let { viewModel.removeFavorite(it.photographerId) {} } } else { viewModel.addFavorite(slug) {} } },
+                        Modifier.size(54.dp),
+                        contentPadding = PaddingValues(0.dp),
+                        shape = CircleShape,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, if (favorite) Gold else Ink)
+                    ) {
+                        Icon(
+                            if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            contentDescription = if (favorite) "Remover dos favoritos" else "Adicionar aos favoritos",
+                            tint = if (favorite) Gold else Ink,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
             }
 
             if (reviewDialogOpen) {
@@ -827,8 +979,6 @@ private fun PhotographerScreen(viewModel: LensClickViewModel, slug: String, onBa
     }
 }
 
-@Composable private fun Stat(value: String, label: String) = Column(horizontalAlignment = Alignment.CenterHorizontally) { Text(label, color = Muted, fontSize = 8.sp); Text(value, color = Ink, fontWeight = FontWeight.Bold, fontSize = 13.sp) }
-
 @Composable
 private fun QuoteScreen(onBack: () -> Unit, onSent: (String, String, String, String, String, String) -> Unit) {
     var type by rememberSaveable { mutableStateOf("Casamento") }
@@ -838,7 +988,11 @@ private fun QuoteScreen(onBack: () -> Unit, onSent: (String, String, String, Str
     var description by rememberSaveable { mutableStateOf("") }
     var details by rememberSaveable { mutableStateOf("") }
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(20.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) { Text("‹", color = Ink, fontSize = 34.sp, modifier = Modifier.clickable(onClick = onBack)); Spacer(Modifier.width(10.dp)); Text("Solicitar Orçamento", color = Ink, fontSize = 20.sp, fontWeight = FontWeight.Bold) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar", tint = Ink, modifier = Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).clickable(onClick = onBack).padding(8.dp))
+            Spacer(Modifier.width(10.dp))
+            Text("Solicitar Orçamento", color = Ink, fontSize = 22.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold)
+        }
         Spacer(Modifier.height(16.dp))
         LensField("Tipo de evento", type, { type = it })
         Spacer(Modifier.height(10.dp))
@@ -929,7 +1083,7 @@ private fun ConversationsScreen(viewModel: LensClickViewModel, photographers: Li
     }
 
     Column(Modifier.padding(top = 12.dp)) {
-        Text("Conversas", color = Ink, fontSize = 27.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(20.dp, 8.dp))
+        Text("Conversas", color = Ink, fontSize = 24.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold, modifier = Modifier.padding(20.dp, 8.dp))
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },
@@ -990,12 +1144,12 @@ private fun ChatScreen(viewModel: LensClickViewModel, onBack: () -> Unit) {
 
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("‹", color = Ink, fontSize = 36.sp, modifier = Modifier.clickable(onClick = onBack))
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar", tint = Ink, modifier = Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).clickable(onClick = onBack).padding(8.dp))
             Avatar(initialsForDisplay(currentConv?.counterpartName ?: "Chat"), Modifier.size(42.dp))
             Spacer(Modifier.width(10.dp))
             Column {
-                Text(currentConv?.counterpartName ?: "Mensagens", color = Ink, fontWeight = FontWeight.SemiBold)
-                Text("● Online", color = Muted, fontSize = 10.sp)
+                Text(currentConv?.counterpartName ?: "Mensagens", color = Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text("Conversa via LensClick", color = Muted, fontSize = 12.sp)
             }
             Spacer(Modifier.weight(1f))
             CompactLogo(34)
@@ -1030,36 +1184,55 @@ private fun ChatScreen(viewModel: LensClickViewModel, onBack: () -> Unit) {
                 modifier = Modifier.size(54.dp),
                 contentPadding = PaddingValues(0.dp),
                 shape = CircleShape,
-                colors = ButtonDefaults.buttonColors(Ink, Color.White)
+                colors = ButtonDefaults.buttonColors(Ink, OnInk),
+                enabled = input.isNotBlank()
             ) {
-                Text("➤", fontSize = 20.sp)
+                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Enviar mensagem", tint = OnInk, modifier = Modifier.size(22.dp))
             }
         }
     }
 }
 
-@Composable private fun Bubble(text: String, mine: Boolean) = Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) { Text(text, color = if (mine) Color.White else Ink, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.widthIn(max = 260.dp).clip(RoundedCornerShape(16.dp)).background(if (mine) Ink else SurfaceHigh).border(1.dp, if (mine) Ink else Line, RoundedCornerShape(16.dp)).padding(13.dp)) }
+@Composable private fun Bubble(text: String, mine: Boolean) = Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
+    Text(
+        text,
+        color = if (mine) OnInk else Ink,
+        fontSize = 13.sp,
+        lineHeight = 19.sp,
+        modifier = Modifier.widthIn(max = 280.dp).clip(RoundedCornerShape(16.dp)).background(if (mine) Ink else SurfaceHigh).border(1.dp, if (mine) Ink else Line, RoundedCornerShape(16.dp)).padding(13.dp)
+    )
+}
 
 @Composable private fun PhotographerPage(current: Screen, onNavigate: (Screen) -> Unit, content: @Composable ColumnScope.() -> Unit) = AppPage(current, onNavigate, isPhotographerMode = true, content = content)
 
 @Composable private fun PhotographerBottomNav(current: Screen, onNavigate: (Screen) -> Unit) {
-    Row(Modifier.fillMaxWidth().height(64.dp).background(SurfaceHigh).border(1.dp, Line), horizontalArrangement = Arrangement.SpaceAround, verticalAlignment = Alignment.CenterVertically) {
-        val items = listOf(Screen.ProDashboard to "Painel", Screen.ProRequests to "Pedidos", Screen.ProAgenda to "Agenda", Screen.ProProfile to "Perfil", Screen.ProPortfolio to "Portfólio")
-        items.forEach { (screen, label) ->
+    val items = listOf(
+        Triple(Screen.ProDashboard, "Painel", Icons.Default.Home),
+        Triple(Screen.ProRequests, "Pedidos", Icons.AutoMirrored.Filled.List),
+        Triple(Screen.ProAgenda, "Agenda", Icons.AutoMirrored.Filled.List),
+        Triple(Screen.ProProfile, "Perfil", Icons.Default.Person),
+        Triple(Screen.ProPortfolio, "Portfólio", Icons.Default.Add)
+    )
+    Row(Modifier.fillMaxWidth().height(72.dp).background(SurfaceHigh).border(1.dp, Line), horizontalArrangement = Arrangement.SpaceAround, verticalAlignment = Alignment.CenterVertically) {
+        items.forEach { (screen, label, icon) ->
             val sel = current == screen
+            val tint = if (sel) Gold else Muted
             Column(
                 modifier = Modifier
-                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                    .clip(CircleShape)
+                    .sizeIn(minWidth = 56.dp, minHeight = 56.dp)
+                    .clip(RoundedCornerShape(14.dp))
                     .clickable { onNavigate(screen) }
                     .semantics {
                         contentDescription = label
                         role = Role.Button
                     }
-                    .padding(8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .padding(horizontal = 4.dp, vertical = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
-                Text(label, color = if (sel) Ink else Muted, fontSize = 11.sp, fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal)
+                Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(19.dp))
+                Spacer(Modifier.height(3.dp))
+                Text(label, color = tint, fontSize = 10.sp, fontWeight = if (sel) FontWeight.Bold else FontWeight.Medium)
             }
         }
     }
@@ -1077,13 +1250,13 @@ private fun PhotographerDashboardScreen(p: Photographer?, budgets: List<BudgetRe
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             ProMetric("Pedidos", "${budgets.size}", Modifier.weight(1f))
             ProMetric("Agenda", "${budgets.count { it.status == "accepted" }}", Modifier.weight(1f))
-            ProMetric("Avaliação", "★ 4.9", Modifier.weight(1f))
+            ProMetric("Avaliação", "—", Modifier.weight(1f))
         }
         Spacer(Modifier.height(22.dp))
         SectionTitle("Ações Rápidas")
         Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            ProAction("Editar Perfil", "Infomações e preços", Modifier.weight(1f)) { onNavigate(Screen.ProProfile) }
+            ProAction("Editar Perfil", "Informações e preços", Modifier.weight(1f)) { onNavigate(Screen.ProProfile) }
             ProAction("Portfólio", "Gerenciar imagens", Modifier.weight(1f)) { onNavigate(Screen.ProPortfolio) }
         }
         Spacer(Modifier.height(22.dp))
@@ -1435,24 +1608,28 @@ private fun AccountScreen(
     var disable2FaOpen by rememberSaveable { mutableStateOf(false) }
     var disable2FaPassword by remember { mutableStateOf("") }
 
-    val actions = listOf("♙  Meus dados", "⚙  Configurações", "♢  Segurança (2FA)", "♧  Notificações", "?  Ajuda e suporte", "ⓘ  Sobre o Lens Click")
+    val actions = listOf(
+        "Meus dados" to Icons.Default.Person,
+        "Configurações" to Icons.Default.Settings,
+        "Segurança (2FA)" to Icons.Default.Lock,
+        "Notificações" to Icons.Default.Email,
+        "Ajuda e suporte" to Icons.AutoMirrored.Filled.List,
+        "Sobre o Lens Click" to Icons.Default.Info
+    )
     val loggingOut = authentication is AuthenticationState.Loading
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            Text(
-                "⚙",
-                color = Ink,
-                fontSize = 24.sp,
+            Icon(
+                Icons.Default.Settings,
+                contentDescription = "Configurações",
+                tint = Ink,
                 modifier = Modifier
                     .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                     .clip(CircleShape)
                     .clickable { selectedAction = "Configurações" }
-                    .semantics {
-                        contentDescription = "Configurações"
-                        role = Role.Button
-                    }
-                    .padding(8.dp)
+                    .semantics { role = Role.Button }
+                    .padding(12.dp)
             )
         }
         if (user == null) {
@@ -1460,9 +1637,9 @@ private fun AccountScreen(
         } else {
             Avatar(initialsForDisplay(user.name), Modifier.size(86.dp))
             Spacer(Modifier.height(10.dp))
-            Text(user.name, color = Ink, fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
-            Text(user.email, color = Muted, fontSize = 11.sp)
-            Text(if (canUseProfessionalMode) "Modo cliente • conta de fotógrafo" else "Conta de cliente", color = Gold, fontSize = 10.sp, modifier = Modifier.padding(top = 5.dp))
+            Text(user.name, color = Ink, fontSize = 22.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold)
+            Text(user.email, color = Muted, fontSize = 13.sp)
+            Text(if (canUseProfessionalMode) "Modo cliente • conta de fotógrafo" else "Conta de cliente", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
             Spacer(Modifier.height(22.dp))
         }
         if (canUseProfessionalMode) {
@@ -1470,17 +1647,19 @@ private fun AccountScreen(
             Spacer(Modifier.height(14.dp))
         }
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(12.dp))) {
-            actions.forEach { action ->
-                val label = action.substringAfter("  ")
+            actions.forEach { (label, icon) ->
                 Row(
                     Modifier
                         .fillMaxWidth()
+                        .sizeIn(minHeight = 56.dp)
                         .clickable { selectedAction = label }
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    Text(action, color = Ink, fontSize = 13.sp)
-                    Text("›", color = Muted, fontSize = 19.sp)
+                    Icon(icon, contentDescription = null, tint = Gold, modifier = Modifier.size(20.dp))
+                    Text(label, color = Ink, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                    Text("›", color = Muted, fontSize = 20.sp)
                 }
                 HorizontalDivider(color = Line)
             }

@@ -133,7 +133,11 @@ O design segue uma direção **editorial e atemporal**, inspirada na fotografia 
 | Arte-base sem letreiro | `assets/hero.jpg` | Fotografia original sem texto, pronta para receber novas composições |
 | Banner montado apenas com o monograma | `assets/banner.jpg` | Cabeçalho deste README |
 
-Na splash, o monograma é declarado em `Theme.LensClickApp.Starting` (`windowSplashScreenAnimatedIcon`) usando `@drawable/splash_icon`, gerado nas densidades `mdpi`→`xxxhdpi` dentro da especificação do Android 12+: **caixa de 288 dp com o desenho dentro do círculo de 192 dp** que o sistema exibe. A arte do monograma é desenhada em preto sólido e recolorida em tempo de execução (`BlendMode.SrcIn`), o que permite usar a mesma logo em off-white sobre a fotografia do Onboarding e em dourado nas telas claras.
+Na splash, o monograma é declarado em `Theme.LensClickApp.Starting` (`windowSplashScreenAnimatedIcon`) usando `@drawable/splash_icon`, gerado nas densidades `mdpi`→`xxxhdpi` dentro da especificação do Android 12+: **caixa de 288 dp com o desenho dentro do círculo de 192 dp** que o sistema exibe.
+
+Na interface, `LogoAsset` usa um único arquivo (`drawable-nodpi/lens_click_mark.png`) com `Image` + `ColorFilter.tint`: a mesma arte aparece em tinta nas telas claras e em off-white sobre fundos escuros. O monograma está presente no onboarding, nas telas de autenticação, no cabeçalho de todas as telas internas (`AppPage`), no perfil público e no chat — não é mais substituído por uma foto de demonstração.
+
+O hero do onboarding usa a arte oficial da marca (`drawable-nodpi/brand_banner.jpg`, fotografia real de câmera) com gradiente e tipografia serifada. Onde ainda não existe fotografia real do fotógrafo/portfólio no backend, o app exibe um placeholder editorial com o monograma em vez de imagens fictícias geradas por IA. A navegação inferior usa ícones Material com rótulos e alvos de toque de 56 dp; os botões e campos seguem a mesma escala (12–16 sp nos textos funcionais).
 
 ## 🗂️ Estrutura do projeto
 
