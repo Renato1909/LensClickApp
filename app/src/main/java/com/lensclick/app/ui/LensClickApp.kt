@@ -758,7 +758,7 @@ private fun SearchScreen(viewModel: LensClickViewModel, guest: Boolean, onNaviga
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("Entrar para usar sua conta", color = Muted, fontSize = 12.sp)
-                Text("Modo visitante", color = Gold, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                Text("Modo visitante", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             }
             Spacer(Modifier.height(8.dp))
         }
@@ -810,7 +810,7 @@ private fun PublicPhotographerRow(p: PublicPhotographer, onClick: () -> Unit) {
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(p.name, color = Ink, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-            Text(p.specialties.joinToString(" · ") { specialtyLabel(it) }, color = Muted, fontSize = 11.sp)
+            Text(p.specialties.joinToString(" · ") { specialtyLabel(it) }, color = Muted, fontSize = 12.sp)
             Text("⌖ ${listOf(p.city, p.state).filter { it.isNotBlank() }.joinToString(", ")}", color = Muted, fontSize = 10.sp)
         }
         p.startingPriceCents?.let { cents ->
@@ -835,15 +835,15 @@ private fun FilterChip(label: String, selected: Boolean = false, onClick: (() ->
             .background(if (selected) Ink else SurfaceHigh)
             .border(1.dp, if (selected) Ink else Line, RoundedCornerShape(20.dp))
             .clickable(enabled = onClick != null) { onClick?.invoke() }
-            .padding(horizontal = 14.dp, vertical = 7.dp)
+            .padding(horizontal = 16.dp, vertical = 10.dp)
     ) {
-        Text(label, color = if (selected) Color.White else Ink, fontSize = 11.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+        Text(label, color = if (selected) OnInk else Ink, fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
     }
 }
 
 @Composable private fun Avatar(initials: String, modifier: Modifier = Modifier) {
     Box(modifier = modifier.clip(CircleShape).background(Ink), contentAlignment = Alignment.Center) {
-        Text(initials, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        Text(initials, color = OnInk, fontWeight = FontWeight.Bold, fontSize = 16.sp)
     }
 }
 
@@ -872,7 +872,7 @@ private fun PhotographerScreen(viewModel: LensClickViewModel, slug: String, onBa
                 Box(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                     Column {
                         Box {
-                            Photo(Modifier.fillMaxWidth().height(240.dp), R.drawable.card_portrait_outdoor)
+                            BrandPhoto(Modifier.fillMaxWidth().height(200.dp), label = profile.profile.city)
                             Box(
                                 Modifier.padding(16.dp).size(44.dp).clip(CircleShape).background(Color.Black.copy(.58f))
                                     .clickable(onClick = onBack)
@@ -883,7 +883,7 @@ private fun PhotographerScreen(viewModel: LensClickViewModel, slug: String, onBa
                         }
                         Column(Modifier.padding(20.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) { Avatar(initialsForDisplay(profile.profile.name), Modifier.size(92.dp)); Spacer(Modifier.width(14.dp)); Column { Text(profile.profile.name, color = Ink, fontSize = 23.sp, fontWeight = FontWeight.SemiBold); Text(profile.profile.specialties.joinToString(" · ") { specialtyLabel(it) }, color = Muted, fontSize = 12.sp) } }
-                            Spacer(Modifier.height(14.dp)); Text("⌖ ${listOf(profile.profile.city, profile.profile.state).filter { it.isNotBlank() }.joinToString(", ")}", color = Muted, fontSize = 11.sp); profile.profile.ratingAverage?.let { Text("★ $it (${profile.profile.reviewCount} avaliações)", color = Gold, fontSize = 12.sp, modifier = Modifier.padding(vertical = 10.dp)) }
+                            Spacer(Modifier.height(14.dp)); Text("⌖ ${listOf(profile.profile.city, profile.profile.state).filter { it.isNotBlank() }.joinToString(", ")}", color = Muted, fontSize = 12.sp); profile.profile.ratingAverage?.let { Text("★ $it (${profile.profile.reviewCount} avaliações)", color = Gold, fontSize = 12.sp, modifier = Modifier.padding(vertical = 10.dp)) }
                             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) { profile.profile.specialties.forEach { FilterChip(specialtyLabel(it)) } }
                             Spacer(Modifier.height(22.dp)); Text("Sobre mim", color = Ink, fontWeight = FontWeight.SemiBold); Text(profile.bio.ifBlank { "Este fotógrafo ainda não adicionou uma apresentação." }, color = Muted, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 8.dp))
                             SectionTitle("Portfólio"); Spacer(Modifier.height(10.dp))
@@ -909,10 +909,10 @@ private fun PhotographerScreen(viewModel: LensClickViewModel, slug: String, onBa
                                         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(12.dp)).padding(12.dp)) {
                                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                                 Text(r.authorName, color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                                Text("★ ${r.rating}", color = Gold, fontSize = 11.sp)
+                                                Text("★ ${r.rating}", color = Gold, fontSize = 12.sp)
                                             }
                                             if (r.comment.isNotBlank()) {
-                                                Text(r.comment, color = Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                                                Text(r.comment, color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
                                             }
                                         }
                                     }
@@ -1040,7 +1040,7 @@ private fun BudgetsScreen(viewModel: LensClickViewModel, budgets: List<BudgetReq
                         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(14.dp)).padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Column {
                                 Text(f.name, color = Ink, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                Text(f.slug, color = Muted, fontSize = 11.sp)
+                                Text(f.slug, color = Muted, fontSize = 12.sp)
                             }
                             OutlinedButton(onClick = { viewModel.removeFavorite(f.photographerId) {} }) { Text("Remover") }
                         }
@@ -1059,7 +1059,7 @@ private fun BudgetCard(b: BudgetRequest) {
             FilterChip(budgetStatusLabel(b.status), selected = true)
         }
         Spacer(Modifier.height(6.dp))
-        Text("Data: ${b.eventDate} • Local: ${b.place}", color = Muted, fontSize = 11.sp)
+        Text("Data: ${b.eventDate} • Local: ${b.place}", color = Muted, fontSize = 12.sp)
         if (b.description.isNotBlank()) Text(b.description, color = Ink, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
     }
 }
@@ -1115,7 +1115,7 @@ private fun ConversationsScreen(viewModel: LensClickViewModel, photographers: Li
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(c.counterpartName, color = Ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                            Text(c.lastMessage.ifBlank { "Nenhuma mensagem ainda." }, color = Muted, fontSize = 11.sp, maxLines = 1)
+                            Text(c.lastMessage.ifBlank { "Nenhuma mensagem ainda." }, color = Muted, fontSize = 12.sp, maxLines = 1)
                         }
                         if (c.unreadCount > 0) {
                             Box(Modifier.size(10.dp).clip(CircleShape).background(Ink))
@@ -1232,7 +1232,7 @@ private fun ChatScreen(viewModel: LensClickViewModel, onBack: () -> Unit) {
             ) {
                 Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(19.dp))
                 Spacer(Modifier.height(3.dp))
-                Text(label, color = tint, fontSize = 10.sp, fontWeight = if (sel) FontWeight.Bold else FontWeight.Medium)
+                Text(label, color = tint, fontSize = 11.sp, fontWeight = if (sel) FontWeight.Bold else FontWeight.Medium)
             }
         }
     }
@@ -1241,7 +1241,7 @@ private fun ChatScreen(viewModel: LensClickViewModel, onBack: () -> Unit) {
 @Composable
 private fun PhotographerDashboardScreen(p: Photographer?, budgets: List<BudgetRequest>, onNavigate: (Screen) -> Unit, onClientMode: () -> Unit) = PhotographerPage(Screen.ProDashboard, onNavigate) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { BrandMark(light = false); Text("Modo Fotógrafo", color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { BrandMark(light = false); Text("Modo Fotógrafo", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
         Spacer(Modifier.height(18.dp))
         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(18.dp)).padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Avatar(p?.initials ?: "FT", Modifier.size(56.dp)); Spacer(Modifier.width(14.dp)); Column { Text(p?.name ?: "Perfil Profissional", color = Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold); Text(p?.specialty ?: "Fotografia", color = Muted, fontSize = 12.sp) } }
         Spacer(Modifier.height(20.dp))
@@ -1264,8 +1264,8 @@ private fun PhotographerDashboardScreen(p: Photographer?, budgets: List<BudgetRe
     }
 }
 
-@Composable private fun ProMetric(label: String, value: String, modifier: Modifier) { Column(modifier.clip(RoundedCornerShape(16.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(16.dp)).padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text(value, color = Ink, fontSize = 20.sp, fontWeight = FontWeight.Bold); Text(label, color = Muted, fontSize = 11.sp) } }
-@Composable private fun ProAction(title: String, desc: String, modifier: Modifier, onClick: () -> Unit) { Column(modifier.clip(RoundedCornerShape(16.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(16.dp)).clickable(onClick = onClick).padding(14.dp)) { Text(title, color = Ink, fontSize = 13.sp, fontWeight = FontWeight.Bold); Text(desc, color = Muted, fontSize = 10.sp, modifier = Modifier.padding(top = 2.dp)) } }
+@Composable private fun ProMetric(label: String, value: String, modifier: Modifier) { Column(modifier.clip(RoundedCornerShape(16.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(16.dp)).padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text(value, color = Ink, fontSize = 20.sp, fontWeight = FontWeight.Bold); Text(label, color = Muted, fontSize = 12.sp) } }
+@Composable private fun ProAction(title: String, desc: String, modifier: Modifier, onClick: () -> Unit) { Column(modifier.clip(RoundedCornerShape(16.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(16.dp)).clickable(onClick = onClick).padding(14.dp)) { Text(title, color = Ink, fontSize = 14.sp, fontWeight = FontWeight.Bold); Text(desc, color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp)) } }
 
 @Composable
 private fun PhotographerRequestsScreen(viewModel: LensClickViewModel, budgets: List<BudgetRequest>, onNavigate: (Screen) -> Unit) = PhotographerPage(Screen.ProRequests, onNavigate) {
@@ -1283,7 +1283,7 @@ private fun PhotographerRequestsScreen(viewModel: LensClickViewModel, budgets: L
                             FilterChip(budgetStatusLabel(b.status), selected = true)
                         }
                         Spacer(Modifier.height(6.dp))
-                        Text("Cliente: ${b.counterpartName} • Data: ${b.eventDate}", color = Muted, fontSize = 11.sp)
+                        Text("Cliente: ${b.counterpartName} • Data: ${b.eventDate}", color = Muted, fontSize = 12.sp)
                         if (b.description.isNotBlank()) Text(b.description, color = Ink, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
                         Spacer(Modifier.height(12.dp))
                         PrimaryButton("Enviar proposta", { proposeTarget = b }, enabled = b.status == "pending")
@@ -1517,8 +1517,8 @@ private fun PortfolioItemCard(item: PortfolioItem, allItems: List<PortfolioItem>
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(item.caption.ifBlank { item.altText.ifBlank { "Imagem do portfólio" } }, color = Ink, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                Text("Categoria: ${item.category}", color = Muted, fontSize = 11.sp)
-                if (item.isCover) Text("★ Capa", color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("Categoria: ${item.category}", color = Muted, fontSize = 12.sp)
+                if (item.isCover) Text("★ Capa", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
             TextButton(onClick = { viewModel.removePortfolioItem(item.id) }) { Text("Excluir", color = MaterialTheme.colorScheme.error) }
         }
@@ -1743,7 +1743,7 @@ private fun AccountScreen(
             title = { Text("Dados Exportados (JSON)", color = Ink, fontWeight = FontWeight.Bold) },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
-                    Text(exportDataJson!!, color = Ink, fontSize = 11.sp)
+                    Text(exportDataJson!!, color = Ink, fontSize = 12.sp)
                 }
             },
             confirmButton = { TextButton(onClick = { exportDialogOpen = false }) { Text("OK") } },
@@ -1786,13 +1786,13 @@ private fun AccountScreen(
             title = { Text("Ativar Autenticação TOTP", color = Ink, fontWeight = FontWeight.Bold) },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
-                    Text("1. Adicione a chave abaixo no seu aplicativo autenticador (Google Authenticator, Authy, etc.):", color = Muted, fontSize = 11.sp)
+                    Text("1. Adicione a chave abaixo no seu aplicativo autenticador (Google Authenticator, Authy, etc.):", color = Muted, fontSize = 12.sp)
                     Spacer(Modifier.height(6.dp))
                     Text(twoFactorSetup?.secret ?: "CHAVE_SECRETA_TOTP", color = Ink, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     Spacer(Modifier.height(12.dp))
-                    Text("2. Guarde seus códigos de recuperação em um local seguro:", color = Muted, fontSize = 11.sp)
+                    Text("2. Guarde seus códigos de recuperação em um local seguro:", color = Muted, fontSize = 12.sp)
                     twoFactorSetup?.recoveryCodes?.forEach { code ->
-                        Text("• $code", color = Ink, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        Text("• $code", color = Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     }
                     Spacer(Modifier.height(12.dp))
                     LensField("Código de 6 dígitos para confirmar", twoFactorVerifyCode, { twoFactorVerifyCode = it }, KeyboardType.Number)
