@@ -1,6 +1,5 @@
 package com.lensclick.app.data.remote
 
-import com.lensclick.app.data.remote.auth.HttpRequest
 import com.lensclick.app.data.remote.auth.HttpTransport
 import com.lensclick.app.data.remote.auth.MobileAuthErrorCode
 import com.lensclick.app.data.remote.auth.MobileAuthException
@@ -18,7 +17,7 @@ class HttpPortfolioGateway(
     private val sessionStore: SessionStore
 ) : PortfolioGateway {
     override suspend fun list(): List<PortfolioItem> {
-        val response = transport.execute(bearerRequest("GET", "/api/account/portfolio"))
+        val response = transport.execute(sessionStore.bearerRequest("GET", "/api/account/portfolio"))
         ensureHttpSuccess(response, 200)
         return parseList(response.body)
     }
@@ -33,7 +32,7 @@ class HttpPortfolioGateway(
         val boundary = "----LensClickPortfolio${UUID.randomUUID()}"
         val body = portfolioMultipartBody(image, imageContentType, altText, caption, category, boundary)
         val response = transport.execute(
-            bearerRequest(
+            sessionStore.bearerRequest(
                 "POST",
                 "/api/account/portfolio",
                 bodyBytes = body,
@@ -52,13 +51,13 @@ class HttpPortfolioGateway(
         val payload = JSONObject().put("items", JSONArray().apply {
             items.forEach { put(portfolioItemJson(it)) }
         }).toString()
-        val response = transport.execute(bearerRequest("PUT", "/api/account/portfolio", payload))
+        val response = transport.execute(sessionStore.bearerRequest("PUT", "/api/account/portfolio", payload))
         ensureHttpSuccess(response, 200)
         return parseList(response.body)
     }
 
     override suspend fun remove(id: Long) {
-        val response = transport.execute(bearerRequest("DELETE", "/api/account/portfolio/$id"))
+        val response = transport.execute(sessionStore.bearerRequest("DELETE", "/api/account/portfolio/$id"))
         ensureHttpSuccess(response, 200)
     }
 
@@ -66,23 +65,6 @@ class HttpPortfolioGateway(
         parsePortfolioList(body)
     } catch (error: Exception) {
         throw MobileAuthException(MobileAuthErrorCode.MALFORMED_RESPONSE, cause = error)
-    }
-
-    private fun bearerRequest(
-        method: String,
-        path: String,
-        body: String? = null,
-        bodyBytes: ByteArray? = null,
-        contentType: String = "application/json"
-    ): HttpRequest {
-        val token = sessionStore.readAccessToken()
-            ?: throw MobileAuthException(MobileAuthErrorCode.UNAUTHENTICATED)
-        val headers = buildMap {
-            put("Accept", "application/json")
-            put("Authorization", "Bearer $token")
-            if (body != null || bodyBytes != null) put("Content-Type", contentType)
-        }
-        return HttpRequest(method, path, headers, body, bodyBytes)
     }
 }
 

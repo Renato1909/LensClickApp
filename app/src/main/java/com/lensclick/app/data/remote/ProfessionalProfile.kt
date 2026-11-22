@@ -1,6 +1,5 @@
 package com.lensclick.app.data.remote
 
-import com.lensclick.app.data.remote.auth.HttpRequest
 import com.lensclick.app.data.remote.auth.HttpTransport
 import com.lensclick.app.data.remote.auth.MobileAuthErrorCode
 import com.lensclick.app.data.remote.auth.MobileAuthException
@@ -16,14 +15,14 @@ class HttpProfessionalProfileGateway(
     private val sessionStore: SessionStore
 ) : ProfessionalProfileGateway {
     override suspend fun load(): ProfessionalProfile {
-        val response = transport.execute(bearerRequest("GET", "/api/account/professional-profile"))
+        val response = transport.execute(sessionStore.bearerRequest("GET", "/api/account/professional-profile"))
         ensureHttpSuccess(response, 200)
         return parseProfile(response.body)
     }
 
     override suspend fun save(profile: ProfessionalProfile): ProfessionalProfile {
         val response = transport.execute(
-            bearerRequest("PUT", "/api/account/professional-profile", professionalProfileBody(profile))
+            sessionStore.bearerRequest("PUT", "/api/account/professional-profile", professionalProfileBody(profile))
         )
         ensureHttpSuccess(response, 200)
         return parseProfile(response.body)
@@ -33,17 +32,6 @@ class HttpProfessionalProfileGateway(
         parseProfessionalProfile(body)
     } catch (error: Exception) {
         throw MobileAuthException(MobileAuthErrorCode.MALFORMED_RESPONSE, cause = error)
-    }
-
-    private fun bearerRequest(method: String, path: String, body: String? = null): HttpRequest {
-        val token = sessionStore.readAccessToken()
-            ?: throw MobileAuthException(MobileAuthErrorCode.UNAUTHENTICATED)
-        val headers = buildMap {
-            put("Accept", "application/json")
-            put("Authorization", "Bearer $token")
-            if (body != null) put("Content-Type", "application/json")
-        }
-        return HttpRequest(method, path, headers, body)
     }
 }
 

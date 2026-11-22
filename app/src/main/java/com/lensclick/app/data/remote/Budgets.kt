@@ -1,9 +1,6 @@
 package com.lensclick.app.data.remote
 
-import com.lensclick.app.data.remote.auth.HttpRequest
 import com.lensclick.app.data.remote.auth.HttpTransport
-import com.lensclick.app.data.remote.auth.MobileAuthErrorCode
-import com.lensclick.app.data.remote.auth.MobileAuthException
 import com.lensclick.app.data.remote.auth.SessionStore
 import com.lensclick.app.data.remote.auth.ensureHttpSuccess
 import com.lensclick.app.domain.BudgetRequest
@@ -27,57 +24,46 @@ class HttpBudgetRequestsGateway(
             .put("description", draft.description)
             .put("additionalInfo", draft.additionalInfo)
             .toString()
-        val response = transport.execute(bearerRequest("POST", "/api/photographers/$slug/budget-requests", body))
+        val response = transport.execute(sessionStore.bearerRequest("POST", "/api/photographers/$slug/budget-requests", body))
         ensureHttpSuccess(response, 201)
         return parseCreatedId(response.body, "request")
     }
 
     override suspend fun list(): List<BudgetRequest> {
-        val response = transport.execute(bearerRequest("GET", "/api/account/budget-requests"))
+        val response = transport.execute(sessionStore.bearerRequest("GET", "/api/account/budget-requests"))
         ensureHttpSuccess(response, 200)
         return parseBudgetRequests(response.body, "requests")
     }
 
     override suspend fun detail(id: Long): BudgetRequest {
-        val response = transport.execute(bearerRequest("GET", "/api/account/budget-requests/$id"))
+        val response = transport.execute(sessionStore.bearerRequest("GET", "/api/account/budget-requests/$id"))
         ensureHttpSuccess(response, 200)
         return parseBudgetRequest(JSONObject(response.body).getJSONObject("request"))
     }
 
     override suspend fun propose(id: Long, priceCents: Long, conditions: String): Long {
         val body = JSONObject().put("priceCents", priceCents).put("conditions", conditions).toString()
-        val response = transport.execute(bearerRequest("POST", "/api/account/budget-requests/$id/proposals", body))
+        val response = transport.execute(sessionStore.bearerRequest("POST", "/api/account/budget-requests/$id/proposals", body))
         ensureHttpSuccess(response, 201)
         return parseCreatedId(response.body, "proposal")
     }
 
     override suspend fun decide(id: Long, proposalId: Long, accept: Boolean) {
         val body = JSONObject().put("action", if (accept) "accept" else "reject").put("proposalId", proposalId).toString()
-        val response = transport.execute(bearerRequest("PUT", "/api/account/budget-requests/$id", body))
+        val response = transport.execute(sessionStore.bearerRequest("PUT", "/api/account/budget-requests/$id", body))
         ensureHttpSuccess(response, 200)
     }
 
     override suspend fun cancel(id: Long) {
         val body = JSONObject().put("action", "cancel").toString()
-        val response = transport.execute(bearerRequest("PUT", "/api/account/budget-requests/$id", body))
+        val response = transport.execute(sessionStore.bearerRequest("PUT", "/api/account/budget-requests/$id", body))
         ensureHttpSuccess(response, 200)
     }
 
     override suspend fun agenda(): List<BudgetRequest> {
-        val response = transport.execute(bearerRequest("GET", "/api/account/agenda"))
+        val response = transport.execute(sessionStore.bearerRequest("GET", "/api/account/agenda"))
         ensureHttpSuccess(response, 200)
         return parseBudgetRequests(response.body, "events")
-    }
-
-    private fun bearerRequest(method: String, path: String, body: String? = null): HttpRequest {
-        val token = sessionStore.readAccessToken()
-            ?: throw MobileAuthException(MobileAuthErrorCode.UNAUTHENTICATED)
-        val headers = buildMap {
-            put("Accept", "application/json")
-            put("Authorization", "Bearer $token")
-            if (body != null) put("Content-Type", "application/json")
-        }
-        return HttpRequest(method, path, headers, body)
     }
 }
 
@@ -86,31 +72,20 @@ class HttpFavoritesGateway(
     private val sessionStore: SessionStore
 ) : FavoritesGateway {
     override suspend fun list(): List<Favorite> {
-        val response = transport.execute(bearerRequest("GET", "/api/account/favorites"))
+        val response = transport.execute(sessionStore.bearerRequest("GET", "/api/account/favorites"))
         ensureHttpSuccess(response, 200)
         val rows = JSONObject(response.body).getJSONArray("favorites")
         return (0 until rows.length()).map { parseFavorite(rows.getJSONObject(it)) }
     }
 
     override suspend fun add(slug: String) {
-        val response = transport.execute(bearerRequest("POST", "/api/account/favorites", JSONObject().put("slug", slug).toString()))
+        val response = transport.execute(sessionStore.bearerRequest("POST", "/api/account/favorites", JSONObject().put("slug", slug).toString()))
         ensureHttpSuccess(response, 201)
     }
 
     override suspend fun remove(photographerId: Long) {
-        val response = transport.execute(bearerRequest("DELETE", "/api/account/favorites/$photographerId"))
+        val response = transport.execute(sessionStore.bearerRequest("DELETE", "/api/account/favorites/$photographerId"))
         ensureHttpSuccess(response, 200)
-    }
-
-    private fun bearerRequest(method: String, path: String, body: String? = null): HttpRequest {
-        val token = sessionStore.readAccessToken()
-            ?: throw MobileAuthException(MobileAuthErrorCode.UNAUTHENTICATED)
-        val headers = buildMap {
-            put("Accept", "application/json")
-            put("Authorization", "Bearer $token")
-            if (body != null) put("Content-Type", "application/json")
-        }
-        return HttpRequest(method, path, headers, body)
     }
 }
 

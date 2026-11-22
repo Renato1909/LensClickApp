@@ -20,7 +20,7 @@ class HttpTwoFactorGateway(
 ) : TwoFactorGateway {
 
     override suspend fun getStatus(): TwoFactorStatus {
-        val response = transport.execute(bearerRequest("GET", "/api/account/2fa/status"))
+        val response = transport.execute(sessionStore.bearerRequest("GET", "/api/account/2fa/status"))
         ensureHttpSuccess(response, 200)
         val json = JSONObject(response.body)
         return TwoFactorStatus(
@@ -30,7 +30,7 @@ class HttpTwoFactorGateway(
     }
 
     override suspend fun setup(): TwoFactorSetup {
-        val response = transport.execute(bearerRequest("POST", "/api/account/2fa/setup"))
+        val response = transport.execute(sessionStore.bearerRequest("POST", "/api/account/2fa/setup"))
         ensureHttpSuccess(response, 200, 201)
         val json = JSONObject(response.body)
         val codesJson = json.optJSONArray("recoveryCodes") ?: JSONArray()
@@ -44,7 +44,7 @@ class HttpTwoFactorGateway(
 
     override suspend fun enable(code: String): Boolean {
         val body = JSONObject().put("code", code).toString()
-        val response = transport.execute(bearerRequest("POST", "/api/account/2fa/enable", body))
+        val response = transport.execute(sessionStore.bearerRequest("POST", "/api/account/2fa/enable", body))
         ensureHttpSuccess(response, 200)
         return JSONObject(response.body).optBoolean("success", true)
     }
@@ -52,9 +52,9 @@ class HttpTwoFactorGateway(
     override suspend fun disable(password: String, code: String?): Boolean {
         val body = JSONObject()
             .put("password", password)
-            .apply { if (!code.isNullBy(code)) put("code", code) }
+            .apply { if (!code.isNullOrBlank()) put("code", code) }
             .toString()
-        val response = transport.execute(bearerRequest("POST", "/api/account/2fa/disable", body))
+        val response = transport.execute(sessionStore.bearerRequest("POST", "/api/account/2fa/disable", body))
         ensureHttpSuccess(response, 200)
         return JSONObject(response.body).optBoolean("success", true)
     }
@@ -100,17 +100,4 @@ class HttpTwoFactorGateway(
             throw MobileAuthException(MobileAuthErrorCode.MALFORMED_RESPONSE, cause = error)
         }
     }
-
-    private fun bearerRequest(method: String, path: String, body: String? = null): HttpRequest {
-        val token = sessionStore.readAccessToken()
-            ?: throw MobileAuthException(MobileAuthErrorCode.UNAUTHENTICATED)
-        val headers = buildMap {
-            put("Accept", "application/json")
-            put("Authorization", "Bearer $token")
-            if (body != null) put("Content-Type", "application/json")
-        }
-        return HttpRequest(method, path, headers, body)
-    }
-
-    private fun String?.isNullBy(str: String?): Boolean = str.isNullOrBlank()
 }
