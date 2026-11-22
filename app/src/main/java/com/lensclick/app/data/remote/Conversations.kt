@@ -1,9 +1,6 @@
 package com.lensclick.app.data.remote
 
-import com.lensclick.app.data.remote.auth.HttpRequest
 import com.lensclick.app.data.remote.auth.HttpTransport
-import com.lensclick.app.data.remote.auth.MobileAuthErrorCode
-import com.lensclick.app.data.remote.auth.MobileAuthException
 import com.lensclick.app.data.remote.auth.SessionStore
 import com.lensclick.app.data.remote.auth.ensureHttpSuccess
 import com.lensclick.app.domain.Conversation
@@ -17,7 +14,7 @@ class HttpConversationsGateway(
 ) : ConversationsGateway {
 
     override suspend fun list(): List<Conversation> {
-        val response = transport.execute(bearerRequest("GET", "/api/account/conversations"))
+        val response = transport.execute(sessionStore.bearerRequest("GET", "/api/account/conversations"))
         ensureHttpSuccess(response, 200)
         val json = JSONObject(response.body)
         val rows = json.optJSONArray("conversations") ?: return emptyList()
@@ -25,7 +22,7 @@ class HttpConversationsGateway(
     }
 
     override suspend fun getMessages(conversationId: Long): List<Message> {
-        val response = transport.execute(bearerRequest("GET", "/api/account/conversations/$conversationId/messages"))
+        val response = transport.execute(sessionStore.bearerRequest("GET", "/api/account/conversations/$conversationId/messages"))
         ensureHttpSuccess(response, 200)
         val json = JSONObject(response.body)
         val rows = json.optJSONArray("messages") ?: return emptyList()
@@ -34,7 +31,7 @@ class HttpConversationsGateway(
 
     override suspend fun sendMessage(conversationId: Long, text: String): Message {
         val body = JSONObject().put("message", text).toString()
-        val response = transport.execute(bearerRequest("POST", "/api/account/conversations/$conversationId/messages", body))
+        val response = transport.execute(sessionStore.bearerRequest("POST", "/api/account/conversations/$conversationId/messages", body))
         ensureHttpSuccess(response, 200, 201)
         val json = JSONObject(response.body)
         val msgObj = json.optJSONObject("message") ?: json
@@ -43,7 +40,7 @@ class HttpConversationsGateway(
 
     override suspend fun startConversation(photographerSlug: String, text: String): Conversation {
         val body = JSONObject().put("message", text).toString()
-        val response = transport.execute(bearerRequest("POST", "/api/photographers/$photographerSlug/conversations", body))
+        val response = transport.execute(sessionStore.bearerRequest("POST", "/api/photographers/$photographerSlug/conversations", body))
         ensureHttpSuccess(response, 200, 201)
         val json = JSONObject(response.body)
         val convObj = json.optJSONObject("conversation") ?: json
@@ -51,19 +48,8 @@ class HttpConversationsGateway(
     }
 
     override suspend fun markAsRead(conversationId: Long) {
-        val response = transport.execute(bearerRequest("PUT", "/api/account/conversations/$conversationId/read"))
+        val response = transport.execute(sessionStore.bearerRequest("PUT", "/api/account/conversations/$conversationId/read"))
         ensureHttpSuccess(response, 200)
-    }
-
-    private fun bearerRequest(method: String, path: String, body: String? = null): HttpRequest {
-        val token = sessionStore.readAccessToken()
-            ?: throw MobileAuthException(MobileAuthErrorCode.UNAUTHENTICATED)
-        val headers = buildMap {
-            put("Accept", "application/json")
-            put("Authorization", "Bearer $token")
-            if (body != null) put("Content-Type", "application/json")
-        }
-        return HttpRequest(method, path, headers, body)
     }
 }
 

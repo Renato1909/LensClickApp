@@ -30,23 +30,13 @@ class HttpReviewsGateway(
     }
 
     override suspend fun submitReview(photographerSlug: String, rating: Int, comment: String): Boolean {
-        val token = sessionStore?.readAccessToken()
-            ?: throw MobileAuthException(MobileAuthErrorCode.UNAUTHENTICATED)
+        val store = sessionStore ?: throw MobileAuthException(MobileAuthErrorCode.UNAUTHENTICATED)
         val body = JSONObject()
             .put("rating", rating)
             .put("comment", comment)
             .toString()
         val response = transport.execute(
-            HttpRequest(
-                method = "POST",
-                path = "/api/photographers/$photographerSlug/reviews",
-                headers = mapOf(
-                    "Accept" to "application/json",
-                    "Authorization" to "Bearer $token",
-                    "Content-Type" to "application/json"
-                ),
-                body = body
-            )
+            store.bearerRequest("POST", "/api/photographers/$photographerSlug/reviews", body)
         )
         ensureHttpSuccess(response, 200, 201)
         return true

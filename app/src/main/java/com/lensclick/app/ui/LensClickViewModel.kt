@@ -36,6 +36,7 @@ import com.lensclick.app.domain.ReviewsGateway
 import com.lensclick.app.domain.TwoFactorGateway
 import com.lensclick.app.domain.TwoFactorSetup
 import com.lensclick.app.domain.TwoFactorStatus
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -143,7 +144,7 @@ class LensClickViewModel(
                 publicPhotographers.list(city, specialty, page).let {
                     if (it.photographers.isEmpty()) PublicSearchState.Empty(it) else PublicSearchState.Ready(it)
                 }
-            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
                 PublicSearchState.Error
@@ -163,7 +164,7 @@ class LensClickViewModel(
                         PublicProfileState.NotFoundOrUnpublished
                     }
                 }
-            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: PublicPhotographerNotFoundException) {
                 PublicProfileState.NotFoundOrUnpublished
@@ -249,6 +250,8 @@ class LensClickViewModel(
                     setAuthenticated(session.user)
                 } catch (error: MobileAuthException) {
                     _authentication.value = AuthenticationState.Error(error.code)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
                 } catch (_: Exception) {
                     _authentication.value = AuthenticationState.Error(MobileAuthErrorCode.SERVER)
                 }
@@ -261,6 +264,8 @@ class LensClickViewModel(
         viewModelScope.launch {
             try {
                 _twoFactorStatus.value = gateway.getStatus()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {}
         }
     }
@@ -270,6 +275,8 @@ class LensClickViewModel(
         viewModelScope.launch {
             try {
                 _twoFactorSetup.value = gateway.setup()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {}
         }
     }
@@ -284,6 +291,8 @@ class LensClickViewModel(
                     _twoFactorSetup.value = null
                 }
                 result(ok)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {
                 result(false)
             }
@@ -299,6 +308,8 @@ class LensClickViewModel(
                     _twoFactorStatus.value = TwoFactorStatus(enabled = false)
                 }
                 result(ok)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {
                 result(false)
             }
@@ -441,6 +452,8 @@ class LensClickViewModel(
         viewModelScope.launch {
             try {
                 _conversations.value = gateway.list()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {}
         }
     }
@@ -451,6 +464,8 @@ class LensClickViewModel(
             try {
                 _messages.value = gateway.getMessages(conversationId)
                 gateway.markAsRead(conversationId)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {}
         }
     }
@@ -463,6 +478,8 @@ class LensClickViewModel(
                 _messages.value = _messages.value + newMsg
                 _conversations.value = gateway.list()
                 result(true)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {
                 result(false)
             }
@@ -476,6 +493,8 @@ class LensClickViewModel(
                 gateway.startConversation(photographerSlug, text)
                 _conversations.value = gateway.list()
                 result(true)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {
                 result(false)
             }
@@ -487,6 +506,8 @@ class LensClickViewModel(
         viewModelScope.launch {
             try {
                 _publicReviews.value = gateway.getReviews(photographerSlug)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {}
         }
     }
@@ -500,6 +521,8 @@ class LensClickViewModel(
                     _publicReviews.value = gateway.getReviews(photographerSlug)
                 }
                 result(ok)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {
                 result(false)
             }
@@ -514,6 +537,8 @@ class LensClickViewModel(
                 onSuccess(data.rawJson)
             } catch (error: MobileAuthException) {
                 onError("Erro ao exportar dados: ${error.code}")
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {
                 onError("Erro ao conectar ao servidor para exportação.")
             }
@@ -534,6 +559,8 @@ class LensClickViewModel(
                 }
             } catch (error: MobileAuthException) {
                 onError("Senha incorreta ou erro no servidor (${error.code}).")
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {
                 onError("Erro de conexão ao solicitar exclusão.")
             }
@@ -545,6 +572,8 @@ class LensClickViewModel(
         viewModelScope.launch {
             try {
                 _budgets.value = gateway.list()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {
             }
         }
@@ -555,6 +584,8 @@ class LensClickViewModel(
         viewModelScope.launch {
             try {
                 _agenda.value = gateway.agenda()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {
             }
         }
@@ -565,6 +596,8 @@ class LensClickViewModel(
         viewModelScope.launch {
             try {
                 _favorites.value = gateway.list()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {
             }
         }
@@ -581,6 +614,8 @@ class LensClickViewModel(
                 result(true)
             } catch (error: MobileAuthException) {
                 _budgetError.value = error.code; result(false)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {
                 _budgetError.value = MobileAuthErrorCode.SERVER; result(false)
             } finally {
@@ -600,6 +635,8 @@ class LensClickViewModel(
                 result(true)
             } catch (error: MobileAuthException) {
                 _budgetError.value = error.code; result(false)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {
                 _budgetError.value = MobileAuthErrorCode.SERVER; result(false)
             } finally {
@@ -620,6 +657,8 @@ class LensClickViewModel(
                 result(true)
             } catch (error: MobileAuthException) {
                 _budgetError.value = error.code; result(false)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {
                 _budgetError.value = MobileAuthErrorCode.SERVER; result(false)
             } finally {
@@ -639,6 +678,8 @@ class LensClickViewModel(
                 result(true)
             } catch (error: MobileAuthException) {
                 _budgetError.value = error.code; result(false)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {
                 _budgetError.value = MobileAuthErrorCode.SERVER; result(false)
             } finally {
@@ -654,6 +695,8 @@ class LensClickViewModel(
                 gateway.add(slug)
                 _favorites.value = gateway.list()
                 result(true)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {
                 result(false)
             }
@@ -667,6 +710,8 @@ class LensClickViewModel(
                 gateway.remove(photographerId)
                 _favorites.value = gateway.list()
                 result(true)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {
                 result(false)
             }
@@ -686,7 +731,7 @@ class LensClickViewModel(
             _professionalProfile.value = ProfessionalProfileState.Loading
             _professionalProfile.value = try {
                 ProfessionalProfileState.Ready(gateway.load())
-            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
                 ProfessionalProfileState.Error
@@ -703,7 +748,7 @@ class LensClickViewModel(
             }
             _professionalProfile.value = try {
                 ProfessionalProfileState.Ready(gateway.save(profile), saving = false, saved = true)
-            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: MobileAuthException) {
                 ProfessionalProfileState.Ready(profile, saving = false, error = error.code)
@@ -728,7 +773,7 @@ class LensClickViewModel(
             _portfolio.value = PortfolioState.Loading
             _portfolio.value = try {
                 PortfolioState.Ready(gateway.list())
-            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
                 PortfolioState.Error
@@ -743,7 +788,7 @@ class LensClickViewModel(
             try {
                 gateway.add(image, imageContentType, altText, caption, category)
                 _portfolio.value = PortfolioState.Ready(gateway.list(), message = "Imagem adicionada.")
-            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: MobileAuthException) {
                 portfolioReady()?.let { _portfolio.value = it.copy(busy = false, error = error.code) }
@@ -759,7 +804,7 @@ class LensClickViewModel(
             portfolioReady()?.let { _portfolio.value = it.copy(busy = true, error = null, message = null) }
             try {
                 _portfolio.value = PortfolioState.Ready(gateway.update(items), message = "Portfólio atualizado.")
-            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: MobileAuthException) {
                 portfolioReady()?.let { _portfolio.value = it.copy(busy = false, error = error.code) }
@@ -776,7 +821,7 @@ class LensClickViewModel(
             try {
                 gateway.remove(id)
                 _portfolio.value = PortfolioState.Ready(gateway.list(), message = "Imagem removida.")
-            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: MobileAuthException) {
                 portfolioReady()?.let { _portfolio.value = it.copy(busy = false, error = error.code) }
