@@ -88,3 +88,57 @@ jobs:
           path: |
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
+
+  feira-release:
+    name: APK assinado da feira
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+      - name: Instalar SDK exigido pelo projeto
+        run: sdkmanager 'platforms;android-36.1' 'build-tools;36.0.0'
+      - name: Gerar APK release assinado
+        env:
+          LENSCLICK_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          LENSCLICK_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          LENSCLICK_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          LENSCLICK_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          for secret in LENSCLICK_RELEASE_KEYSTORE_BASE64 LENSCLICK_RELEASE_STORE_PASSWORD LENSCLICK_RELEASE_KEY_ALIAS LENSCLICK_RELEASE_KEY_PASSWORD; do
+            if [[ -z "${!secret}" ]]; then
+              echo "::error::A chave de assinatura original da feira precisa estar configurada em Actions Secrets."
+              exit 1
+            fi
+          done
+          bash ./gradlew --no-daemon :app:assembleRelease
+      - name: Conferir nome do pacote, versão e assinatura original
+        shell: bash
+        run: |
+          apk=app/build/outputs/apk/release/app-release.apk
+          tools="$ANDROID_HOME/build-tools/36.0.0"
+          package=$("$tools/aapt" dump badging "$apk" | sed -n '1p')
+          [[ "$package" == *"name='com.lensclick.app'"* ]]
+          version_code=$(sed -n "s/.*versionCode='\([0-9][0-9]*\)'.*/\1/p" <<< "$package")
+          [[ "$version_code" -gt 2 ]]
+          signer=$("$tools/apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #[0-9][0-9]* certificate SHA-256 digest: //p')
+          if [[ "$signer" != '0430cf3cb8bf9bff064df9ed72bdc9b40e0acb89252aa0c9b8f632b16e6d5f94' ]]; then
+            echo "::error::A assinatura não corresponde à do APK publicado na release feira-2026."
+            exit 1
+          fi
+          unzip -p "$apk" assets/feira/photographers.json | cmp - app/src/main/assets/feira/photographers.json
+      - name: Disponibilizar APK para publicar na release
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: lensclick-feira-release-apk
+          retention-days: 14
+          if-no-files-found: error
+          path: app/build/outputs/apk/release/app-release.apk

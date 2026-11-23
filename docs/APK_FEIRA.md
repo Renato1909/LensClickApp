@@ -11,91 +11,13 @@ Este documento descreve como gerar e instalar o APK release assinado do **LensCl
 
 A URL de produção e o `applicationId` estão definidos em `app/build.gradle.kts` no `buildType` `release`.
 
-## Opção A — Gerar pelo GitHub Actions (recomendado)
+## Opção A — Gerar pelo GitHub Actions
 
-> **Observação importante:** adicionar/alterar `.github/workflows/android.yml` no GitHub exige credenciais Git com escopo `workflow`. Se o push do workflow for rejeitado, aplique o job abaixo em `.github/workflows/android.yml` a partir de um ambiente autorizado (ou via interface do GitHub) e faça push com permissão de workflow.
-
-O job **"APK release da feira"** (executado manualmente via `workflow_dispatch`) gera `:app:assembleRelease` e publica o artefato `lensclick-feira-release-apk`. Adicione este job ao final de `.github/workflows/android.yml`:
-
-```yaml
-  release:
-    name: APK release da feira
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    env:
-      LENSCLICK_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-      LENSCLICK_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-      LENSCLICK_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-      LENSCLICK_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
-        with:
-          distribution: temurin
-          java-version: '21'
-      - uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
-      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
-      - name: Instalar SDK exigido pelo projeto
-        run: sdkmanager 'platforms;android-36.1' 'build-tools;36.0.0' 'platform-tools'
-      - name: Verificar segredos de assinatura
-        run: |
-          if [ -z "${LENSCLICK_RELEASE_KEYSTORE_BASE64}" ] || [ -z "${LENSCLICK_RELEASE_STORE_PASSWORD}" ] || [ -z "${LENSCLICK_RELEASE_KEY_ALIAS}" ] || [ -z "${LENSCLICK_RELEASE_KEY_PASSWORD}" ]; then
-            echo "Segredos de assinatura ausentes. Configure ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS e ANDROID_KEY_PASSWORD para gerar o APK release assinado."
-            exit 1
-          fi
-      - name: Gerar APK release assinado
-        run: bash ./gradlew --no-daemon --stacktrace :app:assembleRelease
-      - name: Publicar APK release
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: lensclick-feira-release-apk
-          retention-days: 30
-          path: app/build/outputs/apk/release/*.apk
-          if-no-files-found: error
-```
-
-### 1) Criar a keystore de assinatura (uma vez, localmente)
-
-Se ainda não existir uma chave de release, gere uma keystore **e guarde-a com segurança fora do repositório**:
-
-```bash
-keytool -genkeypair -v \
-  -keystore lensclick-release.jks \
-  -alias lensclick \
-  -keyalg RSA -keysize 2048 -validity 10000
-```
-
-> Nunca faça commit de `.jks`/`.keystore`, senhas ou tokens. Faça backup seguro da keystore e das senhas: sem elas não é possível atualizar um app assinado com a mesma chave.
-
-### 2) Configurar segredos no GitHub (repositório LensClickApp)
-
-Em **Settings → Secrets and variables → Actions**, crie:
-
-| Secret | Conteúdo |
-|---|---|
-| `ANDROID_KEYSTORE_BASE64` | Keystore codificada em Base64 (arquivo inteiro) |
-| `ANDROID_KEYSTORE_PASSWORD` | Senha da keystore (`storePassword`) |
-| `ANDROID_KEY_ALIAS` | Alias da chave (ex.: `lensclick`) |
-| `ANDROID_KEY_PASSWORD` | Senha da chave (`keyPassword`) |
-
-Para gerar o Base64 (Linux):
-
-```bash
-base64 -w 0 lensclick-release.jks > lensclick-release.b64.txt
-```
-
-Copie o conteúdo de `lensclick-release.b64.txt` para o secret `ANDROID_KEYSTORE_BASE64` e apague o arquivo temporário se desejar.
-
-### 3) Executar o workflow e baixar o APK
-
-1. No GitHub, abra **Actions → Android → Run workflow** (branch `main`).
-2. Aguarde o job **"APK release da feira"** concluir com sucesso.
-3. Baixe o artefato **`lensclick-feira-release-apk`** (contém `app-release.apk`).
-
-> Observação: o job de release exige os segredos acima; sem eles ele falha com mensagem orientativa. Os jobs de build/testes instrumentados continuam independentes.
+1. Confirme em **Settings → Secrets and variables → Actions** que a assinatura original da feira está configurada com `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` e `ANDROID_KEY_PASSWORD`. A assinatura precisa corresponder à do APK publicado para permitir a atualização de uma instalação existente.
+2. Em **Actions → Android → Run workflow**, selecione a branch com o código que será distribuído.
+3. Aguarde o job **APK assinado da feira**. Ele confere o nome do pacote, o número de versão, o certificado do APK atual e o catálogo incluído no arquivo.
+4. Baixe o artefato **lensclick-feira-release-apk** e extraia `app-release.apk`.
+5. Abra a release [feira-2026](https://github.com/Renato1909/LensClickApp/releases/tag/feira-2026). Guarde uma cópia do APK anterior e publique o arquivo do job com o nome exato `app-release.apk`. O QR mantém o destino. Confira o download pelo QR e teste a instalação em um aparelho Android.
 
 ## Opção B — Gerar localmente (Android Studio / Gradle)
 
@@ -122,15 +44,36 @@ Alternativa: passar como propriedades Gradle `-Plensclick.releaseKeystorePath=..
 1. Transfira o `app-release.apk` para o aparelho (USB, Google Drive, e-mail, etc.).
 2. No aparelho, permita instalação de **apps de fontes desconhecidas** para o app usado para abrir o APK (Arquivos/Chrome), se solicitado.
 3. Abra o APK e confirme a instalação.
-4. Certifique-se de que o aparelho tenha acesso à internet para falar com a API de produção.
-5. (Opcional) Se houver uma versão anterior com assinatura diferente instalada, desinstale-a antes de instalar a nova.
+4. Abra **Explorar fotógrafos → Perfis da feira** para ver o catálogo de demonstração. Login e busca de perfis reais usam a API de produção.
+
+## QR de instalação
+
+[![QR de instalação do APK da feira](../assets/qr-instalacao.png)](https://github.com/Renato1909/LensClickApp/releases/download/feira-2026/app-release.apk)
+
+O QR usa o endereço do APK assinado da release `feira-2026`. Esse endereço permite reutilizar o QR ao disponibilizar uma versão assinada com o mesmo nome de arquivo na release.
+
+## Perfis de apresentação no celular
+
+O menu **Explorar fotógrafos → Perfis da feira** mostra quatro perfis fictícios. Os dados e as fotos vêm dentro do APK, com acesso mesmo sem internet. Os perfis de exemplo ficam em um catálogo separado com bio e portfólio para consulta.
+
+## Fotógrafos de apresentação na API local
+
+Com as dependências do LensClick web instaladas e as migrações locais do D1 aplicadas, execute a partir da pasta Android:
+
+```bash
+node tools/seed-feira-local.mjs /caminho/para/LensClick-main
+```
+
+Inicie o Worker local do projeto web na porta `8787` e abra o APK de debug no emulador. Em **Explorar fotógrafos**, a busca por **São Paulo** mostra Lívia Monteiro (casamentos), Rafael Sato (retratos) e Joana Nascimento (corporativo e retratos). Em **Campinas**, procure Bruno Vidal (eventos). Abra um perfil para apresentar a bio e o portfólio.
+
+O script pode ser repetido e usa o D1 e o R2 locais. Os perfis novos são fictícios e servem para demonstrar a busca pública. O APK público do QR conecta ao ambiente de produção.
 
 ## Checklist rápido para a demo
 
 - [ ] APK release **assinado** gerado (artefato `lensclick-feira-release-apk` ou `app-release.apk` local).
 - [ ] Instala e abre em aparelho real.
 - [ ] Aponta para produção (`https://lensclick.renato-aparecido-business.workers.dev`).
-- [ ] Contas de demonstração (cliente e fotógrafo) criadas/populadas no ambiente de produção.
+- [ ] Os quatro perfis da feira e suas fotos abrem no celular, inclusive com a rede desligada.
 
 ## Segurança
 

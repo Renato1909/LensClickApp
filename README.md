@@ -135,9 +135,9 @@ O design segue uma direção **editorial e atemporal**, inspirada na fotografia 
 
 Na splash, o monograma é declarado em `Theme.LensClickApp.Starting` (`windowSplashScreenAnimatedIcon`) usando `@drawable/splash_icon`, gerado nas densidades `mdpi`→`xxxhdpi` dentro da especificação do Android 12+: **caixa de 288 dp com o desenho dentro do círculo de 192 dp** que o sistema exibe.
 
-Na interface, `LogoAsset` usa um único arquivo (`drawable-nodpi/lens_click_mark.png`) com `Image` + `ColorFilter.tint`: a mesma arte aparece em tinta nas telas claras e em off-white sobre fundos escuros. O monograma está presente no onboarding, nas telas de autenticação, no cabeçalho de todas as telas internas (`AppPage`), no perfil público e no chat — não é mais substituído por uma foto de demonstração.
+Na interface, o monograma LC usa `drawable-nodpi/lens_click_mark.png` e acompanha o nome LensClick nos cabeçalhos. O tema combina papel off-white (`#F6F3EB`), areia clara (`#ECE0D1`) e marrom café (`#704B35`), com Playfair Display nos títulos e a fonte do sistema nos controles. As cores ficam em `ui/theme/Color.kt`.
 
-O hero do onboarding usa a arte oficial da marca (`drawable-nodpi/brand_banner.jpg`, fotografia real de câmera) com gradiente e tipografia serifada. Onde ainda não existe fotografia real do fotógrafo/portfólio no backend, o app exibe um placeholder editorial com o monograma em vez de imagens fictícias geradas por IA. A navegação inferior usa ícones Material com rótulos e alvos de toque de 56 dp; os botões e campos seguem a mesma escala (12–16 sp nos textos funcionais).
+A tela de boas-vindas usa a fotografia de câmera original de `assets/hero.jpg`, embutida no app como `drawable-nodpi/editorial_camera.jpg`. O monograma em fundo areia identifica as áreas de portfólio que usam a imagem padrão. A navegação inferior das áreas de cliente e fotógrafo fica em uma cápsula flutuante com margem para o sistema e destaca a aba atual com um fundo areia.
 
 ## 🗂️ Estrutura do projeto
 
@@ -175,6 +175,12 @@ LensClickApp/
 ├── settings.gradle.kts                       # módulos e repositórios
 └── gradlew / gradlew.bat                     # wrapper multiplataforma
 ```
+
+## 📲 Instalação para a feira
+
+[![QR de instalação do LensClick](assets/qr-instalacao.png)](https://github.com/Renato1909/LensClickApp/releases/download/feira-2026/app-release.apk)
+
+O QR abre o APK público da feira para instalação em um aparelho Android. Na versão de apresentação, **Explorar fotógrafos → Perfis da feira** abre os quatro portfólios fictícios incluídos no APK. Veja [APK da Feira Tecnológica](docs/APK_FEIRA.md) para gerar o APK assinado e atualizar a release.
 
 ## 🚀 Como executar
 

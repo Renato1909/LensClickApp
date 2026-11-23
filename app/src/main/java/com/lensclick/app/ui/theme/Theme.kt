@@ -8,29 +8,41 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 
 private val LensColorScheme = lightColorScheme(
-    primary = LensBlack,
-    onPrimary = LensOffWhite,
-    secondary = LensGold,
-    onSecondary = LensWhite,
-    background = LensOffWhite,
-    onBackground = LensBlack,
-    surface = LensWhite,
-    onSurface = LensBlack,
-    surfaceVariant = LensStone,
+    primary = LensCoffee,
+    onPrimary = LensOnCoffee,
+    primaryContainer = LensSand,
+    onPrimaryContainer = LensInk,
+    inversePrimary = LensSand,
+    secondary = LensCoffee,
+    onSecondary = LensOnCoffee,
+    secondaryContainer = LensSand,
+    onSecondaryContainer = LensInk,
+    tertiary = LensCoffee,
+    onTertiary = LensOnCoffee,
+    tertiaryContainer = LensSand,
+    onTertiaryContainer = LensInk,
+    background = LensPaper,
+    onBackground = LensInk,
+    surface = LensSurface,
+    onSurface = LensInk,
+    surfaceVariant = LensSand,
     onSurfaceVariant = LensMuted,
-    outline = LensStone
+    inverseSurface = LensInk,
+    inverseOnSurface = LensPaper,
+    outline = LensFieldBorder,
+    outlineVariant = LensLine
 )
 
 private val LensShapes = Shapes(
-    small = RoundedCornerShape(8.dp),
-    medium = RoundedCornerShape(14.dp),
-    large = RoundedCornerShape(20.dp)
+    extraSmall = RoundedCornerShape(4.dp),
+    small = RoundedCornerShape(6.dp),
+    medium = RoundedCornerShape(10.dp),
+    large = RoundedCornerShape(16.dp),
+    extraLarge = RoundedCornerShape(20.dp)
 )
 
 @Composable
-fun LensClickAppTheme(
-    content: @Composable () -> Unit
-) {
+fun LensClickAppTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = LensColorScheme,
         typography = Typography,
