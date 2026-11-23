@@ -133,8 +133,8 @@ import com.lensclick.app.data.local.FairPhotographer
 import com.lensclick.app.data.local.Photographer
 import com.lensclick.app.data.local.User
 import com.lensclick.app.data.local.readFairPhotographers
-import com.lensclick.app.data.remote.auth.MobileAuthErrorCode
 import com.lensclick.app.data.remote.loadPublicPortfolioPreview
+import com.lensclick.app.util.TotpQrCode
 import com.lensclick.app.domain.BudgetRequest
 import com.lensclick.app.domain.BudgetRequestDraft
 import com.lensclick.app.domain.Favorite
@@ -2025,6 +2025,26 @@ private fun PortfolioMetadataDialog(
 private fun initialsForDisplay(name: String?): String = name.orEmpty().trim().split(Regex("\\s+")).filter { it.isNotBlank() }.take(2).joinToString("") { it.first().uppercase() }.ifBlank { "LC" }
 
 @Composable
+private fun QrCodeImage(content: String?) {
+    val bitmap = remember(content) {
+        if (content.isNullOrBlank()) null else runCatching { TotpQrCode.bitmap(content, 512) }.getOrNull()
+    }
+    if (bitmap != null) {
+        Image(
+            bitmap = bitmap.asImageBitmap(),
+            contentDescription = "QR Code para configurar o aplicativo autenticador",
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(220.dp)
+                .background(Color.White, RoundedCornerShape(10.dp))
+                .padding(10.dp)
+        )
+    } else {
+        Text("Nao foi possivel gerar o QR Code. Use a chave manual abaixo.", color = Muted, fontSize = 11.sp)
+    }
+}
+
+@Composable
 private fun AccountScreen(
     viewModel: LensClickViewModel,
     user: User?,
@@ -2227,9 +2247,12 @@ private fun AccountScreen(
             title = { Text("Ativar Autenticação TOTP", color = Ink, fontWeight = FontWeight.Bold) },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
-                    Text("1. Adicione a chave abaixo no seu aplicativo autenticador (Google Authenticator, Authy, etc.):", color = Muted, fontSize = 12.sp)
+                    Text("1. Escaneie o QR Code com seu aplicativo autenticador:", color = Muted, fontSize = 12.sp)
                     Spacer(Modifier.height(6.dp))
-                    Text(twoFactorSetup?.secret ?: "CHAVE_SECRETA_TOTP", color = Ink, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    QrCodeImage(twoFactorSetup?.otpauthUrl)
+                    Spacer(Modifier.height(6.dp))
+                    Text("Chave manual (somente se o QR nao funcionar):", color = Muted, fontSize = 11.sp)
+                    Text(twoFactorSetup?.secret ?: "CHAVE_SECRETA_TOTP", color = Ink, fontSize = 11.sp)
                     Spacer(Modifier.height(12.dp))
                     Text("2. Guarde seus códigos de recuperação em um local seguro:", color = Muted, fontSize = 12.sp)
                     twoFactorSetup?.recoveryCodes?.forEach { code ->
