@@ -87,7 +87,7 @@ A navegação usa `Navigation Compose` em uma única `Activity`. Telas de detalh
 | JVM | Toolchain 21 (provisionado via Foojay) |
 | Dados | [Room](https://developer.android.com/training/data-storage/room) 2.8.5 (`photographers`, `budgets`, `users`) + `Flow` |
 | Arquitetura | `:app` único, camadas `ui/` → `ViewModel` → `Repository` → `DAO` |
-| Empacotamento | `com.lensclick.app` · versão 1.0 |
+| Empacotamento | `com.lensclick.app` · versão 1.2.1 |
 
 ```
 UI (Compose)  ──▶  LensClickViewModel  ──▶  LensClickRepository  ──▶  LensClickDao  ──▶  Room
@@ -104,6 +104,8 @@ UI (Compose)  ──▶  LensClickViewModel  ──▶  LensClickRepository  ─
 O fluxo de login e cadastro usa a API móvel da plataforma LensClick. O token de sessão é
 armazenado com Android Keystore e removido no logout, na expiração ou na revogação. O Room
 não é fonte de verdade de usuários e não armazena senhas, tokens ou hashes.
+
+Em **Conta → Segurança (2FA)**, configure seu autenticador pelo QR Code ou pela chave manual e confirme com um código de seis dígitos. Guarde os códigos de recuperação. No próximo login, use o código do autenticador ou um código de recuperação. Para desativar o 2FA, informe também a senha atual. O servidor encerra todas as sessões após a desativação.
 
 Para conhecer o **modo fotógrafo**, use *Cadastrar como fotógrafo* no fluxo de criação de
 conta — o painel profissional abre automaticamente para contas com esse papel. Não existe

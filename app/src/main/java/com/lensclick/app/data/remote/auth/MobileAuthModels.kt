@@ -52,6 +52,7 @@ data class HttpResponse(
 
 enum class MobileAuthErrorCode {
     INVALID_INPUT,
+    INVALID_TWO_FACTOR_CHALLENGE,
     UNAUTHENTICATED,
     FORBIDDEN,
     NOT_FOUND,

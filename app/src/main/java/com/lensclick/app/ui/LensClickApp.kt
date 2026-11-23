@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -135,6 +136,7 @@ import com.lensclick.app.data.local.User
 import com.lensclick.app.data.local.readFairPhotographers
 import com.lensclick.app.data.remote.auth.MobileAuthErrorCode
 import com.lensclick.app.data.remote.loadPublicPortfolioPreview
+import com.lensclick.app.util.TotpQrCode
 import com.lensclick.app.domain.BudgetRequest
 import com.lensclick.app.domain.BudgetRequestDraft
 import com.lensclick.app.domain.Favorite
@@ -237,7 +239,8 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
             composable(Screen.Login.name) { LoginScreen(
                 authentication = authentication,
                 onLogin = { email, password -> viewModel.login(email, password) },
-                onVerify2Fa = { token, code -> viewModel.verifyTwoFactorChallenge(token, code) },
+                onVerify2Fa = viewModel::verifyTwoFactorChallenge,
+                onCancel2Fa = viewModel::cancelTwoFactorChallenge,
                 onSignUp = { go(Screen.AccountType) }
             ) }
             composable(Screen.SignUp.name) { SignUpScreen(
@@ -479,15 +482,17 @@ private fun AuthFrame(title: String, subtitle: String, content: @Composable Colu
 private fun LoginScreen(
     authentication: AuthenticationState,
     onLogin: (String, String) -> Unit,
-    onVerify2Fa: (String, String) -> Unit,
+    onVerify2Fa: (String) -> Unit,
+    onCancel2Fa: () -> Unit,
     onSignUp: () -> Unit
 ) {
     var email by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    var totpCode by rememberSaveable { mutableStateOf("") }
+    val challenge = authentication as? AuthenticationState.TwoFactorRequired
+    var totpCode by remember(challenge?.challengeToken) { mutableStateOf("") }
     var recoveryOpen by rememberSaveable { mutableStateOf(false) }
     val submitting = authentication is AuthenticationState.Loading
-    val is2FA = authentication is AuthenticationState.TwoFactorRequired
+    val is2FA = challenge != null
     val errorMessage = when (authentication) {
         is AuthenticationState.Error -> authentication.code.loginMessage()
         AuthenticationState.SessionExpired -> "Sua sessão expirou ou foi revogada. Entre novamente."
@@ -495,16 +500,23 @@ private fun LoginScreen(
     }
     val completedMessage = authentication == AuthenticationState.LogoutCompleted
 
+    BackHandler(enabled = is2FA, onBack = onCancel2Fa)
     AuthFrame(if (is2FA) "Verificação 2FA" else "Bem-vindo de volta!", if (is2FA) "Digite o código do seu autenticador" else "Entre para continuar") {
-        if (is2FA) {
-            val challenge = authentication as AuthenticationState.TwoFactorRequired
+        if (challenge != null) {
             Text("Insira o código de 6 dígitos do app TOTP ou um código de recuperação.", color = Muted, fontSize = 12.sp, textAlign = TextAlign.Center)
             Spacer(Modifier.height(16.dp))
-            LensField("Código TOTP / Recuperação", totpCode, { totpCode = it }, KeyboardType.Number)
+            LensField("Código TOTP / Recuperação", totpCode, { totpCode = it }, KeyboardType.Ascii)
             Spacer(Modifier.height(20.dp))
+            if (challenge.verifying) {
+                AuthStatusBanner("Verificando o código...", loading = true)
+            } else if (challenge.error != null) {
+                AuthStatusBanner(challenge.error.twoFactorMessage(), loading = false, error = true)
+            }
             PrimaryButton("Confirmar código", {
-                onVerify2Fa(challenge.challengeToken, totpCode)
-            }, enabled = totpCode.isNotBlank() && !submitting)
+                onVerify2Fa(totpCode)
+                totpCode = ""
+            }, enabled = totpCode.isNotBlank() && !challenge.verifying)
+            TextButton(onClick = onCancel2Fa, enabled = !challenge.verifying) { Text("Voltar ao login") }
         } else {
             LensField("E-mail", email, { email = it }, KeyboardType.Email)
             Spacer(Modifier.height(14.dp))
@@ -520,6 +532,7 @@ private fun LoginScreen(
             }
             PrimaryButton(if (submitting) "Entrando..." else "Entrar", {
                 onLogin(email, password)
+                password = ""
             }, enabled = email.isNotBlank() && password.isNotBlank() && !submitting)
             Spacer(Modifier.height(12.dp))
             CenterLink("Não tem uma conta?", "Cadastre-se", onSignUp)
@@ -532,10 +545,20 @@ private fun LoginScreen(
 private fun MobileAuthErrorCode.loginMessage(): String = when (this) {
     MobileAuthErrorCode.INVALID_INPUT,
     MobileAuthErrorCode.UNAUTHENTICATED -> "E-mail ou senha inválidos."
+    MobileAuthErrorCode.INVALID_TWO_FACTOR_CHALLENGE -> "O desafio de verificação expirou. Entre novamente."
     MobileAuthErrorCode.RATE_LIMITED -> "Muitas tentativas. Aguarde antes de tentar novamente."
     MobileAuthErrorCode.NETWORK -> "Não foi possível conectar. Verifique sua internet."
     MobileAuthErrorCode.SERVER -> "O serviço está indisponível. Tente novamente."
     else -> "Não foi possível entrar. Tente novamente."
+}
+
+private fun MobileAuthErrorCode.twoFactorMessage(): String = when (this) {
+    MobileAuthErrorCode.INVALID_INPUT -> "Código inválido. Confira o código e tente novamente."
+    MobileAuthErrorCode.FORBIDDEN -> "A senha atual está incorreta."
+    MobileAuthErrorCode.UNAUTHENTICATED -> "Sua sessão expirou. Entre novamente."
+    MobileAuthErrorCode.NETWORK -> "Não foi possível conectar. Verifique sua internet."
+    MobileAuthErrorCode.RATE_LIMITED -> "Muitas tentativas. Aguarde antes de tentar novamente."
+    else -> "Não foi possível concluir a verificação. Tente novamente."
 }
 
 @Composable
@@ -2025,6 +2048,88 @@ private fun PortfolioMetadataDialog(
 private fun initialsForDisplay(name: String?): String = name.orEmpty().trim().split(Regex("\\s+")).filter { it.isNotBlank() }.take(2).joinToString("") { it.first().uppercase() }.ifBlank { "LC" }
 
 @Composable
+private fun QrCodeImage(content: String) {
+    val bitmap = remember(content) {
+        runCatching { TotpQrCode.bitmap(content) }.getOrNull()
+    }
+    if (bitmap != null) {
+        Image(
+            bitmap = bitmap.asImageBitmap(),
+            contentDescription = "QR Code para configurar o aplicativo autenticador",
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(220.dp)
+                .background(Color.White, RoundedCornerShape(10.dp))
+                .padding(10.dp),
+            contentScale = ContentScale.Fit
+        )
+    } else {
+        Text("Não foi possível gerar o QR Code. Use a chave manual abaixo.", color = Muted, fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun TwoFactorEnrollmentDialog(
+    state: TwoFactorEnrollmentState,
+    onRetry: () -> Unit,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val ready = state as? TwoFactorEnrollmentState.Ready
+    val loading = state == TwoFactorEnrollmentState.Loading
+    val busy = loading || ready?.verifying == true
+    var code by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Ativar verificação em duas etapas", color = Ink, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                when {
+                    loading -> AuthStatusBanner("Preparando o autenticador...", loading = true)
+                    ready == null -> AuthStatusBanner("Não foi possível iniciar a configuração.", loading = false, error = true)
+                    else -> {
+                        Text("Escaneie o QR Code com seu aplicativo autenticador.", color = Muted, fontSize = 12.sp)
+                        QrCodeImage(ready.setup.otpauthUrl)
+                        Text("Chave para configuração manual", color = Muted, fontSize = 12.sp)
+                        Text(ready.setup.secret, color = Ink, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.height(12.dp))
+                        Text("Guarde os códigos de recuperação em um local seguro.", color = Muted, fontSize = 12.sp)
+                        ready.setup.recoveryCodes.forEach { recoveryCode ->
+                            Text(recoveryCode, color = Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        LensField("Código de 6 dígitos", code, { entered ->
+                            code = entered.filter { it in '0'..'9' }.take(6)
+                        }, KeyboardType.Number)
+                        if (ready.verifying) {
+                            AuthStatusBanner("Verificando o código...", loading = true)
+                        } else if (ready.error != null) {
+                            AuthStatusBanner(ready.error.twoFactorMessage(), loading = false, error = true)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (state == TwoFactorEnrollmentState.Error) {
+                Button(onClick = onRetry) { Text("Tentar novamente") }
+            } else if (ready != null) {
+                Button(
+                    onClick = {
+                        onConfirm(code)
+                        code = ""
+                    },
+                    enabled = code.length == 6 && !busy
+                ) { Text("Ativar 2FA") }
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text("Cancelar") } },
+        containerColor = SurfaceHigh
+    )
+}
+
+@Composable
 private fun AccountScreen(
     viewModel: LensClickViewModel,
     user: User?,
@@ -2036,7 +2141,7 @@ private fun AccountScreen(
 ) = AppPage(Screen.Account, onNavigate) {
     var selectedAction by rememberSaveable { mutableStateOf<String?>(null) }
     val twoFactorStatus by viewModel.twoFactorStatus.collectAsStateWithLifecycle()
-    val twoFactorSetup by viewModel.twoFactorSetup.collectAsStateWithLifecycle()
+    val twoFactorEnrollment by viewModel.twoFactorEnrollment.collectAsStateWithLifecycle()
 
     var exportDialogOpen by rememberSaveable { mutableStateOf(false) }
     var exportDataJson by rememberSaveable { mutableStateOf<String?>(null) }
@@ -2044,10 +2149,7 @@ private fun AccountScreen(
     var deletePassword by remember { mutableStateOf("") }
     var accountErrorMsg by rememberSaveable { mutableStateOf<String?>(null) }
 
-    var twoFactorSetupOpen by rememberSaveable { mutableStateOf(false) }
-    var twoFactorVerifyCode by rememberSaveable { mutableStateOf("") }
     var disable2FaOpen by rememberSaveable { mutableStateOf(false) }
-    var disable2FaPassword by remember { mutableStateOf("") }
 
     val actions = listOf(
         "Meus dados" to Icons.Default.Person,
@@ -2143,27 +2245,31 @@ private fun AccountScreen(
                 )
             }
             "Segurança (2FA)", "Segurança" -> {
-                val is2FaEnabled = twoFactorStatus?.enabled == true
+                val status = twoFactorStatus
                 AlertDialog(
                     onDismissRequest = { selectedAction = null },
                     title = { Text("Segurança & 2FA", color = Ink, fontWeight = FontWeight.Bold) },
                     text = {
                         Column {
-                            Text("Status da verificação em duas etapas (TOTP):", color = Muted, fontSize = 12.sp)
-                            Spacer(Modifier.height(8.dp))
-                            FilterChip(if (is2FaEnabled) "2FA Ativado" else "2FA Desativado", selected = is2FaEnabled)
-                            Spacer(Modifier.height(16.dp))
-                            if (is2FaEnabled) {
+                            if (status == null) {
+                                Text("Status da verificação em duas etapas indisponível.", color = Muted, fontSize = 12.sp)
+                                TextButton(onClick = viewModel::loadTwoFactorStatus) { Text("Consultar status") }
+                            } else if (status.enabled) {
+                                FilterChip("2FA Ativado", selected = true)
+                                Spacer(Modifier.height(16.dp))
                                 OutlinedButton(
                                     onClick = {
+                                        selectedAction = null
                                         disable2FaOpen = true
                                     },
                                     modifier = Modifier.fillMaxWidth()
                                 ) { Text("Desativar 2FA", color = MaterialTheme.colorScheme.error) }
                             } else {
+                                FilterChip("2FA Desativado", selected = false)
+                                Spacer(Modifier.height(16.dp))
                                 PrimaryButton("Configurar 2FA (TOTP)", {
+                                    selectedAction = null
                                     viewModel.setupTwoFactor()
-                                    twoFactorSetupOpen = true
                                 })
                             }
                         }
@@ -2221,66 +2327,55 @@ private fun AccountScreen(
         )
     }
 
-    if (twoFactorSetupOpen) {
-        AlertDialog(
-            onDismissRequest = { twoFactorSetupOpen = false },
-            title = { Text("Ativar Autenticação TOTP", color = Ink, fontWeight = FontWeight.Bold) },
-            text = {
-                Column(Modifier.verticalScroll(rememberScrollState())) {
-                    Text("1. Adicione a chave abaixo no seu aplicativo autenticador (Google Authenticator, Authy, etc.):", color = Muted, fontSize = 12.sp)
-                    Spacer(Modifier.height(6.dp))
-                    Text(twoFactorSetup?.secret ?: "CHAVE_SECRETA_TOTP", color = Ink, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    Spacer(Modifier.height(12.dp))
-                    Text("2. Guarde seus códigos de recuperação em um local seguro:", color = Muted, fontSize = 12.sp)
-                    twoFactorSetup?.recoveryCodes?.forEach { code ->
-                        Text("• $code", color = Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    LensField("Código de 6 dígitos para confirmar", twoFactorVerifyCode, { twoFactorVerifyCode = it }, KeyboardType.Number)
-                }
-            },
-            confirmButton = {
-                Button(onClick = {
-                    viewModel.enableTwoFactor(twoFactorVerifyCode) {
-                        twoFactorSetupOpen = false
-                        twoFactorVerifyCode = ""
-                    }
-                }) { Text("Ativar 2FA") }
-            },
-            dismissButton = { TextButton(onClick = { twoFactorSetupOpen = false }) { Text("Cancelar") } },
-            containerColor = SurfaceHigh
+    if (twoFactorEnrollment != TwoFactorEnrollmentState.Idle) {
+        TwoFactorEnrollmentDialog(
+            state = twoFactorEnrollment,
+            onRetry = viewModel::setupTwoFactor,
+            onConfirm = viewModel::enableTwoFactor,
+            onDismiss = viewModel::closeTwoFactorSetup
         )
     }
 
     if (disable2FaOpen) {
+        var password by remember { mutableStateOf("") }
+        var code by remember { mutableStateOf("") }
+        var submitting by remember { mutableStateOf(false) }
+        var errorMessage by remember { mutableStateOf<String?>(null) }
         AlertDialog(
-            onDismissRequest = { disable2FaOpen = false },
+            onDismissRequest = { if (!submitting) disable2FaOpen = false },
             title = { Text("Desativar 2FA", color = Ink, fontWeight = FontWeight.Bold) },
             text = {
-                Column {
-                    Text("Digite sua senha atual para confirmar a desativação da verificação em duas etapas:", color = Muted, fontSize = 12.sp)
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Text("Informe sua senha atual e um código do autenticador ou de recuperação. Ao desativar o 2FA, todas as sessões serão encerradas.", color = Muted, fontSize = 12.sp)
                     Spacer(Modifier.height(12.dp))
-                    LensField("Senha atual", disable2FaPassword, { disable2FaPassword = it }, password = true)
+                    LensField("Senha atual", password, { password = it }, password = true)
+                    Spacer(Modifier.height(12.dp))
+                    LensField("Código TOTP / Recuperação", code, { code = it }, KeyboardType.Ascii)
+                    if (submitting) {
+                        AuthStatusBanner("Desativando a verificação...", loading = true)
+                    } else {
+                        errorMessage?.let { AuthStatusBanner(it, loading = false, error = true) }
+                    }
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.disableTwoFactor(disable2FaPassword) { ok ->
-                            if (ok) {
-                                disable2FaOpen = false
-                                disable2FaPassword = ""
-                                selectedAction = null
-                            } else {
-                                accountErrorMsg = "Falha ao desativar 2FA. Verifique sua senha."
-                            }
+                        submitting = true
+                        errorMessage = null
+                        viewModel.disableTwoFactor(password, code) { error ->
+                            submitting = false
+                            if (error == null) disable2FaOpen = false
+                            errorMessage = error?.twoFactorMessage()
                         }
+                        password = ""
+                        code = ""
                     },
                     colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.error, Color.White),
-                    enabled = disable2FaPassword.isNotBlank()
+                    enabled = password.isNotBlank() && code.isNotBlank() && !submitting
                 ) { Text("Confirmar Desativação") }
             },
-            dismissButton = { TextButton(onClick = { disable2FaOpen = false }) { Text("Cancelar") } },
+            dismissButton = { TextButton(onClick = { disable2FaOpen = false }, enabled = !submitting) { Text("Cancelar") } },
             containerColor = SurfaceHigh
         )
     }

@@ -21,6 +21,6 @@ interface TwoFactorGateway {
     suspend fun getStatus(): TwoFactorStatus
     suspend fun setup(): TwoFactorSetup
     suspend fun enable(code: String): Boolean
-    suspend fun disable(password: String, code: String? = null): Boolean
+    suspend fun disable(password: String, code: String): Boolean
     suspend fun verifyChallenge(challengeToken: String, code: String): MobileSession
 }

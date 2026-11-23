@@ -79,27 +79,17 @@ class HttpMobileAuthApi(
         if (response.statusCode == 202) {
             return try {
                 val root = JSONObject(response.body)
+                require(root.getString("status") == "twoFactorRequired")
                 val challengeToken = root.getString("challengeToken")
-                val expiresAt = root.optString("expiresAt", "")
+                val expiresAt = root.getString("expiresAt")
+                require(challengeToken.isNotBlank() && expiresAt.isNotBlank())
                 MobileLoginResult.TwoFactorRequired(challengeToken, expiresAt)
             } catch (error: Exception) {
                 throw MobileAuthException(MobileAuthErrorCode.MALFORMED_RESPONSE, cause = error)
             }
         }
         ensureSuccess(response, 200)
-        return try {
-            val root = JSONObject(response.body)
-            val session = root.getJSONObject("session")
-            MobileLoginResult.Success(
-                MobileSession(
-                    user = parseUser(root.getJSONObject("user")),
-                    accessToken = session.getString("accessToken"),
-                    expiresAt = session.getString("expiresAt")
-                )
-            )
-        } catch (error: Exception) {
-            throw MobileAuthException(MobileAuthErrorCode.MALFORMED_RESPONSE, cause = error)
-        }
+        return MobileLoginResult.Success(parseSessionResponse(response))
     }
 
     override suspend fun register(request: MobileRegisterRequest): MobileSession {

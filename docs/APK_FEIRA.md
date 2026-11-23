@@ -52,6 +52,12 @@ Alternativa: passar como propriedades Gradle `-Plensclick.releaseKeystorePath=..
 
 O QR usa o endereço do APK assinado da release `feira-2026`. Esse endereço permite reutilizar o QR ao disponibilizar uma versão assinada com o mesmo nome de arquivo na release.
 
+### Versão 1.2.1
+
+- Configuração do autenticador pelo QR Code gerado no app, com chave manual e códigos de recuperação.
+- Nova tentativa de verificação no mesmo desafio após código incorreto. Desafio expirado solicita novo login.
+- Desativação do 2FA com senha e código, seguida de encerramento da sessão local.
+
 ## Perfis de apresentação no celular
 
 O menu **Explorar fotógrafos → Perfis da feira** mostra quatro perfis fictícios. Os dados e as fotos vêm dentro do APK, com acesso mesmo sem internet. Os perfis de exemplo ficam em um catálogo separado com bio e portfólio para consulta.
