@@ -44,6 +44,24 @@ class LensClickNavigationTest {
         rule.onNodeWithText("Explorar fotógrafos").performScrollTo().assertIsDisplayed()
     }
 
+    @Test fun fairCatalogAndPortfolioOpenAsGuest() {
+        rule.onNodeWithText("Explorar fotógrafos").performScrollTo().performClick()
+        awaitText("Buscar Fotógrafos")
+        rule.onNodeWithText("Perfis da feira").performClick()
+
+        awaitText("Lívia Monteiro")
+        rule.onNodeWithText("Rafael Sato").assertExists()
+        rule.onNodeWithText("Joana Nascimento").assertExists()
+        rule.onNodeWithText("Bruno Vidal").assertExists()
+        rule.onNodeWithText("Lívia Monteiro").performClick()
+
+        awaitText("Perfil fictício para demonstração.")
+        rule.onNodeWithContentDescription(
+            "Casal caminhando entre convidados em uma cerimônia ao ar livre."
+        ).performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Solicitar orçamento").assertDoesNotExist()
+    }
+
     @Test fun loginStartsSignedOutAndDoesNotUseDemoCredentials() {
         rule.onNodeWithText("Entrar").performScrollTo().performClick()
         awaitText("Bem-vindo de volta!")

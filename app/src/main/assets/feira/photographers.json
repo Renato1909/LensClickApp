@@ -1,0 +1,85 @@
+[
+  {
+    "slug": "feira-livia-monteiro",
+    "name": "Lívia Monteiro",
+    "city": "São Paulo",
+    "specialties": [
+      "wedding"
+    ],
+    "price": 245000,
+    "radius": 75,
+    "bio": "Fotografia documental de casamentos, com atenção aos encontros e aos pequenos gestos da cerimônia.",
+    "photos": [
+      [
+        "card_wedding.jpg",
+        "Cerimônia ao ar livre",
+        "Casal caminhando entre convidados em uma cerimônia ao ar livre.",
+        "wedding"
+      ]
+    ]
+  },
+  {
+    "slug": "feira-rafael-sato",
+    "name": "Rafael Sato",
+    "city": "São Paulo",
+    "specialties": [
+      "portrait"
+    ],
+    "price": 65000,
+    "radius": 35,
+    "bio": "Retratos em estúdio e ao ar livre, com direção de poses e atenção à luz natural.",
+    "photos": [
+      [
+        "card_portrait_studio.jpg",
+        "Retrato em luz de janela",
+        "Pessoa sentada em um estúdio iluminado pela janela.",
+        "portrait"
+      ],
+      [
+        "card_portrait_outdoor.jpg",
+        "Retrato ao ar livre",
+        "Pessoa fotografada em um parque com a cidade ao fundo.",
+        "portrait"
+      ]
+    ]
+  },
+  {
+    "slug": "feira-joana-nascimento",
+    "name": "Joana Nascimento",
+    "city": "São Paulo",
+    "specialties": [
+      "corporate",
+      "portrait"
+    ],
+    "price": 95000,
+    "radius": 45,
+    "bio": "Retratos profissionais e cobertura de equipes para sites, apresentações e materiais institucionais.",
+    "photos": [
+      [
+        "card_corporate.jpg",
+        "Equipe em reunião",
+        "Equipe reunida ao redor de uma mesa em um escritório.",
+        "corporate"
+      ]
+    ]
+  },
+  {
+    "slug": "feira-bruno-vidal",
+    "name": "Bruno Vidal",
+    "city": "Campinas",
+    "specialties": [
+      "events"
+    ],
+    "price": 120000,
+    "radius": 80,
+    "bio": "Cobertura de aniversários e eventos com foco em fotos espontâneas de quem participa.",
+    "photos": [
+      [
+        "card_event.jpg",
+        "Recepção à luz de velas",
+        "Convidados reunidos em torno de uma mesa iluminada por velas.",
+        "events"
+      ]
+    ]
+  }
+]
