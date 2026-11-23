@@ -107,4 +107,6 @@ class MobileAuthRepository(
             sessionStore.clear()
         }
     }
+
+    fun clearSession() = sessionStore.clear()
 }

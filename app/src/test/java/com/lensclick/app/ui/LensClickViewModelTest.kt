@@ -115,32 +115,86 @@ class LensClickViewModelTest {
     }
 
     @Test
-    fun verifyTwoFactorChallengeAuthenticatesUser() = runTest(dispatcher) {
+    fun verifyTwoFactorChallengeKeepsTheChallengeAfterInvalidCode() = runTest(dispatcher) {
         val sessionStore = InMemorySessionStore()
+        val submitted = mutableListOf<Pair<String, String>>()
         val gateway = object : TwoFactorGateway {
             override suspend fun getStatus(): TwoFactorStatus = TwoFactorStatus(true)
             override suspend fun setup(): TwoFactorSetup = TwoFactorSetup("secret", "url", emptyList())
             override suspend fun enable(code: String): Boolean = true
-            override suspend fun disable(password: String, code: String?): Boolean = true
-            override suspend fun verifyChallenge(challengeToken: String, code: String): MobileSession =
-                MobileSession(
+            override suspend fun disable(password: String, code: String): Boolean = true
+            override suspend fun verifyChallenge(challengeToken: String, code: String): MobileSession {
+                submitted += challengeToken to code
+                if (code != "ABCD-EFGH") throw MobileAuthException(MobileAuthErrorCode.INVALID_INPUT)
+                return MobileSession(
                     user = MobileUser(1, "2FA User", "2fa@example.com", null, "client", true, false),
                     accessToken = "2fa_bearer",
                     expiresAt = "2099-01-01T00:00:00Z"
                 )
+            }
+        }
+        viewModel = LensClickViewModel(
+            LensClickRepository(dao),
+            mobileAuthRepository = authRepository(sessionStore, status = 202),
+            twoFactorGateway = gateway
+        )
+        advanceUntilIdle()
+
+        viewModel.verifyTwoFactorChallenge("123456")
+        assertTrue(submitted.isEmpty())
+        viewModel.login("user@example.com", "Secret123")
+        advanceUntilIdle()
+        viewModel.verifyTwoFactorChallenge("123456")
+        advanceUntilIdle()
+
+        val challenge = viewModel.authentication.value as AuthenticationState.TwoFactorRequired
+        assertEquals(MobileAuthErrorCode.INVALID_INPUT, challenge.error)
+        assertFalse(challenge.verifying)
+        assertNull(viewModel.currentUser.value)
+        assertNull(sessionStore.readAccessToken())
+
+        viewModel.verifyTwoFactorChallenge("ABCD-EFGH")
+        advanceUntilIdle()
+
+        assertTrue(viewModel.authentication.value is AuthenticationState.Authenticated)
+        assertEquals("2fa@example.com", viewModel.currentUser.value?.email)
+        assertEquals(listOf("challenge_token_real" to "123456", "challenge_token_real" to "ABCD-EFGH"), submitted)
+    }
+
+    @Test
+    fun disableTwoFactorClearsTheRevokedSession() = runTest(dispatcher) {
+        val sessionStore = InMemorySessionStore()
+        val gateway = object : TwoFactorGateway {
+            override suspend fun getStatus() = TwoFactorStatus(true)
+            override suspend fun setup() = error("Unexpected setup")
+            override suspend fun enable(code: String) = error("Unexpected enable")
+            override suspend fun verifyChallenge(challengeToken: String, code: String) = error("Unexpected verification")
+            override suspend fun disable(password: String, code: String): Boolean {
+                assertEquals("Secret123", password)
+                assertEquals("ABCD-EFGH", code)
+                return true
+            }
         }
         viewModel = LensClickViewModel(
             LensClickRepository(dao),
             mobileAuthRepository = authRepository(sessionStore),
             twoFactorGateway = gateway
         )
+        viewModel.login("user@example.com", "Secret123")
+        advanceUntilIdle()
+        assertNotNull(sessionStore.readAccessToken())
+
+        var completed = false
+        viewModel.disableTwoFactor("Secret123", "ABCD-EFGH") { error ->
+            assertNull(error)
+            completed = true
+        }
         advanceUntilIdle()
 
-        viewModel.verifyTwoFactorChallenge("token_123", "123456")
-        advanceUntilIdle()
-
-        assertTrue(viewModel.authentication.value is AuthenticationState.Authenticated)
-        assertEquals("2fa@example.com", viewModel.currentUser.value?.email)
+        assertTrue(completed)
+        assertEquals(AuthenticationState.LogoutCompleted, viewModel.authentication.value)
+        assertNull(viewModel.currentUser.value)
+        assertNull(sessionStore.readAccessToken())
     }
 
     @Test

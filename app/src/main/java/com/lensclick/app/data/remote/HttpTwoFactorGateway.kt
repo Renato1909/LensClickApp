@@ -36,7 +36,7 @@ class HttpTwoFactorGateway(
         val codesJson = json.optJSONArray("recoveryCodes") ?: JSONArray()
         val codesList = (0 until codesJson.length()).map { codesJson.getString(it) }
         return TwoFactorSetup(
-            secret = json.optString("secret"),
+            secret = json.getString("secret").also { require(it.isNotBlank()) },
             otpauthUrl = json.optString("otpauthUrl"),
             recoveryCodes = codesList
         )
@@ -49,10 +49,10 @@ class HttpTwoFactorGateway(
         return JSONObject(response.body).optBoolean("success", true)
     }
 
-    override suspend fun disable(password: String, code: String?): Boolean {
+    override suspend fun disable(password: String, code: String): Boolean {
         val body = JSONObject()
             .put("password", password)
-            .apply { if (!code.isNullOrBlank()) put("code", code) }
+            .put("code", code.trim())
             .toString()
         val response = transport.execute(sessionStore.bearerRequest("POST", "/api/account/2fa/disable", body))
         ensureHttpSuccess(response, 200)
@@ -62,7 +62,7 @@ class HttpTwoFactorGateway(
     override suspend fun verifyChallenge(challengeToken: String, code: String): MobileSession {
         val body = JSONObject()
             .put("challengeToken", challengeToken)
-            .put("code", code)
+            .put("code", code.trim())
             .toString()
         val response = transport.execute(
             HttpRequest(
@@ -75,8 +75,13 @@ class HttpTwoFactorGateway(
                 body = body
             )
         )
+        if (response.statusCode == 400 &&
+            runCatching { JSONObject(response.body).optString("code") }.getOrNull() == "invalid_challenge"
+        ) {
+            throw MobileAuthException(MobileAuthErrorCode.INVALID_TWO_FACTOR_CHALLENGE, response.statusCode)
+        }
         ensureHttpSuccess(response, 200)
-        return try {
+        val verifiedSession = try {
             val root = JSONObject(response.body)
             val session = root.getJSONObject("session")
             val userJson = root.getJSONObject("user")
@@ -89,15 +94,15 @@ class HttpTwoFactorGateway(
                 emailVerified = userJson.optBoolean("emailVerified", false),
                 isAdmin = userJson.optBoolean("isAdmin", false)
             )
-            val sessionObj = MobileSession(
+            MobileSession(
                 user = parsedUser,
-                accessToken = session.getString("accessToken"),
+                accessToken = session.getString("accessToken").also { require(it.isNotBlank()) },
                 expiresAt = session.getString("expiresAt")
             )
-            sessionStore.writeAccessToken(sessionObj.accessToken)
-            sessionObj
         } catch (error: Exception) {
             throw MobileAuthException(MobileAuthErrorCode.MALFORMED_RESPONSE, cause = error)
         }
+        sessionStore.writeAccessToken(verifiedSession.accessToken)
+        return verifiedSession
     }
 }

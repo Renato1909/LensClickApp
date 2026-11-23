@@ -7,6 +7,8 @@ import com.lensclick.app.data.remote.auth.MobileAuthException
 import kotlinx.coroutines.test.runTest
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.fail
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -49,12 +51,14 @@ class TwoFactorGatewayTest {
     }
 
     @Test
-    fun disableSendsPasswordAndReturnsSuccess() = runTest {
+    fun disableSendsPasswordAndRecoveryCode() = runTest {
         val transport = FakeHttpTransport(HttpResponse(200, body = """{"success":true}"""))
         val gateway = HttpTwoFactorGateway(transport, store())
-        val ok = gateway.disable("senha123")
+        val ok = gateway.disable("senha123", " ABCD-EFGH ")
         assertTrue(ok)
-        assertEquals("senha123", JSONObject(transport.lastRequest!!.body!!).getString("password"))
+        val body = JSONObject(transport.lastRequest!!.body!!)
+        assertEquals("senha123", body.getString("password"))
+        assertEquals("ABCD-EFGH", body.getString("code"))
     }
 
     @Test
@@ -71,6 +75,26 @@ class TwoFactorGatewayTest {
         assertEquals("new_bearer", session.accessToken)
         assertEquals("new_bearer", sessionStore.readAccessToken())
         assertEquals("654321", JSONObject(transport.lastRequest!!.body!!).getString("code"))
+    }
+
+    @Test
+    fun verifyDistinguishesInvalidCodeFromExpiredChallenge() = runTest {
+        val store = InMemorySessionStore()
+        val errors = mapOf(
+            "invalid_code" to MobileAuthErrorCode.INVALID_INPUT,
+            "invalid_challenge" to MobileAuthErrorCode.INVALID_TWO_FACTOR_CHALLENGE
+        )
+        for ((responseCode, expected) in errors) {
+            val transport = FakeHttpTransport(HttpResponse(400, body = """{"code":"$responseCode"}"""))
+            val gateway = HttpTwoFactorGateway(transport, store)
+            try {
+                gateway.verifyChallenge("test-challenge", "ABCD-EFGH")
+                fail("Expected $expected")
+            } catch (error: MobileAuthException) {
+                assertEquals(expected, error.code)
+            }
+            assertNull(store.readAccessToken())
+        }
     }
 
     @Test

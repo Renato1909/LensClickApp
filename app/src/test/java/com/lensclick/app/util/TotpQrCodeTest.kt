@@ -1,24 +1,28 @@
 package com.lensclick.app.util
 
+import com.google.zxing.BinaryBitmap
+import com.google.zxing.RGBLuminanceSource
+import com.google.zxing.common.HybridBinarizer
+import com.google.zxing.qrcode.QRCodeReader
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TotpQrCodeTest {
-    private val otpauth = "otpauth://totp/LensClick:demo@example.com?issuer=LensClick&digits=6&period=30"
+    private val url = "otpauth://totp/LensClick:demo%40example.com?secret=JBSWY3DPEHPK3PXP&issuer=LensClick"
 
     @Test
-    fun `qr code eh deterministico e nao vazio`() {
-        val first = TotpQrCode.modules(otpauth, 256)
-        val second = TotpQrCode.modules(otpauth, 256)
+    fun qrCodeRoundTripsAuthenticatorUrl() {
+        val matrix = TotpQrCode.matrix(url, 256)
+        val pixels = IntArray(matrix.width * matrix.height) { index ->
+            if (matrix[index % matrix.width, index / matrix.width]) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
+        }
+        val image = RGBLuminanceSource(matrix.width, matrix.height, pixels)
 
-        assertEquals(256 * 256, first.size)
-        assertTrue(first.contentEquals(second))
-        assertTrue(first.count { it } > 0)
+        assertEquals(url, QRCodeReader().decode(BinaryBitmap(HybridBinarizer(image))).text)
     }
 
     @Test(expected = IllegalArgumentException::class)
-    fun `conteudo vazio nao gera qr code`() {
-        TotpQrCode.modules(" ")
+    fun rejectsEmptyAuthenticatorUrl() {
+        TotpQrCode.matrix(" ", 256)
     }
 }

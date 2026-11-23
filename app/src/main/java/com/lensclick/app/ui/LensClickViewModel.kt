@@ -13,6 +13,7 @@ import com.lensclick.app.data.remote.HttpPublicPhotographersGateway
 import com.lensclick.app.data.remote.auth.MobileAuthErrorCode
 import com.lensclick.app.data.remote.auth.MobileAuthException
 import com.lensclick.app.data.remote.auth.MobileAuthRepository
+import com.lensclick.app.data.remote.auth.MobileLoginResult
 import com.lensclick.app.domain.AccountGateway
 import com.lensclick.app.domain.BudgetRequest
 import com.lensclick.app.domain.BudgetRequestDraft
@@ -65,9 +66,25 @@ sealed interface AuthenticationState {
     data object SignedOut : AuthenticationState
     data object LogoutCompleted : AuthenticationState
     data class Authenticated(val user: User) : AuthenticationState
-    data class TwoFactorRequired(val email: String, val challengeToken: String) : AuthenticationState
+    data class TwoFactorRequired(
+        val email: String,
+        val challengeToken: String,
+        val verifying: Boolean = false,
+        val error: MobileAuthErrorCode? = null
+    ) : AuthenticationState
     data class Error(val code: MobileAuthErrorCode) : AuthenticationState
     data object SessionExpired : AuthenticationState
+}
+
+sealed interface TwoFactorEnrollmentState {
+    data object Idle : TwoFactorEnrollmentState
+    data object Loading : TwoFactorEnrollmentState
+    data object Error : TwoFactorEnrollmentState
+    data class Ready(
+        val setup: TwoFactorSetup,
+        val verifying: Boolean = false,
+        val error: MobileAuthErrorCode? = null
+    ) : TwoFactorEnrollmentState
 }
 
 sealed interface ProfessionalProfileState {
@@ -195,8 +212,8 @@ class LensClickViewModel(
     // 2FA State
     private val _twoFactorStatus = MutableStateFlow<TwoFactorStatus?>(null)
     val twoFactorStatus: StateFlow<TwoFactorStatus?> = _twoFactorStatus.asStateFlow()
-    private val _twoFactorSetup = MutableStateFlow<TwoFactorSetup?>(null)
-    val twoFactorSetup: StateFlow<TwoFactorSetup?> = _twoFactorSetup.asStateFlow()
+    private val _twoFactorEnrollment = MutableStateFlow<TwoFactorEnrollmentState>(TwoFactorEnrollmentState.Idle)
+    val twoFactorEnrollment: StateFlow<TwoFactorEnrollmentState> = _twoFactorEnrollment.asStateFlow()
 
     // Conversations & Messages State
     private val _conversations = MutableStateFlow<List<Conversation>>(emptyList())
@@ -224,8 +241,9 @@ class LensClickViewModel(
                         deviceName = "Android",
                         appVersion = BuildConfig.VERSION_NAME
                     )) {
-                        is com.lensclick.app.data.remote.auth.MobileLoginResult.Success -> setAuthenticated(result.session.user)
-                        is com.lensclick.app.data.remote.auth.MobileLoginResult.TwoFactorRequired -> {
+                        is MobileLoginResult.Success -> setAuthenticated(result.session.user)
+                        is MobileLoginResult.TwoFactorRequired -> {
+                            _currentUser.value = null
                             _authentication.value = AuthenticationState.TwoFactorRequired(
                                 email = email,
                                 challengeToken = result.challengeToken
@@ -240,30 +258,44 @@ class LensClickViewModel(
         }
     }
 
-    fun verifyTwoFactorChallenge(challengeToken: String, code: String) {
+    fun verifyTwoFactorChallenge(code: String) {
         val gateway = twoFactorGateway ?: return
+        val challenge = _authentication.value as? AuthenticationState.TwoFactorRequired ?: return
+        if (challenge.verifying || code.isBlank()) return
         viewModelScope.launch {
             authenticationMutex.withLock {
-                _authentication.value = AuthenticationState.Loading
+                if (_authentication.value !== challenge) return@withLock
+                _authentication.value = challenge.copy(verifying = true, error = null)
                 try {
-                    val session = gateway.verifyChallenge(challengeToken, code)
+                    val session = gateway.verifyChallenge(challenge.challengeToken, code)
                     setAuthenticated(session.user)
                 } catch (error: MobileAuthException) {
-                    _authentication.value = AuthenticationState.Error(error.code)
+                    _authentication.value = if (error.code == MobileAuthErrorCode.INVALID_TWO_FACTOR_CHALLENGE) {
+                        AuthenticationState.Error(error.code)
+                    } else {
+                        challenge.copy(error = error.code)
+                    }
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
-                    _authentication.value = AuthenticationState.Error(MobileAuthErrorCode.SERVER)
+                    _authentication.value = challenge.copy(error = MobileAuthErrorCode.SERVER)
                 }
             }
         }
     }
 
+    fun cancelTwoFactorChallenge() {
+        val challenge = _authentication.value as? AuthenticationState.TwoFactorRequired ?: return
+        if (!challenge.verifying) _authentication.value = AuthenticationState.SignedOut
+    }
+
     fun loadTwoFactorStatus() {
         val gateway = twoFactorGateway ?: return
+        val userId = _currentUser.value?.id ?: return
         viewModelScope.launch {
             try {
-                _twoFactorStatus.value = gateway.getStatus()
+                val status = gateway.getStatus()
+                if (_currentUser.value?.id == userId) _twoFactorStatus.value = status
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {}
@@ -272,46 +304,84 @@ class LensClickViewModel(
 
     fun setupTwoFactor() {
         val gateway = twoFactorGateway ?: return
+        if (_authentication.value !is AuthenticationState.Authenticated) return
+        if (_twoFactorEnrollment.value !in setOf(TwoFactorEnrollmentState.Idle, TwoFactorEnrollmentState.Error)) return
+        _twoFactorEnrollment.value = TwoFactorEnrollmentState.Loading
         viewModelScope.launch {
-            try {
-                _twoFactorSetup.value = gateway.setup()
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {}
-        }
-    }
-
-    fun enableTwoFactor(code: String, result: (Boolean) -> Unit) {
-        val gateway = twoFactorGateway ?: run { result(false); return }
-        viewModelScope.launch {
-            try {
-                val ok = gateway.enable(code)
-                if (ok) {
-                    _twoFactorStatus.value = TwoFactorStatus(enabled = true)
-                    _twoFactorSetup.value = null
+            authenticationMutex.withLock {
+                if (_authentication.value !is AuthenticationState.Authenticated ||
+                    _twoFactorEnrollment.value != TwoFactorEnrollmentState.Loading
+                ) return@withLock
+                _twoFactorEnrollment.value = try {
+                    TwoFactorEnrollmentState.Ready(gateway.setup())
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    TwoFactorEnrollmentState.Error
                 }
-                result(ok)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                result(false)
             }
         }
     }
 
-    fun disableTwoFactor(password: String, code: String? = null, result: (Boolean) -> Unit) {
-        val gateway = twoFactorGateway ?: run { result(false); return }
+    fun closeTwoFactorSetup() {
+        val state = _twoFactorEnrollment.value
+        if (state != TwoFactorEnrollmentState.Loading && (state as? TwoFactorEnrollmentState.Ready)?.verifying != true) {
+            _twoFactorEnrollment.value = TwoFactorEnrollmentState.Idle
+        }
+    }
+
+    fun enableTwoFactor(code: String) {
+        val gateway = twoFactorGateway ?: return
+        val enrollment = _twoFactorEnrollment.value as? TwoFactorEnrollmentState.Ready ?: return
+        if (enrollment.verifying) return
         viewModelScope.launch {
-            try {
-                val ok = gateway.disable(password, code)
-                if (ok) {
-                    _twoFactorStatus.value = TwoFactorStatus(enabled = false)
+            authenticationMutex.withLock {
+                if (_twoFactorEnrollment.value !== enrollment) return@withLock
+                _twoFactorEnrollment.value = enrollment.copy(verifying = true, error = null)
+                try {
+                    if (gateway.enable(code)) {
+                        _twoFactorStatus.value = TwoFactorStatus(enabled = true)
+                        _twoFactorEnrollment.value = TwoFactorEnrollmentState.Idle
+                    } else {
+                        _twoFactorEnrollment.value = enrollment.copy(error = MobileAuthErrorCode.SERVER)
+                    }
+                } catch (error: MobileAuthException) {
+                    _twoFactorEnrollment.value = enrollment.copy(error = error.code)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    _twoFactorEnrollment.value = enrollment.copy(error = MobileAuthErrorCode.SERVER)
                 }
-                result(ok)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                result(false)
+            }
+        }
+    }
+
+    fun disableTwoFactor(password: String, code: String, result: (MobileAuthErrorCode?) -> Unit) {
+        val gateway = twoFactorGateway ?: run { result(MobileAuthErrorCode.SERVER); return }
+        viewModelScope.launch {
+            authenticationMutex.withLock {
+                if (_authentication.value !is AuthenticationState.Authenticated) {
+                    result(MobileAuthErrorCode.UNAUTHENTICATED)
+                    return@withLock
+                }
+                try {
+                    if (!gateway.disable(password, code)) {
+                        result(MobileAuthErrorCode.SERVER)
+                        return@withLock
+                    }
+                    _twoFactorStatus.value = null
+                    _twoFactorEnrollment.value = TwoFactorEnrollmentState.Idle
+                    _currentUser.value = null
+                    _authentication.value = AuthenticationState.LogoutCompleted
+                    mobileAuthRepository?.clearSession()
+                    result(null)
+                } catch (error: MobileAuthException) {
+                    result(error.code)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    result(MobileAuthErrorCode.SERVER)
+                }
             }
         }
     }
@@ -347,6 +417,8 @@ class LensClickViewModel(
     fun logout() {
         viewModelScope.launch {
             authenticationMutex.withLock {
+                _twoFactorStatus.value = null
+                _twoFactorEnrollment.value = TwoFactorEnrollmentState.Idle
                 if (mobileAuthRepository == null) {
                     _currentUser.value = null
                     _authentication.value = AuthenticationState.SignedOut
@@ -373,6 +445,8 @@ class LensClickViewModel(
             email = user.email,
             role = user.role
         )
+        _twoFactorStatus.value = null
+        _twoFactorEnrollment.value = TwoFactorEnrollmentState.Idle
         _currentUser.value = localUser
         _authentication.value = AuthenticationState.Authenticated(localUser)
         loadTwoFactorStatus()

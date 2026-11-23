@@ -111,6 +111,21 @@ O backend revoga a sessão. O app remove o segredo do armazenamento seguro após
 
 Troca de senha, exclusão da conta e eventos de segurança devem invalidar as sessões móveis conforme a política de revogação definida pelo backend.
 
+### 4.5 Verificação em duas etapas
+
+Quando a conta tem 2FA ativo, o login responde HTTP 202 com `status: "twoFactorRequired"`, `challengeToken` e `expiresAt`. O app mantém o desafio em memória e envia `{ challengeToken, code }` para `POST /api/mobile/auth/2fa/verify`. O campo `code` aceita TOTP ou código de recuperação alfanumérico. O token de sessão é armazenado no Android Keystore após a resposta HTTP 200 de verificação.
+
+O backend devolve HTTP 400 com `code: "invalid_code"` para código incorreto e `code: "invalid_challenge"` para desafio inválido ou expirado. No primeiro caso, o app permite tentar outro código no mesmo desafio. No segundo, solicita novo login. O limite de tentativas é aplicado pelo backend.
+
+Os endpoints de conta exigem a sessão móvel Bearer.
+
+| Método | Endpoint | Uso |
+|---|---|---|
+| GET | `/api/account/2fa/status` | Consultar o estado do 2FA |
+| POST | `/api/account/2fa/setup` | Obter `secret`, `otpauthUrl` e códigos de recuperação. O app gera o QR Code localmente |
+| POST | `/api/account/2fa/enable` | Confirmar a ativação com `{ code }` |
+| POST | `/api/account/2fa/disable` | Enviar `{ password, code }`. O servidor revoga todas as sessões e o app limpa a sessão local |
+
 ## 5. Renovação
 
 A primeira integração não introduzirá refresh token automaticamente.
@@ -131,7 +146,7 @@ Refresh tokens rotativos podem ser avaliados posteriormente se forem necessário
 |---|---|---|
 | 200 | sucesso | atualizar estado |
 | 201 | criado | atualizar estado |
-| 202 | aceito/assíncrono | confirmação adequada |
+| 202 | verificação em duas etapas exigida no login | apresentar o desafio |
 | 400 | entrada inválida | erro de formulário |
 | 401 | não autenticado | limpar sessão quando aplicável |
 | 403 | não autorizado | acesso negado |
