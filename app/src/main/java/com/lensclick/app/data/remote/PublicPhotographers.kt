@@ -79,7 +79,8 @@ fun parsePublicPhotographerPage(json: String): PublicPhotographerPage {
             specialties = if (specialties == null) emptyList() else (0 until specialties.length()).map { specialties.getString(it) },
             startingPriceCents = if (row.isNull("startingPriceCents")) null else row.getLong("startingPriceCents"),
             ratingAverage = if (row.isNull("ratingAverage")) null else row.getDouble("ratingAverage"),
-            reviewCount = row.optInt("reviewCount", 0)
+            reviewCount = row.optInt("reviewCount", 0),
+            photoPath = if (row.isNull("profilePic")) "" else row.optString("profilePic")
         )
     }
 

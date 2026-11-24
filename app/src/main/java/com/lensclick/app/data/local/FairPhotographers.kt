@@ -8,6 +8,7 @@ import org.json.JSONArray
 
 internal data class FairPhotographer(
     val summary: PublicPhotographer,
+    @get:DrawableRes val portrait: Int,
     val bio: String,
     val photos: List<FairPhoto>
 )
@@ -16,6 +17,13 @@ internal data class FairPhoto(
     @get:DrawableRes val drawable: Int,
     val caption: String,
     val altText: String
+)
+
+private val PortraitDrawables = mapOf(
+    "feira-livia-monteiro" to R.drawable.discovery_livia,
+    "feira-rafael-sato" to R.drawable.discovery_rafael,
+    "feira-joana-nascimento" to R.drawable.discovery_joana,
+    "feira-bruno-vidal" to R.drawable.discovery_bruno
 )
 
 private val PortfolioDrawables = mapOf(
@@ -30,11 +38,12 @@ internal fun readFairPhotographers(context: Context): List<FairPhotographer> {
     val catalog = context.assets.open("feira/photographers.json").bufferedReader().use { JSONArray(it.readText()) }
     return List(catalog.length()) { index ->
         val row = catalog.getJSONObject(index)
+        val slug = row.getString("slug")
         val specialties = row.getJSONArray("specialties")
         val photos = row.getJSONArray("photos")
         FairPhotographer(
             summary = PublicPhotographer(
-                slug = row.getString("slug"),
+                slug = slug,
                 name = row.getString("name"),
                 city = row.getString("city"),
                 state = "SP",
@@ -43,6 +52,7 @@ internal fun readFairPhotographers(context: Context): List<FairPhotographer> {
                 ratingAverage = null,
                 reviewCount = 0
             ),
+            portrait = PortraitDrawables.getValue(slug),
             bio = row.getString("bio"),
             photos = List(photos.length()) { photoIndex ->
                 val photo = photos.getJSONArray(photoIndex)

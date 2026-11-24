@@ -13,7 +13,7 @@ class PublicPhotographersTest {
               "photographers": [
                 {"slug":"ana-12","name":"Ana Silva","city":"Recife","state":"PE",
                  "specialties":["wedding","portrait"],"startingPriceCents":125000,
-                 "ratingAverage":4.75,"reviewCount":8},
+                 "ratingAverage":4.75,"reviewCount":8,"profilePic":"/api/photographers/ana-12/photo?v=42"},
                 {"slug":"bia-3","name":"Bia","city":"","state":"",
                  "specialties":[],"startingPriceCents":null,"ratingAverage":null,"reviewCount":0}
               ],
@@ -29,6 +29,8 @@ class PublicPhotographersTest {
         assertEquals(listOf("wedding", "portrait"), page.photographers[0].specialties)
         assertEquals(125000L, page.photographers[0].startingPriceCents)
         assertEquals(4.75, page.photographers[0].ratingAverage!!, 0.001)
+        assertEquals("/api/photographers/ana-12/photo?v=42", page.photographers[0].photoPath)
+        assertEquals("", page.photographers[1].photoPath)
         assertNull(page.photographers[1].startingPriceCents)
         assertNull(page.photographers[1].ratingAverage)
     }
