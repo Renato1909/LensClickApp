@@ -18,19 +18,6 @@ data class MobileRegisterRequest(
     val appVersion: String = "1.0"
 )
 
-data class MobilePhotographerRegisterRequest(
-    val name: String,
-    val email: String,
-    val password: String,
-    val specialty: String,
-    val city: String,
-    val price: String,
-    val bio: String,
-    val role: String = "photographer",
-    val deviceName: String = "Android",
-    val appVersion: String = "1.0"
-)
-
 sealed interface MobileLoginResult {
     data class Success(val session: MobileSession) : MobileLoginResult
     data class TwoFactorRequired(val challengeToken: String, val expiresAt: String) : MobileLoginResult

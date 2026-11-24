@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.annotation.DrawableRes
 import com.lensclick.app.R
 import com.lensclick.app.domain.PublicPhotographer
+import com.lensclick.app.ui.localized
 import org.json.JSONArray
 
 internal data class FairPhotographer(
@@ -53,13 +54,13 @@ internal fun readFairPhotographers(context: Context): List<FairPhotographer> {
                 reviewCount = 0
             ),
             portrait = PortraitDrawables.getValue(slug),
-            bio = row.getString("bio"),
+            bio = localized(row.getString("bio")),
             photos = List(photos.length()) { photoIndex ->
                 val photo = photos.getJSONArray(photoIndex)
                 FairPhoto(
                     drawable = PortfolioDrawables.getValue(photo.getString(0)),
-                    caption = photo.getString(1),
-                    altText = photo.getString(2)
+                    caption = localized(photo.getString(1)),
+                    altText = localized(photo.getString(2))
                 )
             }
         )

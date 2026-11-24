@@ -24,8 +24,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
@@ -41,6 +43,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -55,6 +58,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -66,6 +70,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -74,6 +79,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lensclick.app.R
 import com.lensclick.app.data.local.FairPhotographer
 import com.lensclick.app.data.remote.loadPublicPhotographerPhoto
+import com.lensclick.app.data.remote.loadPublicPortfolioPreview
 import com.lensclick.app.domain.PublicPhotographer
 import com.lensclick.app.ui.theme.LensCoffee as Accent
 import com.lensclick.app.ui.theme.LensInk as Ink
@@ -82,13 +88,10 @@ import com.lensclick.app.ui.theme.LensMuted as Muted
 import com.lensclick.app.ui.theme.LensOnCoffee as OnCoffee
 import com.lensclick.app.ui.theme.LensSand as Sand
 import com.lensclick.app.ui.theme.LensSurface as SurfaceHigh
-import java.math.BigDecimal
 import java.text.NumberFormat
-import java.util.Locale
 
-private const val TestPhotographerSlug = "teste-9999"
-private const val DemoPhotographerSlug = "demo-fotografo"
-private val BrazilianLocale = Locale.forLanguageTag("pt-BR")
+internal const val TestPhotographerSlug = "teste-9999"
+internal const val DemoPhotographerSlug = "demo-fotografo"
 
 private data class DiscoveryCategory(val specialty: String, @get:DrawableRes val photo: Int)
 
@@ -102,21 +105,26 @@ private val DiscoveryCategories = listOf(
 
 @Composable
 internal fun HomeScreen(
+    viewModel: LensClickViewModel,
     photographers: List<FairPhotographer>,
     onNavigate: (Screen) -> Unit,
     onCategory: (String) -> Unit,
+    onRankedProfile: (String) -> Unit,
+    onRankedRequest: ((PublicPhotographer) -> Unit)?,
     onFair: () -> Unit,
     onFairPhotographer: (String) -> Unit
 ) = AppPage(Screen.Home, onNavigate) {
+    val ranking = observeRanking(viewModel, photographers)
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().testTag("home-discovery"),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
         item { HomeCover { onNavigate(Screen.Search) } }
+        rankingItems(ranking, onRankedProfile, onRankedRequest)
         item {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                SectionTitle("Explore por especialidade")
+                SectionTitle(localized("Explore por especialidade"))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(DiscoveryCategories, key = { it.specialty }) { category ->
                         CategoryTile(category) { onCategory(category.specialty) }
@@ -160,13 +168,13 @@ private fun HomeCover(onSearch: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text(
-                "Seu momento, seu fotógrafo",
+                localized("Seu momento, seu fotógrafo"),
                 color = OnCoffee,
                 style = MaterialTheme.typography.headlineLarge,
                 modifier = Modifier.widthIn(max = 280.dp).semantics { heading() }
             )
             Text(
-                "Encontre o estilo certo para o que você quer registrar.",
+                localized("Encontre o estilo certo para o que você quer registrar."),
                 color = OnCoffee,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.widthIn(max = 210.dp)
@@ -179,7 +187,7 @@ private fun HomeCover(onSearch: () -> Unit) {
             ) {
                 Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Buscar fotógrafos")
+                Text(localized("Buscar fotógrafos"))
             }
         }
     }
@@ -218,9 +226,9 @@ private fun FairPreview(
     onPhotographer: (String) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SectionTitle("Inspire-se com portfólios", onFair)
+        SectionTitle(localized("Inspire-se com portfólios"), onFair)
         Text(
-            "Perfis fictícios da feira para conhecer diferentes estilos.",
+            localized("Perfis fictícios da feira para conhecer diferentes estilos."),
             color = Muted,
             style = MaterialTheme.typography.bodyMedium
         )
@@ -267,10 +275,10 @@ private fun BookingGuide() {
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            SectionTitle("Como funciona")
-            BookingStep(Icons.Default.Search, "Encontre profissionais", "Filtre por cidade e especialidade.")
-            BookingStep(Icons.AutoMirrored.Filled.List, "Conheça o trabalho", "Veja portfólios e avaliações no perfil.")
-            BookingStep(Icons.Default.Email, "Peça um orçamento", "Conte os detalhes do seu evento pelo app.")
+            SectionTitle(localized("Como funciona"))
+            BookingStep(Icons.Default.Search, localized("Encontre profissionais"), localized("Filtre por cidade e especialidade."))
+            BookingStep(Icons.AutoMirrored.Filled.List, localized("Conheça o trabalho"), localized("Veja portfólios e avaliações no perfil."))
+            BookingStep(Icons.Default.Email, localized("Peça um orçamento"), localized("Conte os detalhes do seu evento pelo app."))
         }
     }
 }
@@ -296,6 +304,8 @@ internal fun SearchScreen(
     fairPhotographers: List<FairPhotographer>,
     onNavigate: (Screen) -> Unit,
     onPhotographer: (String) -> Unit,
+    onRankedProfile: (String) -> Unit,
+    onRankedRequest: ((PublicPhotographer) -> Unit)?,
     onFair: () -> Unit,
     onFairPhotographer: (String) -> Unit
 ) = AppPage(Screen.Search, onNavigate) {
@@ -304,16 +314,19 @@ internal fun SearchScreen(
     var page by rememberSaveable { mutableIntStateOf(1) }
     val cityFilter = city.trim()
     val state by viewModel.publicSearch.collectAsStateWithLifecycle()
+    val ranking = observeRanking(viewModel, fairPhotographers)
     val resultsPage = when (val result = state) {
         is PublicSearchState.Ready -> result.page
         is PublicSearchState.Empty -> result.page
         else -> null
     }
-    val publishedPhotographers = resultsPage?.photographers.orEmpty().filterNot { it.slug == TestPhotographerSlug }
+    val fairSlugs = remember(fairPhotographers) { fairPhotographers.map { it.summary.slug }.toSet() }
+    val publishedPhotographers = resultsPage?.photographers.orEmpty().filterNot {
+        it.slug == TestPhotographerSlug || it.slug in fairSlugs
+    }
     val fairMatches = fairPhotographers.filter { photographer ->
         photographer.summary.city.contains(cityFilter, ignoreCase = true) &&
-            (specialty == null || specialty in photographer.summary.specialties) &&
-            publishedPhotographers.none { it.slug == photographer.summary.slug }
+            (specialty == null || specialty in photographer.summary.specialties)
     }
 
     LaunchedEffect(cityFilter, specialty, page) {
@@ -321,7 +334,7 @@ internal fun SearchScreen(
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().imePadding(),
+        modifier = Modifier.fillMaxSize().imePadding().testTag("search-discovery"),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -335,9 +348,9 @@ internal fun SearchScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         TextButton(onClick = { onNavigate(Screen.Login) }, modifier = Modifier.weight(1f)) {
-                            Text("Entrar para usar sua conta")
+                            Text(localized("Entrar para usar sua conta"))
                         }
-                        TextButton(onClick = onFair) { Text("Perfis da feira") }
+                        TextButton(onClick = onFair) { Text(localized("Perfis da feira")) }
                     }
                 }
                 OutlinedTextField(
@@ -347,15 +360,15 @@ internal fun SearchScreen(
                         city = it
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Cidade") },
-                    placeholder = { Text("Ex.: São Paulo") },
+                    label = { Text(localized("Cidade")) },
+                    placeholder = { Text(localized("Ex.: São Paulo")) },
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                     trailingIcon = if (city.isNotEmpty()) {
                         {
                             IconButton(onClick = {
                                 page = 1
                                 city = ""
-                            }) { Icon(Icons.Default.Close, contentDescription = "Limpar cidade") }
+                            }) { Icon(Icons.Default.Close, contentDescription = localized("Limpar cidade")) }
                         }
                     } else null,
                     singleLine = true,
@@ -363,12 +376,12 @@ internal fun SearchScreen(
                     colors = lensFieldColors()
                 )
                 Column {
-                    Text("Especialidade", color = Ink, style = MaterialTheme.typography.labelLarge)
+                    Text(localized("Especialidade"), color = Ink, style = MaterialTheme.typography.labelLarge)
                     Row(
                         Modifier.horizontalScroll(rememberScrollState()).selectableGroup(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        FilterChip("Todos", specialty == null) {
+                        FilterChip(localized("Todos"), specialty == null) {
                             if (specialty != null) {
                                 page = 1
                                 specialty = null
@@ -387,7 +400,7 @@ internal fun SearchScreen(
             }
         }
 
-        item { SectionTitle("Fotógrafos publicados") }
+        item { SectionTitle(localized("Fotógrafos publicados")) }
         when {
             state == PublicSearchState.Loading -> item {
                 Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
@@ -395,17 +408,17 @@ internal fun SearchScreen(
                 }
             }
             state == PublicSearchState.Error -> item {
-                SearchStatus("Não foi possível carregar os perfis.") {
+                SearchStatus(localized("Não foi possível carregar os perfis.")) {
                     TextButton(onClick = { viewModel.searchPublicPhotographers(cityFilter, specialty, page) }) {
-                        Text("Tentar novamente")
+                        Text(localized("Tentar novamente"))
                     }
                 }
             }
             publishedPhotographers.isEmpty() -> item {
                 val message = if (page == 1 && (resultsPage?.totalPages ?: 0) <= 1) {
-                    "Nenhum fotógrafo encontrado. Experimente outra cidade ou especialidade."
+                    localized("Nenhum fotógrafo encontrado. Experimente outra cidade ou especialidade.")
                 } else {
-                    "Esta página não tem perfis para exibir."
+                    localized("Esta página não tem perfis para exibir.")
                 }
                 SearchStatus(message)
             }
@@ -418,19 +431,106 @@ internal fun SearchScreen(
         if (resultsPage != null && (page > 1 || resultsPage.totalPages > page)) {
             item {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    TextButton(onClick = { page-- }, enabled = page > 1) { Text("Anterior") }
-                    TextButton(onClick = { page++ }, enabled = page < resultsPage.totalPages) { Text("Próxima") }
+                    TextButton(onClick = { page-- }, enabled = page > 1) { Text(localized("Anterior")) }
+                    TextButton(onClick = { page++ }, enabled = page < resultsPage.totalPages) { Text(localized("Próxima")) }
                 }
             }
         }
 
+        rankingItems(ranking, onRankedProfile, onRankedRequest)
         if (fairMatches.isNotEmpty()) {
             item {
                 FairPreview(fairMatches, onFair, onFairPhotographer)
             }
         }
         if (!guest && fairMatches.isEmpty()) {
-            item { TextButton(onClick = onFair) { Text("Perfis da feira") } }
+            item { TextButton(onClick = onFair) { Text(localized("Perfis da feira")) } }
+        }
+    }
+}
+
+private data class InlineRanking(val state: PhotographerRankingState, val load: () -> Unit)
+
+@Composable
+private fun observeRanking(viewModel: LensClickViewModel, fair: List<FairPhotographer>): InlineRanking {
+    val state by viewModel.photographerRanking.collectAsStateWithLifecycle()
+    val excluded = remember(fair) { fair.map { it.summary.slug }.toSet() }
+    LaunchedEffect(excluded, state.nextPage) {
+        if (state.nextPage == 1 && !state.failed) viewModel.loadPhotographerRanking(excluded)
+    }
+    return InlineRanking(state) { viewModel.loadPhotographerRanking(excluded) }
+}
+
+private fun LazyListScope.rankingItems(
+    ranking: InlineRanking,
+    onPhotographer: (String) -> Unit,
+    onRequest: ((PublicPhotographer) -> Unit)?
+) {
+    val state = ranking.state
+    item(key = "ranking-title") { SectionTitle(localized("Fotógrafos mais bem avaliados")) }
+    itemsIndexed(state.photographers, key = { _, photographer -> "ranking-${photographer.slug}" }) { index, photographer ->
+        RankedPhotographer(
+            photographer, index + 1, { onPhotographer(photographer.slug) },
+            onRequest?.let { request -> { request(photographer) } }
+        )
+    }
+    when {
+        state.loading || (state.nextPage == 1 && !state.failed) -> item {
+            SearchStatus(localized("Carregando ranking…")) {
+                CircularProgressIndicator(Modifier.size(22.dp), color = Accent)
+            }
+        }
+        state.failed -> item {
+            SearchStatus(localized("Não foi possível carregar as avaliações do ranking.")) {
+                TextButton(onClick = { ranking.load() }) { Text(localized("Tentar novamente")) }
+            }
+        }
+        state.nextPage != null -> item {
+            TextButton(onClick = { ranking.load() }) { Text(localized("Ver mais fotógrafos")) }
+        }
+        state.photographers.isEmpty() -> item {
+            Text(
+                localized("Ainda não há fotógrafos com avaliações publicadas."),
+                color = Muted, style = MaterialTheme.typography.bodyMedium
+            )
+        }
+    }
+}
+
+@Composable
+private fun RankedPhotographer(
+    photographer: PublicPhotographer,
+    rank: Int,
+    onProfile: () -> Unit,
+    onRequest: (() -> Unit)?
+) {
+    val previewUrl = photographer.portfolioPreviewUrl
+    val preview by produceState<Bitmap?>(null, previewUrl) {
+        value = if (previewUrl.isBlank()) null else loadPublicPortfolioPreview(previewUrl)
+    }
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = SurfaceHigh,
+        border = BorderStroke(1.dp, Line),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column {
+            preview?.let { photo ->
+                Image(
+                    photo.asImageBitmap(), contentDescription = localized("Prévia do portfólio"),
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 150.dp).aspectRatio(2.5f),
+                    contentScale = ContentScale.Crop
+                )
+            }
+            DiscoveryPhotographerCard(photographer, rank = rank, onClick = onProfile)
+            Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp)) {
+                TextButton(onClick = onProfile) { Text(localized("Ver perfil")) }
+                onRequest?.let {
+                    TextButton(onClick = it) {
+                        Text(if (photographer.startingPriceCents == null) localized("Solicitar orçamento") else localized("Contratar"))
+                    }
+                }
+            }
         }
     }
 }
@@ -460,12 +560,12 @@ private fun SearchCover() {
         )
         Column(Modifier.fillMaxWidth(0.72f).padding(horizontal = 16.dp, vertical = 14.dp)) {
             Text(
-                "Buscar Fotógrafos",
+                localized("Buscar Fotógrafos"),
                 color = Ink,
                 style = MaterialTheme.typography.headlineMedium,
                 modifier = Modifier.semantics { heading() }
             )
-            Text("Explore perfis e portfólios", color = Muted, style = MaterialTheme.typography.bodyMedium)
+            Text(localized("Explore perfis e portfólios"), color = Muted, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
@@ -489,20 +589,13 @@ private fun SearchStatus(message: String, action: @Composable (() -> Unit)? = nu
 internal fun DiscoveryPhotographerCard(
     photographer: PublicPhotographer,
     @DrawableRes portrait: Int? = null,
+    rank: Int? = null,
     onClick: () -> Unit
 ) {
     val location = listOf(photographer.city, photographer.state).filter(String::isNotBlank).joinToString(", ")
     val specialties = photographer.specialties.joinToString(" · ", transform = ::specialtyLabel)
-    val price = remember(photographer.startingPriceCents) {
-        photographer.startingPriceCents?.let {
-            NumberFormat.getCurrencyInstance(BrazilianLocale).format(BigDecimal.valueOf(it, 2))
-        }
-    }
-    val rating = remember(photographer.ratingAverage) {
-        photographer.ratingAverage?.let {
-            NumberFormat.getNumberInstance(BrazilianLocale).format(it)
-        }
-    }
+    val price = photographer.startingPriceCents?.let(::moneyInReais)
+    val rating = photographerRatingLabel(photographer.ratingAverage, photographer.reviewCount)
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -515,6 +608,15 @@ internal fun DiscoveryPhotographerCard(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            if (rank != null) {
+                val placement = if (AppLanguage.current == Language.English) "#$rank" else "${rank}º"
+                Text(
+                    placement,
+                    modifier = Modifier.widthIn(min = 26.dp).semantics { contentDescription = localized("{0}º lugar", rank) },
+                    color = Accent,
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
             val photoModifier = Modifier.size(68.dp)
             if (portrait != null) {
                 Image(
@@ -531,18 +633,20 @@ internal fun DiscoveryPhotographerCard(
                 if (specialties.isNotBlank()) Text(specialties, color = Muted, style = MaterialTheme.typography.bodyMedium)
                 if (location.isNotBlank()) Text(location, color = Muted, style = MaterialTheme.typography.bodyMedium)
                 if (photographer.slug == DemoPhotographerSlug) {
-                    Text("Perfil de demonstração", color = Accent, style = MaterialTheme.typography.labelLarge)
+                    Text(localized("Perfil de demonstração"), color = Accent, style = MaterialTheme.typography.labelLarge)
                 } else if (price != null) {
-                    Text("A partir de $price", color = Accent, style = MaterialTheme.typography.labelLarge)
+                    Text(localized("A partir de {0}", price), color = Accent, style = MaterialTheme.typography.labelLarge)
                 }
-                if (rating != null && photographer.reviewCount > 0) {
+                if (rating != null) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Icon(Icons.Default.Star, contentDescription = "Avaliação", tint = Accent, modifier = Modifier.size(14.dp))
-                        Text("$rating (${photographer.reviewCount})", color = Accent, style = MaterialTheme.typography.labelLarge)
+                        Icon(Icons.Default.Star, contentDescription = null, tint = Accent, modifier = Modifier.size(14.dp))
+                        Text(rating, color = Accent, style = MaterialTheme.typography.labelLarge)
                     }
+                } else if (portrait == null && photographer.slug != DemoPhotographerSlug) {
+                    Text(localized("Sem avaliações"), color = Muted, style = MaterialTheme.typography.bodySmall)
                 }
             }
             Icon(
@@ -553,6 +657,16 @@ internal fun DiscoveryPhotographerCard(
             )
         }
     }
+}
+
+internal fun photographerRatingLabel(average: Double?, count: Int): String? {
+    if (average == null || average !in 1.0..5.0 || count < 1) return null
+    val score = NumberFormat.getNumberInstance(AppLanguage.locale).apply {
+        minimumFractionDigits = 1
+        maximumFractionDigits = 2
+    }.format(average)
+    val reviews = if (count == 1) localized("1 avaliação") else localized("{0} avaliações", count)
+    return localized("{0} de 5 · {1}", score, reviews)
 }
 
 @Composable
@@ -578,5 +692,26 @@ internal fun PublicPhotographerAvatar(
             modifier = modifier.clip(CircleShape),
             contentScale = ContentScale.Crop
         )
+    }
+}
+
+
+@Composable
+internal fun ReviewDistribution(counts: Map<Int, Int>, total: Int) {
+    Column(Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(localized("Distribuição das notas"), color = Ink, style = MaterialTheme.typography.labelLarge)
+        for (stars in 5 downTo 1) {
+            val count = counts[stars] ?: 0
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("★ $stars", color = Accent, style = MaterialTheme.typography.labelLarge)
+                LinearProgressIndicator(
+                    progress = { (count.toFloat() / total.coerceAtLeast(1)).coerceIn(0f, 1f) },
+                    modifier = Modifier.weight(1f),
+                    color = Accent,
+                    trackColor = Sand
+                )
+                Text(count.toString(), color = Muted, style = MaterialTheme.typography.bodySmall)
+            }
+        }
     }
 }

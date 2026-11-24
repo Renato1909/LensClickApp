@@ -20,6 +20,10 @@ import com.lensclick.app.domain.BudgetRequestDraft
 import com.lensclick.app.domain.BudgetRequestsGateway
 import com.lensclick.app.domain.Conversation
 import com.lensclick.app.domain.ConversationsGateway
+import com.lensclick.app.domain.EngagementAction
+import com.lensclick.app.domain.EngagementDraft
+import com.lensclick.app.domain.EngagementGateway
+import com.lensclick.app.domain.EngagementOffer
 import com.lensclick.app.domain.Favorite
 import com.lensclick.app.domain.FavoritesGateway
 import com.lensclick.app.domain.Message
@@ -29,15 +33,19 @@ import com.lensclick.app.domain.PortfolioItem
 import com.lensclick.app.domain.ProfessionalProfile
 import com.lensclick.app.domain.ProfessionalProfileGateway
 import com.lensclick.app.domain.PublicPhotographerNotFoundException
+import com.lensclick.app.domain.PublicPhotographer
 import com.lensclick.app.domain.PublicPhotographerPage
 import com.lensclick.app.domain.PublicPhotographerProfile
 import com.lensclick.app.domain.PublicPhotographersGateway
 import com.lensclick.app.domain.PublicReviews
+import com.lensclick.app.domain.ReviewRequest
 import com.lensclick.app.domain.ReviewsGateway
 import com.lensclick.app.domain.TwoFactorGateway
 import com.lensclick.app.domain.TwoFactorSetup
 import com.lensclick.app.domain.TwoFactorStatus
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -53,6 +61,19 @@ sealed interface PublicSearchState {
     data class Empty(val page: PublicPhotographerPage) : PublicSearchState
     data class Ready(val page: PublicPhotographerPage) : PublicSearchState
 }
+
+data class PhotographerRankingState(
+    val photographers: List<PublicPhotographer> = emptyList(),
+    val nextPage: Int? = 1,
+    val loading: Boolean = false,
+    val failed: Boolean = false
+)
+
+data class PhotographerReviewsState(
+    val slug: String,
+    val data: PublicReviews? = null,
+    val failed: Boolean = false
+)
 
 sealed interface PublicProfileState {
     data object Loading : PublicProfileState
@@ -109,6 +130,12 @@ sealed interface PortfolioState {
     ) : PortfolioState
 }
 
+data class ChatState(
+    val conversationId: Long,
+    val messages: List<Message>? = null,
+    val loadFailed: Boolean = false
+)
+
 class LensClickViewModel(
     private val repository: LensClickRepository,
     private val publicPhotographers: PublicPhotographersGateway = HttpPublicPhotographersGateway(),
@@ -120,7 +147,8 @@ class LensClickViewModel(
     private val twoFactorGateway: TwoFactorGateway? = null,
     private val conversationsGateway: ConversationsGateway? = null,
     private val reviewsGateway: ReviewsGateway? = null,
-    private val accountGateway: AccountGateway? = null
+    private val accountGateway: AccountGateway? = null,
+    private val engagementGateway: EngagementGateway? = null
 ) : ViewModel() {
     companion object {
         val Factory = viewModelFactory {
@@ -136,7 +164,8 @@ class LensClickViewModel(
                     twoFactorGateway = application.twoFactorGateway,
                     conversationsGateway = application.conversationsGateway,
                     reviewsGateway = application.reviewsGateway,
-                    accountGateway = application.accountGateway
+                    accountGateway = application.accountGateway,
+                    engagementGateway = application.engagementGateway
                 )
             }
         }
@@ -147,11 +176,17 @@ class LensClickViewModel(
     val authentication: StateFlow<AuthenticationState> = _authentication.asStateFlow()
     private val _publicSearch = MutableStateFlow<PublicSearchState>(PublicSearchState.Loading)
     val publicSearch: StateFlow<PublicSearchState> = _publicSearch.asStateFlow()
+    private val _photographerRanking = MutableStateFlow(PhotographerRankingState())
+    val photographerRanking = _photographerRanking.asStateFlow()
+    private var rankingJob: Job? = null
     private val _publicProfile = MutableStateFlow<PublicProfileState>(PublicProfileState.Loading)
     val publicProfile: StateFlow<PublicProfileState> = _publicProfile.asStateFlow()
     private var publicSearchJob: kotlinx.coroutines.Job? = null
     private var publicProfileJob: kotlinx.coroutines.Job? = null
     private val authenticationMutex = Mutex()
+    private var pendingPhotographerEmail: String? = null
+    private val _finishingPhotographerRegistration = MutableStateFlow(false)
+    val finishingPhotographerRegistration = _finishingPhotographerRegistration.asStateFlow()
 
     fun searchPublicPhotographers(city: String, specialty: String?, page: Int) {
         publicSearchJob?.cancel()
@@ -165,6 +200,37 @@ class LensClickViewModel(
                 throw cancelled
             } catch (_: Exception) {
                 PublicSearchState.Error
+            }
+        }
+    }
+
+    fun loadPhotographerRanking(excludedSlugs: Set<String>, refresh: Boolean = false) {
+        if (_photographerRanking.value.loading) return
+        val current = if (refresh) PhotographerRankingState() else _photographerRanking.value
+        val page = current.nextPage ?: return
+        _photographerRanking.value = current.copy(loading = true, failed = false)
+        rankingJob = viewModelScope.launch {
+            try {
+                val result = publicPhotographers.listTopRated(page)
+                val eligible = result.photographers.filter { photographer ->
+                    val average = photographer.ratingAverage
+                    average != null && average in 1.0..5.0 && photographer.reviewCount > 0 &&
+                        photographer.slug != TestPhotographerSlug && photographer.slug != DemoPhotographerSlug &&
+                        photographer.slug !in excludedSlugs
+                }
+                // A API ordena os perfis sem nota depois de todos os perfis avaliados.
+                val reachedUnrated = result.photographers.any { it.ratingAverage == null }
+                val nextPage = (page + 1).takeIf {
+                    !reachedUnrated && result.photographers.isNotEmpty() && page < result.totalPages
+                }
+                _photographerRanking.value = PhotographerRankingState(
+                    photographers = (current.photographers + eligible).distinctBy { it.slug },
+                    nextPage = nextPage
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                _photographerRanking.value = current.copy(failed = true)
             }
         }
     }
@@ -212,22 +278,31 @@ class LensClickViewModel(
     // 2FA State
     private val _twoFactorStatus = MutableStateFlow<TwoFactorStatus?>(null)
     val twoFactorStatus: StateFlow<TwoFactorStatus?> = _twoFactorStatus.asStateFlow()
+    private val _twoFactorStatusLoading = MutableStateFlow(false)
+    val twoFactorStatusLoading: StateFlow<Boolean> = _twoFactorStatusLoading.asStateFlow()
     private val _twoFactorEnrollment = MutableStateFlow<TwoFactorEnrollmentState>(TwoFactorEnrollmentState.Idle)
     val twoFactorEnrollment: StateFlow<TwoFactorEnrollmentState> = _twoFactorEnrollment.asStateFlow()
 
     // Conversations & Messages State
     private val _conversations = MutableStateFlow<List<Conversation>>(emptyList())
     val conversations: StateFlow<List<Conversation>> = _conversations.asStateFlow()
-    private val _messages = MutableStateFlow<List<Message>>(emptyList())
-    val messages: StateFlow<List<Message>> = _messages.asStateFlow()
+    private val _conversationsLoading = MutableStateFlow(false)
+    val conversationsLoading: StateFlow<Boolean> = _conversationsLoading.asStateFlow()
+    private val _conversationsFailed = MutableStateFlow(false)
+    val conversationsFailed: StateFlow<Boolean> = _conversationsFailed.asStateFlow()
+    private val _chat = MutableStateFlow<ChatState?>(null)
+    val chat: StateFlow<ChatState?> = _chat.asStateFlow()
+    private var conversationsJob: Job? = null
+    private var messagesJob: Job? = null
 
     // Reviews State
-    private val _publicReviews = MutableStateFlow<PublicReviews?>(null)
-    val publicReviews: StateFlow<PublicReviews?> = _publicReviews.asStateFlow()
+    private val _publicReviews = MutableStateFlow<PhotographerReviewsState?>(null)
+    val publicReviews = _publicReviews.asStateFlow()
+    private var reviewsJob: Job? = null
 
     init {
         viewModelScope.launch { repository.seedDemoData() }
-        viewModelScope.launch { restoreSession() }
+        restoreSession()
     }
 
     fun login(email: String, password: String) {
@@ -292,13 +367,19 @@ class LensClickViewModel(
     fun loadTwoFactorStatus() {
         val gateway = twoFactorGateway ?: return
         val userId = _currentUser.value?.id ?: return
+        if (_twoFactorStatusLoading.value) return
+        _twoFactorStatusLoading.value = true
         viewModelScope.launch {
             try {
                 val status = gateway.getStatus()
                 if (_currentUser.value?.id == userId) _twoFactorStatus.value = status
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+                if (_currentUser.value?.id == userId) _twoFactorStatus.value = null
+            } finally {
+                _twoFactorStatusLoading.value = false
+            }
         }
     }
 
@@ -333,7 +414,9 @@ class LensClickViewModel(
     fun enableTwoFactor(code: String) {
         val gateway = twoFactorGateway ?: return
         val enrollment = _twoFactorEnrollment.value as? TwoFactorEnrollmentState.Ready ?: return
-        if (enrollment.verifying) return
+        if (enrollment.verifying) {
+            return
+        }
         viewModelScope.launch {
             authenticationMutex.withLock {
                 if (_twoFactorEnrollment.value !== enrollment) return@withLock
@@ -372,6 +455,7 @@ class LensClickViewModel(
                     _twoFactorStatus.value = null
                     _twoFactorEnrollment.value = TwoFactorEnrollmentState.Idle
                     _currentUser.value = null
+                    clearAccountLists()
                     _authentication.value = AuthenticationState.LogoutCompleted
                     mobileAuthRepository?.clearSession()
                     result(null)
@@ -419,6 +503,7 @@ class LensClickViewModel(
             authenticationMutex.withLock {
                 _twoFactorStatus.value = null
                 _twoFactorEnrollment.value = TwoFactorEnrollmentState.Idle
+                clearAccountLists()
                 if (mobileAuthRepository == null) {
                     _currentUser.value = null
                     _authentication.value = AuthenticationState.SignedOut
@@ -433,12 +518,16 @@ class LensClickViewModel(
                     return@withLock
                 }
                 _currentUser.value = null
+                pendingPhotographerEmail = null
+                _finishingPhotographerRegistration.value = false
                 _authentication.value = AuthenticationState.LogoutCompleted
             }
         }
     }
 
     private fun setAuthenticated(user: MobileUser) {
+        val previous = _currentUser.value
+        if (previous?.id != user.id || previous.role != user.role) clearAccountLists()
         val localUser = User(
             id = user.id,
             name = user.name,
@@ -451,6 +540,19 @@ class LensClickViewModel(
         _authentication.value = AuthenticationState.Authenticated(localUser)
         loadTwoFactorStatus()
         loadConversations()
+    }
+
+    private fun clearAccountLists() {
+        conversationsJob?.cancel()
+        conversationsJob = null
+        messagesJob?.cancel()
+        _chat.value = null
+        _conversations.value = emptyList()
+        _conversationsLoading.value = false
+        _conversationsFailed.value = false
+        _budgets.value = emptyList()
+        _favorites.value = emptyList()
+        _agenda.value = emptyList()
     }
 
     private fun requireMobileAuthRepository(): MobileAuthRepository =
@@ -486,10 +588,8 @@ class LensClickViewModel(
         name: String,
         email: String,
         password: String,
-        specialty: String,
-        city: String,
-        price: String,
-        bio: String,
+        phone: String,
+        profile: ProfessionalProfile,
         result: (Boolean) -> Unit
     ) {
         viewModelScope.launch {
@@ -500,23 +600,49 @@ class LensClickViewModel(
                 }
                 _authentication.value = AuthenticationState.Loading
                 try {
-                    val session = requireMobileAuthRepository().registerPhotographer(
-                        name = name,
-                        email = email,
-                        password = password,
-                        specialty = specialty,
-                        city = city,
-                        price = price,
-                        bio = bio,
-                        deviceName = "Android",
-                        appVersion = BuildConfig.VERSION_NAME
-                    )
-                    setAuthenticated(session.user)
+                    val normalizedEmail = email.trim().lowercase()
+                    val existing = if (pendingPhotographerEmail == normalizedEmail) mobileAuthRepository.restore() else null
+                    val registered = existing?.takeIf { it.email == normalizedEmail }
+                        ?: mobileAuthRepository.register(
+                            name, normalizedEmail, password, deviceName = "Android", appVersion = BuildConfig.VERSION_NAME
+                        ).user
+                    pendingPhotographerEmail = registered.email
+                    _finishingPhotographerRegistration.value = true
+                    val photographer = if (registered.role == "photographer") registered
+                    else checkNotNull(accountGateway).enableProfessionalAccount(phone.trim())
+                    val gateway = checkNotNull(professionalProfileGateway)
+                    val saved = gateway.load()
+                    gateway.save(saved.copy(
+                        bio = profile.bio,
+                        city = profile.city,
+                        specialties = profile.specialties,
+                        startingPriceCents = profile.startingPriceCents
+                    ))
+                    pendingPhotographerEmail = null
+                    _finishingPhotographerRegistration.value = false
+                    setAuthenticated(photographer)
                     result(true)
                 } catch (error: MobileAuthException) {
                     _authentication.value = AuthenticationState.Error(error.code)
                     result(false)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    _authentication.value = AuthenticationState.Error(MobileAuthErrorCode.SERVER)
+                    result(false)
                 }
+            }
+        }
+    }
+
+    fun enableProfessionalAccount(phone: String, result: (Result<Unit>) -> Unit) {
+        runRemoteAction(result) {
+            authenticationMutex.withLock {
+                if (_authentication.value !is AuthenticationState.Authenticated) {
+                    throw MobileAuthException(MobileAuthErrorCode.UNAUTHENTICATED)
+                }
+                val user = checkNotNull(accountGateway).enableProfessionalAccount(phone.trim())
+                setAuthenticated(user)
             }
         }
     }
@@ -530,129 +656,228 @@ class LensClickViewModel(
 
     fun loadConversations() {
         val gateway = conversationsGateway ?: return
-        viewModelScope.launch {
+        if (conversationsJob?.isActive == true) return
+        val userId = _currentUser.value?.id
+        _conversationsLoading.value = true
+        _conversationsFailed.value = false
+        conversationsJob = viewModelScope.launch {
             try {
-                _conversations.value = gateway.list()
+                val rows = gateway.list()
+                if (_currentUser.value?.id == userId) _conversations.value = rows
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+                _conversationsFailed.value = true
+            } finally {
+                if (isActive) _conversationsLoading.value = false
+            }
         }
     }
 
     fun loadMessages(conversationId: Long) {
         val gateway = conversationsGateway ?: return
-        viewModelScope.launch {
+        messagesJob?.cancel()
+        _chat.value = ChatState(conversationId)
+        messagesJob = viewModelScope.launch {
+            val loaded = try {
+                gateway.getMessages(conversationId)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                _chat.value = ChatState(conversationId, loadFailed = true)
+                return@launch
+            }
+            _chat.value = ChatState(conversationId, messages = loaded)
             try {
-                _messages.value = gateway.getMessages(conversationId)
                 gateway.markAsRead(conversationId)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {}
-        }
-    }
-
-    fun sendMessage(conversationId: Long, text: String, result: (Boolean) -> Unit) {
-        val gateway = conversationsGateway ?: run { result(false); return }
-        viewModelScope.launch {
-            try {
-                val newMsg = gateway.sendMessage(conversationId, text)
-                _messages.value = _messages.value + newMsg
-                _conversations.value = gateway.list()
-                result(true)
+                _conversations.value = _conversations.value.map {
+                    if (it.id == conversationId) it.copy(unreadCount = 0) else it
+                }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                result(false)
+                // Keep messages visible. The inbox will refresh its unread counts on return.
             }
         }
     }
 
-    fun startConversation(photographerSlug: String, text: String, result: (Boolean) -> Unit) {
-        val gateway = conversationsGateway ?: run { result(false); return }
+    fun sendMessage(conversationId: Long, text: String, result: (MobileAuthErrorCode?) -> Unit) {
+        val gateway = conversationsGateway ?: run { result(MobileAuthErrorCode.SERVER); return }
+        val userId = _currentUser.value?.id
         viewModelScope.launch {
-            try {
-                gateway.startConversation(photographerSlug, text)
-                _conversations.value = gateway.list()
-                result(true)
+            val newMessage = try {
+                gateway.sendMessage(conversationId, text)
             } catch (cancelled: CancellationException) {
                 throw cancelled
+            } catch (failure: MobileAuthException) {
+                result(failure.code)
+                return@launch
             } catch (_: Exception) {
-                result(false)
+                result(MobileAuthErrorCode.SERVER)
+                return@launch
             }
+            if (_currentUser.value?.id != userId) return@launch
+            val current = _chat.value
+            if (current?.conversationId == conversationId && current.messages != null) {
+                _chat.value = current.copy(messages = (current.messages + newMessage).distinctBy { it.id })
+            }
+            result(null)
+            loadConversations()
+        }
+    }
+
+    suspend fun findPortfolioConversation(photographerSlug: String): Long? {
+        val rows = checkNotNull(conversationsGateway).list()
+        _conversations.value = rows
+        return rows.firstOrNull { it.photographerSlug == photographerSlug }?.id
+    }
+
+    fun startConversation(photographerSlug: String, text: String, result: (Result<Long>) -> Unit) {
+        runRemoteAction(result) {
+            val conversation = checkNotNull(conversationsGateway).startConversation(photographerSlug, text)
+            _conversations.value = listOf(conversation) + _conversations.value.filterNot { it.id == conversation.id }
+            conversation.id
         }
     }
 
     fun loadReviews(photographerSlug: String) {
-        val gateway = reviewsGateway ?: return
-        viewModelScope.launch {
+        reviewsJob?.cancel()
+        val loading = PhotographerReviewsState(photographerSlug)
+        _publicReviews.value = loading
+        reviewsJob = viewModelScope.launch {
             try {
-                _publicReviews.value = gateway.getReviews(photographerSlug)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {}
-        }
-    }
-
-    fun submitReview(photographerSlug: String, rating: Int, comment: String, result: (Boolean) -> Unit) {
-        val gateway = reviewsGateway ?: run { result(false); return }
-        viewModelScope.launch {
-            try {
-                val ok = gateway.submitReview(photographerSlug, rating, comment)
-                if (ok) {
-                    _publicReviews.value = gateway.getReviews(photographerSlug)
-                }
-                result(ok)
+                val reviews = checkNotNull(reviewsGateway).getReviews(photographerSlug)
+                _publicReviews.value = loading.copy(data = reviews)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                result(false)
+                _publicReviews.value = loading.copy(failed = true)
             }
         }
     }
 
-    fun exportAccountData(onSuccess: (String) -> Unit, onError: (String) -> Unit) {
-        val gateway = accountGateway ?: run { onError("Serviço de conta indisponível."); return }
+    private fun invalidateRanking() {
+        rankingJob?.cancel()
+        _photographerRanking.value = PhotographerRankingState()
+    }
+
+    suspend fun getEngagementOffer(slug: String, budgetId: Long?): EngagementOffer {
+        if (budgetId != null) {
+            val budget = checkNotNull(budgetRequestsGateway).detail(budgetId)
+            val approved = budget.proposals.firstOrNull { it.status == "accepted" }
+            if (approved == null || budget.status != "accepted" || budget.photographerSlug != slug ||
+                budget.photographerSpecialties.isEmpty()
+            ) throw MobileAuthException(MobileAuthErrorCode.CONFLICT)
+            return EngagementOffer(
+                budget.photographerName, budget.photographerSpecialties, approved.priceCents, approved.id, budget
+            )
+        }
+        val profile = publicPhotographers.get(slug).profile
+        val price = profile.startingPriceCents ?: throw MobileAuthException(MobileAuthErrorCode.CONFLICT)
+        return EngagementOffer(profile.name, profile.specialties, price)
+    }
+
+    suspend fun createEngagement(slug: String, reference: String, offer: EngagementOffer, draft: EngagementDraft) =
+        checkNotNull(engagementGateway).create(slug, reference, offer.priceCents, offer.proposalId, draft)
+
+    suspend fun getEngagements() = checkNotNull(engagementGateway).list()
+
+    suspend fun getEngagement(id: Long) = checkNotNull(engagementGateway).detail(id)
+
+    suspend fun updateEngagement(id: Long, action: EngagementAction) =
+        checkNotNull(engagementGateway).update(id, action)
+
+    suspend fun reviewEngagement(id: Long, rating: Int, comment: String) {
+        checkNotNull(engagementGateway).review(id, rating, comment)
+        invalidateRanking()
+    }
+
+    fun requestReviewVerification(photographerSlug: String, message: String, result: (Result<Unit>) -> Unit) {
+        runRemoteAction(result) { checkNotNull(reviewsGateway).requestVerification(photographerSlug, message) }
+    }
+
+    fun loadReviewRequests(result: (Result<List<ReviewRequest>>) -> Unit) {
+        runRemoteAction(result) { checkNotNull(reviewsGateway).listReviewRequests() }
+    }
+
+    fun resolveReviewRequest(id: Long, confirm: Boolean, result: (Result<Unit>) -> Unit) {
+        runRemoteAction(result) { checkNotNull(reviewsGateway).resolveReviewRequest(id, confirm) }
+    }
+
+    private fun <T> runRemoteAction(result: (Result<T>) -> Unit, action: suspend () -> T) {
         viewModelScope.launch {
-            try {
-                val data = gateway.exportData()
-                onSuccess(data.rawJson)
-            } catch (error: MobileAuthException) {
-                onError("Erro ao exportar dados: ${error.code}")
+            val response = try {
+                Result.success(action())
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (_: Exception) {
-                onError("Erro ao conectar ao servidor para exportação.")
+            } catch (error: Exception) {
+                Result.failure(error)
+            }
+            result(response)
+        }
+    }
+
+    suspend fun fetchAccountExport(): String = checkNotNull(accountGateway).exportData().rawJson
+
+    fun changePassword(currentPassword: String, newPassword: String, result: (MobileAuthErrorCode?) -> Unit) {
+        val gateway = accountGateway ?: run {
+            result(MobileAuthErrorCode.SERVER)
+            return
+        }
+        viewModelScope.launch {
+            authenticationMutex.withLock {
+                if (_authentication.value !is AuthenticationState.Authenticated) {
+                    result(MobileAuthErrorCode.UNAUTHENTICATED)
+                    return@withLock
+                }
+                val error = try {
+                    gateway.changePassword(currentPassword, newPassword)
+                    null
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: MobileAuthException) {
+                    failure.code
+                } catch (_: Exception) {
+                    MobileAuthErrorCode.SERVER
+                }
+                result(error)
             }
         }
     }
 
     fun deleteAccount(password: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
-        val gateway = accountGateway ?: run { onError("Serviço de conta indisponível."); return }
+        val gateway = accountGateway ?: run { onError(localized("Serviço de conta indisponível.")); return }
         viewModelScope.launch {
             try {
                 val ok = gateway.deleteAccount(password)
                 if (ok) {
                     _currentUser.value = null
+                    clearAccountLists()
                     _authentication.value = AuthenticationState.SignedOut
                     onSuccess()
                 } else {
-                    onError("Não foi possível excluir a conta.")
+                    onError(localized("Não foi possível excluir a conta."))
                 }
             } catch (error: MobileAuthException) {
-                onError("Senha incorreta ou erro no servidor (${error.code}).")
+                onError(
+                    if (error.code == MobileAuthErrorCode.FORBIDDEN) localized("A senha atual está incorreta.")
+                    else error.code.accountActionMessage(localized("Não foi possível excluir a conta."))
+                )
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                onError("Erro de conexão ao solicitar exclusão.")
+                onError(localized("Erro de conexão ao solicitar exclusão."))
             }
         }
     }
 
     fun loadBudgets() {
         val gateway = budgetRequestsGateway ?: return
+        val userId = _currentUser.value?.id
         viewModelScope.launch {
             try {
-                _budgets.value = gateway.list()
+                val rows = gateway.list()
+                if (userId == _currentUser.value?.id) _budgets.value = rows
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
@@ -660,11 +885,17 @@ class LensClickViewModel(
         }
     }
 
+    fun loadBudgetDetail(id: Long, result: (Result<BudgetRequest>) -> Unit) {
+        runRemoteAction(result) { checkNotNull(budgetRequestsGateway).detail(id) }
+    }
+
     fun loadAgenda() {
         val gateway = budgetRequestsGateway ?: return
+        val userId = _currentUser.value?.id
         viewModelScope.launch {
             try {
-                _agenda.value = gateway.agenda()
+                val rows = gateway.agenda()
+                if (userId == _currentUser.value?.id) _agenda.value = rows
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
@@ -674,9 +905,11 @@ class LensClickViewModel(
 
     fun loadFavorites() {
         val gateway = favoritesGateway ?: return
+        val userId = _currentUser.value?.id
         viewModelScope.launch {
             try {
-                _favorites.value = gateway.list()
+                val rows = gateway.list()
+                if (userId == _currentUser.value?.id) _favorites.value = rows
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
@@ -687,18 +920,22 @@ class LensClickViewModel(
     fun createBudgetRequest(slug: String, draft: BudgetRequestDraft, result: (Boolean) -> Unit) {
         val gateway = budgetRequestsGateway ?: run { result(false); return }
         viewModelScope.launch {
-            _budgetBusy.value = true; _budgetError.value = null; _budgetMessage.value = null
+            _budgetBusy.value = true
+            _budgetError.value = null
+            _budgetMessage.value = null
             try {
                 gateway.create(slug, draft)
-                _budgets.value = gateway.list()
-                _budgetMessage.value = "Pedido de orçamento enviado."
+                loadBudgets()
+                _budgetMessage.value = localized("Pedido de orçamento enviado.")
                 result(true)
             } catch (error: MobileAuthException) {
-                _budgetError.value = error.code; result(false)
+                _budgetError.value = error.code
+                result(false)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                _budgetError.value = MobileAuthErrorCode.SERVER; result(false)
+                _budgetError.value = MobileAuthErrorCode.SERVER
+                result(false)
             } finally {
                 _budgetBusy.value = false
             }
@@ -708,18 +945,23 @@ class LensClickViewModel(
     fun proposeToRequest(id: Long, priceCents: Long, conditions: String, result: (Boolean) -> Unit) {
         val gateway = budgetRequestsGateway ?: run { result(false); return }
         viewModelScope.launch {
-            _budgetBusy.value = true; _budgetError.value = null; _budgetMessage.value = null
+            _budgetBusy.value = true
+            _budgetError.value = null
+            _budgetMessage.value = null
             try {
                 gateway.propose(id, priceCents, conditions)
-                _budgets.value = gateway.list()
-                _budgetMessage.value = "Proposta enviada."
+                updateBudgetStatus(id, "proposed")
+                loadBudgets()
+                _budgetMessage.value = localized("Proposta enviada.")
                 result(true)
             } catch (error: MobileAuthException) {
-                _budgetError.value = error.code; result(false)
+                _budgetError.value = error.code
+                result(false)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                _budgetError.value = MobileAuthErrorCode.SERVER; result(false)
+                _budgetError.value = MobileAuthErrorCode.SERVER
+                result(false)
             } finally {
                 _budgetBusy.value = false
             }
@@ -729,44 +971,57 @@ class LensClickViewModel(
     fun decideRequest(id: Long, proposalId: Long, accept: Boolean, result: (Boolean) -> Unit) {
         val gateway = budgetRequestsGateway ?: run { result(false); return }
         viewModelScope.launch {
-            _budgetBusy.value = true; _budgetError.value = null; _budgetMessage.value = null
+            _budgetBusy.value = true
+            _budgetError.value = null
+            _budgetMessage.value = null
             try {
                 gateway.decide(id, proposalId, accept)
-                _budgets.value = gateway.list()
-                _agenda.value = gateway.agenda()
-                _budgetMessage.value = if (accept) "Proposta aceita." else "Proposta recusada."
+                updateBudgetStatus(id, if (accept) "accepted" else "rejected")
+                loadBudgets()
+                _budgetMessage.value = if (accept) localized("Proposta aceita.") else localized("Proposta recusada.")
                 result(true)
             } catch (error: MobileAuthException) {
-                _budgetError.value = error.code; result(false)
+                _budgetError.value = error.code
+                result(false)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                _budgetError.value = MobileAuthErrorCode.SERVER; result(false)
+                _budgetError.value = MobileAuthErrorCode.SERVER
+                result(false)
             } finally {
                 _budgetBusy.value = false
             }
         }
     }
 
-    fun cancelRequest(id: Long, result: (Boolean) -> Unit) {
+    fun closeBudgetRequest(id: Long, decline: Boolean, result: (Boolean) -> Unit) {
         val gateway = budgetRequestsGateway ?: run { result(false); return }
         viewModelScope.launch {
-            _budgetBusy.value = true; _budgetError.value = null; _budgetMessage.value = null
+            _budgetBusy.value = true
+            _budgetError.value = null
+            _budgetMessage.value = null
             try {
-                gateway.cancel(id)
-                _budgets.value = gateway.list()
-                _budgetMessage.value = "Pedido cancelado."
+                if (decline) gateway.decline(id) else gateway.cancel(id)
+                updateBudgetStatus(id, if (decline) "rejected" else "cancelled")
+                loadBudgets()
+                _budgetMessage.value = if (decline) localized("Pedido recusado.") else localized("Pedido cancelado.")
                 result(true)
             } catch (error: MobileAuthException) {
-                _budgetError.value = error.code; result(false)
+                _budgetError.value = error.code
+                result(false)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                _budgetError.value = MobileAuthErrorCode.SERVER; result(false)
+                _budgetError.value = MobileAuthErrorCode.SERVER
+                result(false)
             } finally {
                 _budgetBusy.value = false
             }
         }
+    }
+
+    private fun updateBudgetStatus(id: Long, status: String) {
+        _budgets.value = _budgets.value.map { if (it.id == id) it.copy(status = status) else it }
     }
 
     fun addFavorite(slug: String, result: (Boolean) -> Unit) {
@@ -868,7 +1123,7 @@ class LensClickViewModel(
             portfolioReady()?.let { _portfolio.value = it.copy(busy = true, error = null, message = null) }
             try {
                 gateway.add(image, imageContentType, altText, caption, category)
-                _portfolio.value = PortfolioState.Ready(gateway.list(), message = "Imagem adicionada.")
+                _portfolio.value = PortfolioState.Ready(gateway.list(), message = localized("Imagem adicionada."))
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: MobileAuthException) {
@@ -884,7 +1139,7 @@ class LensClickViewModel(
         viewModelScope.launch {
             portfolioReady()?.let { _portfolio.value = it.copy(busy = true, error = null, message = null) }
             try {
-                _portfolio.value = PortfolioState.Ready(gateway.update(items), message = "Portfólio atualizado.")
+                _portfolio.value = PortfolioState.Ready(gateway.update(items), message = localized("Portfólio atualizado."))
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: MobileAuthException) {
@@ -901,7 +1156,7 @@ class LensClickViewModel(
             portfolioReady()?.let { _portfolio.value = it.copy(busy = true, error = null, message = null) }
             try {
                 gateway.remove(id)
-                _portfolio.value = PortfolioState.Ready(gateway.list(), message = "Imagem removida.")
+                _portfolio.value = PortfolioState.Ready(gateway.list(), message = localized("Imagem removida."))
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: MobileAuthException) {

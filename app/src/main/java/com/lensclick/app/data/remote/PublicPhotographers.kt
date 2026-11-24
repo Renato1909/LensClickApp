@@ -7,6 +7,7 @@ import com.lensclick.app.domain.PublicPhotographerPage
 import com.lensclick.app.domain.PublicPhotographerProfile
 import com.lensclick.app.domain.PublicPhotographersGateway
 import com.lensclick.app.domain.PortfolioItem
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
@@ -17,12 +18,24 @@ class HttpPublicPhotographersGateway(
     private val baseUrl: String = ApiEnvironment.baseUrl
 ) : PublicPhotographersGateway {
     override suspend fun list(city: String, specialty: String?, page: Int): PublicPhotographerPage =
+        listPage(city, specialty, page)
+
+    override suspend fun listTopRated(page: Int): PublicPhotographerPage =
+        listPage(city = "", specialty = null, page = page, sort = "rating_rank")
+
+    private suspend fun listPage(
+        city: String,
+        specialty: String?,
+        page: Int,
+        sort: String? = null
+    ): PublicPhotographerPage =
         withContext(Dispatchers.IO) {
             val params = buildList {
                 add("page=${page.coerceAtLeast(1)}")
                 add("pageSize=12")
                 if (city.isNotBlank()) add("city=${java.net.URLEncoder.encode(city.trim(), "UTF-8")}")
                 if (specialty != null) add("specialty=${java.net.URLEncoder.encode(specialty, "UTF-8")}")
+                if (sort != null) add("sort=$sort")
             }.joinToString("&")
             val connection = URL("$baseUrl/api/photographers?$params").openConnection() as HttpURLConnection
             try {
@@ -32,9 +45,13 @@ class HttpPublicPhotographersGateway(
                 connection.connectTimeout = 10_000
                 connection.readTimeout = 10_000
                 if (connection.responseCode != HttpURLConnection.HTTP_OK) {
-                    throw java.io.IOException("Photographers HTTP ${connection.responseCode}")
+                    throw IOException("Photographers HTTP ${connection.responseCode}")
                 }
-                parsePublicPhotographerPage(connection.inputStream.bufferedReader().use { it.readText() })
+                val root = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+                if (sort != null && root.optString("sort") != sort) {
+                    throw IOException("Photographers response did not apply the requested sort")
+                }
+                parsePublicPhotographerPage(root)
             } finally {
                 connection.disconnect()
             }
@@ -43,7 +60,7 @@ class HttpPublicPhotographersGateway(
     override suspend fun get(slug: String): PublicPhotographerProfile =
         withContext(Dispatchers.IO) {
             require(slug.matches(Regex("[a-z0-9-]{3,80}"))) { "Invalid photographer slug" }
-            val connection = URL("$baseUrl/api/photographers/${java.net.URLEncoder.encode(slug, "UTF-8")}")
+            val connection = URL("$baseUrl/api/photographers/${java.net.URLEncoder.encode(slug, "UTF-8")}?fresh=1")
                 .openConnection() as HttpURLConnection
             try {
                 connection.requestMethod = "GET"
@@ -64,8 +81,10 @@ class HttpPublicPhotographersGateway(
         }
 }
 
-fun parsePublicPhotographerPage(json: String): PublicPhotographerPage {
-    val root = JSONObject(json)
+fun parsePublicPhotographerPage(json: String): PublicPhotographerPage =
+    parsePublicPhotographerPage(JSONObject(json))
+
+private fun parsePublicPhotographerPage(root: JSONObject): PublicPhotographerPage {
     val rows = root.getJSONArray("photographers")
     val pagination = root.getJSONObject("pagination")
     val photographers = (0 until rows.length()).map { index ->
@@ -80,7 +99,8 @@ fun parsePublicPhotographerPage(json: String): PublicPhotographerPage {
             startingPriceCents = if (row.isNull("startingPriceCents")) null else row.getLong("startingPriceCents"),
             ratingAverage = if (row.isNull("ratingAverage")) null else row.getDouble("ratingAverage"),
             reviewCount = row.optInt("reviewCount", 0),
-            photoPath = if (row.isNull("profilePic")) "" else row.optString("profilePic")
+            photoPath = if (row.isNull("profilePic")) "" else row.optString("profilePic"),
+            portfolioPreviewUrl = row.optString("portfolioPreviewUrl", "")
         )
     }
 

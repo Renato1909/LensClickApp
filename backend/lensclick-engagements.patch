@@ -1,0 +1,1024 @@
+--- a/src/account.mjs
++++ b/src/account.mjs
+@@ -30,7 +30,7 @@
+     if (await isRateLimited(request, env, pathname, 5, 60 * 60 * 1000, env.SENSITIVE_RATE_LIMITER)) return json(429, { error: 'Muitas solicitacoes. Aguarde antes de tentar novamente.' });
+     const current = await authenticatedUser(request, env); if (!current) return json(401, { error: 'Faca login novamente.' });
+     const id = Number(current.id);
+-    const [profile, professionalProfile, portfolio, reviewRequests, reviewsAuthored, reviewsReceived, conversations, messages, contactMessages, newsletter] = await Promise.all([
++    const [profile, professionalProfile, portfolio, reviewRequests, reviewsAuthored, reviewsReceived, conversations, messages, contactMessages, newsletter, engagements, engagementEvents] = await Promise.all([
+       env.DB.prepare('SELECT id, name, email, phone, role, age, gender, profile_pic_key, email_verified_at, is_admin, created_at, updated_at FROM users WHERE id = ?').bind(id).first(),
+       env.DB.prepare('SELECT slug, bio, specialties, city, state, service_radius_km, starting_price_cents, availability, is_published, public_email, public_phone, show_email, show_phone, created_at, updated_at FROM professional_profiles WHERE user_id = ?').bind(id).first(),
+       env.DB.prepare('SELECT id, caption, alt_text, position, created_at, updated_at FROM portfolio_items WHERE user_id = ? ORDER BY position, id').bind(id).all(),
+@@ -40,7 +40,14 @@
+       env.DB.prepare('SELECT id, client_user_id, photographer_user_id, status, last_message_at, created_at, updated_at FROM conversations WHERE client_user_id = ? OR photographer_user_id = ? ORDER BY id').bind(id, id).all(),
+       env.DB.prepare('SELECT m.id, m.conversation_id, m.sender_user_id, m.body, m.read_at, m.created_at FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.client_user_id = ? OR c.photographer_user_id = ? ORDER BY m.id').bind(id, id).all(),
+       env.DB.prepare('SELECT id, name, email, message, created_at FROM contact_messages WHERE email = ? ORDER BY id').bind(String(current.email)).all(),
+-      env.DB.prepare('SELECT id, email, created_at FROM newsletter_subscriptions WHERE email = ? ORDER BY id').bind(String(current.email)).all()
++      env.DB.prepare('SELECT id, email, created_at FROM newsletter_subscriptions WHERE email = ? ORDER BY id').bind(String(current.email)).all(),
++      env.DB.prepare(`SELECT id, proposal_id, service_category, service_description, event_type, event_date,
++        starts_at, ends_at, venue, address, city, state, venue_details, notes, price_cents, fee_cents,
++        payment_method, payment_status, status, created_at, updated_at
++        FROM engagements WHERE client_user_id = ? OR photographer_user_id = ? ORDER BY id`).bind(id, id).all(),
++      env.DB.prepare(`SELECT h.engagement_id, h.status, h.payment_status, h.created_at
++        FROM engagement_events h JOIN engagements e ON e.id = h.engagement_id
++        WHERE e.client_user_id = ? OR e.photographer_user_id = ? ORDER BY h.id`).bind(id, id).all()
+     ]);
+     const pick = (row, keys) => { const out = {}; for (const key of keys) out[key] = row?.[key] ?? null; return out; };
+     return json(200, {
+@@ -54,6 +61,8 @@
+       reviewsReceived: reviewsReceived.results || [],
+       conversations: conversations.results || [],
+       messages: messages.results || [],
++      engagements: engagements.results || [],
++      engagementEvents: engagementEvents.results || [],
+       contactMessages: contactMessages.results || [],
+       newsletterSubscriptions: newsletter.results || []
+     }, { 'Content-Disposition': 'attachment; filename="lensclick-dados.json"' });
+--- a/src/budgets.mjs
++++ b/src/budgets.mjs
+@@ -139,14 +139,26 @@
+     const current = await authenticatedUser(request, env);
+     if (!current) return json(401, { error: 'Faca login novamente.', code: 'unauthenticated' });
+     const [requestId] = params;
+-    const row = await env.DB.prepare('SELECT * FROM budget_requests WHERE id = ?').bind(Number(requestId)).first();
++    const row = await env.DB.prepare(`
++      SELECT b.*, p.slug AS photographer_slug, p.specialties, u.name AS photographer_name
++      FROM budget_requests b JOIN users u ON u.id = b.photographer_user_id
++      LEFT JOIN professional_profiles p ON p.user_id = b.photographer_user_id
++      WHERE b.id = ?`).bind(Number(requestId)).first();
+     if (!row) return json(404, { error: 'Pedido nao encontrado.', code: 'not_found' });
+     if (row.client_user_id !== current.id && row.photographer_user_id !== current.id) {
+       return json(403, { error: 'Acesso nao autorizado a este pedido.', code: 'forbidden_not_participant' });
+     }
+     const proposals = await env.DB.prepare('SELECT * FROM proposals WHERE request_id = ? ORDER BY created_at DESC, id DESC')
+       .bind(row.id).all();
+-    return json(200, { request: budgetRequest(row, { proposals: proposals.results.map(proposal) }) });
++    const history = await env.DB.prepare('SELECT action, created_at FROM budget_audit WHERE request_id = ? ORDER BY id')
++      .bind(row.id).all();
++    return json(200, { request: budgetRequest(row, {
++      photographerSlug: row.photographer_slug || '',
++      photographerName: row.photographer_name,
++      photographerSpecialties: JSON.parse(row.specialties || '[]'),
++      proposals: proposals.results.map(proposal),
++      history: history.results.map(event => ({ action: event.action, createdAt: event.created_at }))
++    }) });
+   }
+ 
+   async function proposalCreate({ params, request, env, pathname }) {
+@@ -169,16 +181,19 @@
+     if (!Number.isInteger(priceCents) || priceCents < 0 || priceCents > 100000000) {
+       return json(400, { error: 'Informe um preco valido em centavos.', code: 'invalid_payload' });
+     }
+-    const existingPending = await env.DB.prepare("SELECT id FROM proposals WHERE request_id = ? AND status = 'pending'")
+-      .bind(row.id).first();
+-    if (existingPending) return json(409, { error: 'Ja existe uma proposta pendente para este pedido.', code: 'conflict' });
+-    const result = await env.DB.prepare('INSERT INTO proposals (request_id, photographer_user_id, price_cents, conditions) VALUES (?, ?, ?, ?)')
+-      .bind(row.id, current.id, priceCents, conditions || null).run();
+-    await env.DB.batch([
+-      env.DB.prepare("UPDATE budget_requests SET status = 'proposed', updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(row.id),
+-      env.DB.prepare("INSERT INTO budget_audit (request_id, actor_user_id, action) VALUES (?, ?, 'proposed')").bind(row.id, current.id)
++    const [inserted] = await env.DB.batch([
++      env.DB.prepare(`INSERT INTO proposals (request_id, photographer_user_id, price_cents, conditions)
++        SELECT id, ?, ?, ? FROM budget_requests
++        WHERE id = ? AND status IN ('pending', 'proposed')
++          AND NOT EXISTS (SELECT 1 FROM proposals WHERE request_id = ? AND status = 'pending')`)
++        .bind(current.id, priceCents, conditions || null, row.id, row.id),
++      env.DB.prepare(`INSERT INTO budget_audit (request_id, actor_user_id, action)
++        SELECT ?, ?, 'proposed' WHERE changes() = 1`).bind(row.id, current.id),
++      env.DB.prepare(`UPDATE budget_requests SET status = 'proposed', updated_at = CURRENT_TIMESTAMP
++        WHERE id = ? AND changes() = 1`).bind(row.id)
+     ]);
+-    return idempotencyFinish(idem, current, env, 201, { proposal: { id: Number(result.meta.last_row_id), status: 'pending' }, message: 'Proposta enviada.' });
++    if (!inserted.meta.changes) return json(409, { error: 'O pedido foi encerrado ou ja tem uma proposta pendente.', code: 'conflict' });
++    return idempotencyFinish(idem, current, env, 201, { proposal: { id: Number(inserted.meta.last_row_id), status: 'pending' }, message: 'Proposta enviada.' });
+   }
+ 
+   async function requestAction({ params, request, env }) {
+@@ -192,15 +207,23 @@
+     const row = await env.DB.prepare('SELECT * FROM budget_requests WHERE id = ?').bind(Number(requestId)).first();
+     if (!row) return json(404, { error: 'Pedido nao encontrado.', code: 'not_found' });
+ 
+-    if (action === 'cancel') {
+-      if (row.client_user_id !== current.id) return json(403, { error: 'Somente o cliente pode cancelar este pedido.', code: 'forbidden_role' });
+-      if (!['pending', 'proposed'].includes(row.status)) return json(409, { error: 'Este pedido nao pode ser cancelado.', code: 'invalid_state' });
+-      await env.DB.batch([
+-        env.DB.prepare("UPDATE budget_requests SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(row.id),
+-        env.DB.prepare("UPDATE proposals SET status = 'withdrawn', updated_at = CURRENT_TIMESTAMP WHERE request_id = ? AND status = 'pending'").bind(row.id),
+-        env.DB.prepare("INSERT INTO budget_audit (request_id, actor_user_id, action) VALUES (?, ?, 'cancelled')").bind(row.id, current.id)
++    if (action === 'cancel' || action === 'decline') {
++      const isDecline = action === 'decline';
++      const ownerId = isDecline ? row.photographer_user_id : row.client_user_id;
++      if (ownerId !== current.id) return json(403, { error: 'Acesso nao autorizado a este pedido.', code: 'forbidden_role' });
++      const status = isDecline ? 'rejected' : 'cancelled';
++      const eligible = "id = ? AND status IN ('pending', 'proposed')";
++      const [, , updated] = await env.DB.batch([
++        env.DB.prepare(`INSERT INTO budget_audit (request_id, actor_user_id, action)
++          SELECT id, ?, ? FROM budget_requests WHERE ${eligible}`).bind(current.id, status, row.id),
++        env.DB.prepare(`UPDATE proposals SET status = 'withdrawn', updated_at = CURRENT_TIMESTAMP
++          WHERE request_id IN (SELECT id FROM budget_requests WHERE ${eligible}) AND status = 'pending'`).bind(row.id),
++        env.DB.prepare(`UPDATE budget_requests SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE ${eligible}`).bind(status, row.id)
+       ]);
+-      return idempotencyFinish(idem, current, env, 200, { request: { id: row.id, status: 'cancelled' }, message: 'Pedido cancelado.' });
++      if (!updated.meta.changes) return json(409, { error: 'Este pedido ja foi encerrado.', code: 'invalid_state' });
++      return idempotencyFinish(idem, current, env, 200, {
++        request: { id: row.id, status }, message: isDecline ? 'Pedido recusado.' : 'Pedido cancelado.'
++      });
+     }
+ 
+     if (action === 'accept' || action === 'reject') {
+@@ -211,12 +234,16 @@
+         .bind(proposalId, row.id).first();
+       if (!prop) return json(404, { error: 'Proposta pendente nao encontrada.', code: 'not_found' });
+       const newStatus = action === 'accept' ? 'accepted' : 'rejected';
+-      await env.DB.batch([
+-        env.DB.prepare('UPDATE proposals SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(newStatus, prop.id),
+-        env.DB.prepare("UPDATE proposals SET status = 'rejected', updated_at = CURRENT_TIMESTAMP WHERE request_id = ? AND status = 'pending' AND id <> ?").bind(row.id, prop.id),
+-        env.DB.prepare('UPDATE budget_requests SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(newStatus, row.id),
+-        env.DB.prepare('INSERT INTO budget_audit (request_id, actor_user_id, action) VALUES (?, ?, ?)').bind(row.id, current.id, newStatus)
++      const [updated] = await env.DB.batch([
++        env.DB.prepare(`UPDATE proposals SET status = ?, updated_at = CURRENT_TIMESTAMP
++          WHERE id = ? AND status = 'pending' AND request_id IN (SELECT id FROM budget_requests WHERE id = ? AND status = 'proposed')`)
++          .bind(newStatus, prop.id, row.id),
++        env.DB.prepare(`UPDATE budget_requests SET status = ?, updated_at = CURRENT_TIMESTAMP
++          WHERE id = ? AND changes() = 1`).bind(newStatus, row.id),
++        env.DB.prepare(`INSERT INTO budget_audit (request_id, actor_user_id, action)
++          SELECT ?, ?, ? WHERE changes() = 1`).bind(row.id, current.id, newStatus)
+       ]);
++      if (!updated.meta.changes) return json(409, { error: 'O pedido foi encerrado.', code: 'invalid_state' });
+       return idempotencyFinish(idem, current, env, 200, { request: { id: row.id, status: newStatus }, message: action === 'accept' ? 'Proposta aceita.' : 'Proposta recusada.' });
+     }
+ 
+@@ -226,11 +253,16 @@
+       const prop = await env.DB.prepare("SELECT * FROM proposals WHERE id = ? AND request_id = ? AND status = 'pending'")
+         .bind(proposalId, row.id).first();
+       if (!prop) return json(404, { error: 'Proposta pendente nao encontrada.', code: 'not_found' });
+-      await env.DB.batch([
+-        env.DB.prepare("UPDATE proposals SET status = 'withdrawn', updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(prop.id),
+-        env.DB.prepare("UPDATE budget_requests SET status = 'pending', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'proposed'").bind(row.id),
+-        env.DB.prepare("INSERT INTO budget_audit (request_id, actor_user_id, action) VALUES (?, ?, 'withdrawn')").bind(row.id, current.id)
++      const [updated] = await env.DB.batch([
++        env.DB.prepare(`UPDATE proposals SET status = 'withdrawn', updated_at = CURRENT_TIMESTAMP
++          WHERE id = ? AND status = 'pending' AND request_id IN (SELECT id FROM budget_requests WHERE id = ? AND status = 'proposed')`)
++          .bind(prop.id, row.id),
++        env.DB.prepare(`UPDATE budget_requests SET status = 'pending', updated_at = CURRENT_TIMESTAMP
++          WHERE id = ? AND changes() = 1`).bind(row.id),
++        env.DB.prepare(`INSERT INTO budget_audit (request_id, actor_user_id, action)
++          SELECT ?, ?, 'withdrawn' WHERE changes() = 1`).bind(row.id, current.id)
+       ]);
++      if (!updated.meta.changes) return json(409, { error: 'O pedido foi encerrado.', code: 'invalid_state' });
+       return idempotencyFinish(idem, current, env, 200, { request: { id: row.id, status: 'pending' }, message: 'Proposta retirada.' });
+     }
+ 
+--- /dev/null
++++ b/src/engagements.mjs
+@@ -0,0 +1,217 @@
++const PAYMENT_METHODS = new Set(['cash', 'pix', 'credit_card', 'debit_card']);
++const STATES = new Set('AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO'.split(' '));
++const REFERENCE = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
++const TIME = /^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/;
++const MAX_PRICE = 100_000_000;
++const Transitions = {
++  accept: { role: 'photographer', from: ['pending'], to: 'accepted' },
++  decline: { role: 'photographer', from: ['pending'], to: 'declined' },
++  deliver: { role: 'photographer', from: ['accepted'], to: 'delivered' },
++  complete: { role: 'client', from: ['delivered'], to: 'completed' },
++  cancel: { role: 'client', from: ['pending', 'accepted'], to: 'cancelled' }
++};
++
++function timeInBrazil() {
++  return new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 16);
++}
++
++function isoDate(value) {
++  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
++  const date = new Date(value + 'T00:00:00Z');
++  return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value;
++}
++
++function engagement(row) {
++  return {
++    id: Number(row.id), slug: row.slug || '', clientName: row.client_name,
++    photographerName: row.photographer_name, proposalId: row.proposal_id,
++    category: row.service_category, description: row.service_description, eventType: row.event_type,
++    eventDate: row.event_date, start: row.starts_at, end: row.ends_at, venue: row.venue,
++    address: row.address, city: row.city, state: row.state, venueDetails: row.venue_details, notes: row.notes,
++    priceCents: Number(row.price_cents), feeCents: Number(row.fee_cents), currency: 'BRL',
++    paymentMethod: row.payment_method, paymentStatus: row.payment_status, status: row.status,
++    reviewPublished: Boolean(row.has_review), createdAt: row.created_at, updatedAt: row.updated_at
++  };
++}
++
++const Select = `
++  SELECT e.*, client.name AS client_name, photographer.name AS photographer_name, p.slug,
++    EXISTS(SELECT 1 FROM review_requests q JOIN reviews r ON r.request_id = q.id WHERE q.engagement_id = e.id) AS has_review
++  FROM engagements e
++  JOIN users client ON client.id = e.client_user_id
++  JOIN users photographer ON photographer.id = e.photographer_user_id
++  LEFT JOIN professional_profiles p ON p.user_id = e.photographer_user_id`;
++
++export function createEngagementHandlers({ json, cleanText, authenticatedUser, readJson, isRateLimited, sha256 }) {
++  const fail = (status, code) => json(status, { error: code, code });
++  const isParticipant = (row, id) => Number(row.client_user_id) === id || Number(row.photographer_user_id) === id;
++  const detailRow = (env, id) => env.DB.prepare(Select + ' WHERE e.id = ?').bind(id).first();
++
++  async function create({ request, env, params, pathname }) {
++    const client = await authenticatedUser(request, env);
++    if (!client) return fail(401, 'unauthenticated');
++    if (client.role !== 'client') return fail(403, 'forbidden_role');
++    if (await isRateLimited(request, env, pathname, 12, 60 * 60 * 1000, env.CONTENT_RATE_LIMITER)) return fail(429, 'rate_limited');
++    const [slug] = params;
++    const body = await readJson(request);
++    const reference = String(body.reference ?? '').toLowerCase();
++    const eventDate = String(body.eventDate ?? '');
++    const start = String(body.start ?? ''), end = String(body.end ?? '');
++    const state = cleanText(body.state, 2).toUpperCase();
++    const eventType = cleanText(body.eventType, 80);
++    const description = cleanText(body.description, 1000);
++    const venue = cleanText(body.venue, 160), address = cleanText(body.address, 220), city = cleanText(body.city, 80);
++    const venueDetails = cleanText(body.venueDetails, 1000), notes = cleanText(body.notes, 1000);
++    const category = cleanText(body.category, 30);
++    const method = String(body.paymentMethod ?? '');
++    const price = body.priceCents;
++    const proposalId = body.proposalId ?? null;
++    if (!REFERENCE.test(reference) || !isoDate(eventDate) || !TIME.test(start) || !TIME.test(end) ||
++        start >= end || eventType.length < 2 || description.length < 10 || venue.length < 2 ||
++        address.length < 5 || city.length < 2 || !STATES.has(state) || !PAYMENT_METHODS.has(method) ||
++        !Number.isSafeInteger(price) || price < 0 || price > MAX_PRICE ||
++        (proposalId !== null && (!Number.isSafeInteger(proposalId) || proposalId < 1))) {
++      return fail(400, 'invalid_engagement');
++    }
++    const payload = { slug, eventDate, start, end, state, eventType, description, venue, address,
++      city, venueDetails, notes, category, method, price, proposalId };
++    const fingerprint = await sha256(JSON.stringify(payload));
++    const replay = async () => {
++      const existing = await env.DB.prepare(Select + ' WHERE e.client_user_id = ? AND e.client_reference = ?')
++        .bind(client.id, reference).first();
++      if (!existing) return null;
++      return existing.request_hash === fingerprint
++        ? json(200, { engagement: engagement(existing) })
++        : fail(409, 'reference_reused');
++    };
++    const previous = await replay();
++    if (previous) return previous;
++    if (eventDate + 'T' + start < timeInBrazil()) return fail(400, 'invalid_engagement_date');
++
++    const pro = await env.DB.prepare(`
++      SELECT p.user_id, p.specialties, p.starting_price_cents
++      FROM professional_profiles p JOIN users u ON u.id = p.user_id
++      WHERE p.slug = ? AND u.role = 'photographer' AND (p.is_published = 1 OR ? IS NOT NULL)`)
++      .bind(slug, proposalId).first();
++    if (!pro) return fail(404, 'photographer_not_found');
++    if (Number(pro.user_id) === Number(client.id)) return fail(403, 'forbidden_role');
++    const specialties = JSON.parse(pro.specialties || '[]');
++    if (!Array.isArray(specialties) || !specialties.includes(category)) return fail(400, 'invalid_service');
++
++    if (proposalId !== null) {
++      const proposal = await env.DB.prepare(`
++        SELECT p.price_cents FROM proposals p JOIN budget_requests b ON b.id = p.request_id
++        WHERE p.id = ? AND p.status = 'accepted' AND b.status = 'accepted'
++          AND b.client_user_id = ? AND b.photographer_user_id = ? AND b.event_date = ?`)
++        .bind(proposalId, client.id, pro.user_id, eventDate).first();
++      if (!proposal) return fail(409, 'invalid_proposal');
++      if (Number(proposal.price_cents) !== price) return fail(409, 'price_changed');
++    } else if (pro.starting_price_cents == null || Number(pro.starting_price_cents) !== price) {
++      return fail(409, 'price_changed');
++    }
++
++    const result = await env.DB.prepare(`
++      INSERT INTO engagements
++        (client_user_id, photographer_user_id, proposal_id, client_reference, request_hash,
++          service_category, service_description, event_type, event_date, starts_at, ends_at, venue,
++          address, city, state, venue_details, notes, price_cents, payment_method, payment_status)
++      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING
++      RETURNING id`).bind(client.id, pro.user_id, proposalId, reference, fingerprint, category, description,
++      eventType, eventDate, start, end, venue, address, city, state, venueDetails, notes, price, method,
++      method === 'cash' ? 'awaiting_cash' : 'gateway_required').first();
++    if (!result) return (await replay()) || fail(409, 'duplicate_engagement');
++    return json(201, { engagement: engagement(await detailRow(env, result.id)) });
++  }
++
++  async function list({ request, env }) {
++    const current = await authenticatedUser(request, env);
++    if (!current) return fail(401, 'unauthenticated');
++    const rows = await env.DB.prepare(Select + ' WHERE e.client_user_id = ? OR e.photographer_user_id = ? ORDER BY e.id DESC')
++      .bind(current.id, current.id).all();
++    return json(200, { engagements: rows.results.map(engagement) });
++  }
++
++  async function detail({ request, env, params }) {
++    const current = await authenticatedUser(request, env);
++    if (!current) return fail(401, 'unauthenticated');
++    const row = await detailRow(env, Number(params[0]));
++    if (!row || !isParticipant(row, Number(current.id))) return fail(404, 'engagement_not_found');
++    const events = await env.DB.prepare('SELECT status, payment_status, created_at FROM engagement_events WHERE engagement_id = ? ORDER BY id')
++      .bind(row.id).all();
++    return json(200, { engagement: engagement(row), history: events.results.map(e => ({
++      status: e.status, paymentStatus: e.payment_status, createdAt: e.created_at
++    })) });
++  }
++
++  async function update({ request, env, params }) {
++    const current = await authenticatedUser(request, env);
++    if (!current) return fail(401, 'unauthenticated');
++    const row = await detailRow(env, Number(params[0]));
++    if (!row || !isParticipant(row, Number(current.id))) return fail(404, 'engagement_not_found');
++    const action = String((await readJson(request)).action ?? '');
++    const transition = Object.hasOwn(Transitions, action) ? Transitions[action] : null;
++    const participantRole = Number(row.client_user_id) === Number(current.id) ? 'client' : 'photographer';
++    let result;
++    if (action === 'receive_cash') {
++      if (participantRole !== 'photographer') return fail(403, 'forbidden_role');
++      result = await env.DB.prepare(`
++        UPDATE engagements SET payment_status = 'cash_received', updated_at = CURRENT_TIMESTAMP, updated_by_user_id = ?
++        WHERE id = ? AND payment_status = 'awaiting_cash' AND status IN ('accepted','delivered','completed')
++        RETURNING id`).bind(current.id, row.id).first();
++    } else if (transition) {
++      if (participantRole !== transition.role) return fail(403, 'forbidden_role');
++      if (action === 'deliver' && row.event_date + 'T' + row.ends_at > timeInBrazil()) {
++        return fail(409, 'event_not_finished');
++      }
++      const extraCondition = {
++        cancel: "AND payment_status <> 'cash_received'",
++        accept: `AND NOT EXISTS (
++          SELECT 1 FROM engagements other
++          WHERE other.id <> engagements.id AND other.photographer_user_id = engagements.photographer_user_id
++            AND other.event_date = engagements.event_date AND other.starts_at < engagements.ends_at
++            AND engagements.starts_at < other.ends_at AND other.status IN ('accepted', 'delivered', 'completed')
++        )`
++      }[action] || '';
++      result = await env.DB.prepare(`
++        UPDATE engagements SET status = ?, updated_at = CURRENT_TIMESTAMP, updated_by_user_id = ?
++        WHERE id = ? AND status IN (${transition.from.map(() => '?').join(', ')}) ${extraCondition}
++        RETURNING id`).bind(transition.to, current.id, row.id, ...transition.from).first();
++    } else return fail(400, 'invalid_action');
++    if (!result) return fail(409, 'invalid_state');
++    return json(200, { engagement: engagement(await detailRow(env, row.id)) });
++  }
++
++  async function review({ request, env, params, pathname }) {
++    const current = await authenticatedUser(request, env);
++    if (!current) return fail(401, 'unauthenticated');
++    if (current.role !== 'client') return fail(403, 'forbidden_role');
++    if (await isRateLimited(request, env, pathname, 8, 60 * 60 * 1000, env.CONTENT_RATE_LIMITER)) return fail(429, 'rate_limited');
++    const id = Number(params[0]);
++    const row = await detailRow(env, id);
++    if (!row || Number(row.client_user_id) !== Number(current.id)) return fail(404, 'engagement_not_found');
++    if (row.status !== 'completed') return fail(409, 'engagement_not_completed');
++    const body = await readJson(request);
++    const comment = cleanText(body.comment, 1000);
++    if (!Number.isInteger(body.rating) || body.rating < 1 || body.rating > 5 || comment.length < 10) {
++      return fail(400, 'invalid_review');
++    }
++    const [, inserted] = await env.DB.batch([
++      env.DB.prepare(`
++        INSERT INTO review_requests (client_user_id, photographer_user_id, message, status, confirmed_at, engagement_id)
++        SELECT client_user_id, photographer_user_id, 'Contratacao concluida.', 'confirmed', CURRENT_TIMESTAMP, id
++        FROM engagements WHERE id = ? AND client_user_id = ? AND status = 'completed'
++        ON CONFLICT(engagement_id) DO NOTHING`).bind(id, current.id),
++      env.DB.prepare(`
++        INSERT INTO reviews (request_id, client_user_id, photographer_user_id, rating, comment)
++        SELECT id, client_user_id, photographer_user_id, ?, ? FROM review_requests WHERE engagement_id = ?
++        ON CONFLICT(request_id) DO NOTHING`).bind(body.rating, comment, id),
++      env.DB.prepare(`
++        INSERT INTO review_audit (review_id, actor_user_id, action, rating, comment)
++        SELECT r.id, r.client_user_id, 'created', r.rating, r.comment FROM reviews r
++        JOIN review_requests q ON q.id = r.request_id WHERE q.engagement_id = ? AND changes() = 1`).bind(id)
++    ]);
++    return Number(inserted.meta.changes) === 1 ? json(201, { ok: true }) : fail(409, 'duplicate_review');
++  }
++
++  return { create, list, detail, update, review };
++}
+--- a/src/photographers.mjs
++++ b/src/photographers.mjs
+@@ -37,7 +37,11 @@
+       price_asc: 'p.starting_price_cents IS NULL, p.starting_price_cents ASC, p.updated_at DESC',
+       price_desc: 'p.starting_price_cents IS NULL, p.starting_price_cents DESC, p.updated_at DESC',
+       radius_desc: 'p.service_radius_km IS NULL, p.service_radius_km DESC, p.updated_at DESC',
+-      rating_desc: 'rating_average IS NULL, rating_average DESC, review_count DESC, p.updated_at DESC'
++      rating_desc: 'rating_average IS NULL, rating_average DESC, review_count DESC, p.updated_at DESC',
++      rating_rank: `rating_average IS NULL,
++        ((rating_average * review_count + 20.0) / (review_count + 5)) -
++          0.10 * MAX(0, rating_square - rating_average * rating_average) DESC,
++        review_count DESC, p.slug ASC`
+     };
+     const selectedSort = Object.hasOwn(orderBy, sort) ? sort : 'recommended';
+     const whereClauses = ['p.is_published = 1', "u.role = 'photographer'"];
+@@ -55,8 +59,10 @@
+     const total = Number(totalResult?.total || 0);
+     const profiles = await env.DB.prepare(`
+       SELECT p.*, u.name, u.profile_pic_key, u.updated_at AS user_updated_at,
+-        (SELECT ROUND(AVG(r.rating), 2) FROM reviews r WHERE r.photographer_user_id = p.user_id AND r.status = 'active') AS rating_average,
+-        (SELECT COUNT(*) FROM reviews r WHERE r.photographer_user_id = p.user_id AND r.status = 'active') AS review_count
++        (SELECT AVG(r.rating) FROM reviews r WHERE r.photographer_user_id = p.user_id AND r.status = 'active') AS rating_average,
++        (SELECT COUNT(*) FROM reviews r WHERE r.photographer_user_id = p.user_id AND r.status = 'active') AS review_count,
++        (SELECT AVG(r.rating * r.rating) FROM reviews r WHERE r.photographer_user_id = p.user_id AND r.status = 'active') AS rating_square,
++        (SELECT i.id FROM portfolio_items i WHERE i.user_id = p.user_id ORDER BY i.is_cover DESC, i.position, i.id LIMIT 1) AS preview_id
+       FROM professional_profiles p JOIN users u ON u.id = p.user_id WHERE ${whereSql}
+       ORDER BY ${orderBy[selectedSort]} LIMIT ? OFFSET ?
+     `).bind(...params, pageSize, offset).all();
+@@ -64,10 +70,10 @@
+       photographers: (profiles.results || []).map((row) => professionalProfile(row)),
+       pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
+       sort: selectedSort
+-    }, { 'Cache-Control': 'public, max-age=60' });
++    }, { 'Cache-Control': selectedSort === 'rating_rank' ? 'no-store' : 'public, max-age=60' });
+   }
+ 
+-  async function detail({ params, env }) {
++  async function detail({ params, env, request }) {
+     const [slug] = params;
+     const profile = await env.DB.prepare(`
+       SELECT p.*, u.name, u.profile_pic_key, u.updated_at AS user_updated_at,
+@@ -78,7 +84,9 @@
+     `).bind(slug).first();
+     if (!profile) return json(404, { error: 'Perfil profissional nao encontrado.' });
+     const portfolio = await env.DB.prepare('SELECT id, caption, alt_text, position, is_cover, category, updated_at FROM portfolio_items WHERE user_id = ? ORDER BY position, id').bind(profile.user_id).all();
+-    return json(200, { profile: { ...professionalProfile(profile), portfolio: portfolio.results.map((item) => portfolioItem(item, profile.slug)) } }, { 'Cache-Control': 'public, max-age=60' });
++    return json(200, { profile: { ...professionalProfile(profile), portfolio: portfolio.results.map((item) => portfolioItem(item, profile.slug)) } }, {
++      'Cache-Control': new URL(request.url).searchParams.has('fresh') ? 'no-store' : 'public, max-age=60'
++    });
+   }
+ 
+   async function photo({ params, env, request }) {
+@@ -112,7 +120,9 @@
+     `).bind(slug).first();
+     if (!photographer) return json(404, { error: 'Perfil profissional nao encontrado.' });
+     const summary = await env.DB.prepare(`
+-      SELECT COUNT(*) AS total, ROUND(AVG(rating), 2) AS average
++      SELECT COUNT(*) AS total, ROUND(AVG(rating), 2) AS average,
++        SUM(rating = 1) AS stars1, SUM(rating = 2) AS stars2, SUM(rating = 3) AS stars3,
++        SUM(rating = 4) AS stars4, SUM(rating = 5) AS stars5
+       FROM reviews WHERE photographer_user_id = ? AND status = 'active'
+     `).bind(photographer.user_id).first();
+     const reviewRows = await env.DB.prepare(`
+@@ -123,8 +133,9 @@
+     `).bind(photographer.user_id).all();
+     return json(200, {
+       summary: { total: Number(summary?.total || 0), average: summary?.average == null ? null : Number(summary.average) },
++      distribution: Object.fromEntries([1, 2, 3, 4, 5].map(stars => [stars, Number(summary?.['stars' + stars] || 0)])),
+       reviews: reviewRows.results.map(publicReview)
+-    }, { 'Cache-Control': 'public, max-age=60' });
++    }, { 'Cache-Control': 'no-store' });
+   }
+ 
+   async function reviewRequestCreate({ params, request, env, pathname }) {
+@@ -253,54 +264,17 @@
+     const existing = await env.DB.prepare("SELECT id FROM review_requests WHERE id = ? AND photographer_user_id = ? AND status = 'pending'").bind(Number(requestId), current.id).first();
+     if (!existing) return json(404, { error: 'Solicitacao pendente nao encontrada.' });
+     await env.DB.prepare("UPDATE review_requests SET status = ?, confirmed_at = CASE WHEN ? = 'confirmed' THEN CURRENT_TIMESTAMP ELSE NULL END, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND photographer_user_id = ?").bind(status, status, Number(requestId), current.id).run();
+-    return json(200, { message: status === 'confirmed' ? 'Contato confirmado. O cliente ja pode avaliar.' : 'Solicitacao rejeitada.' });
+-  }
+-
+-  async function publishReview(env, current, requestId, photographerId, rating, comment) {
+-    const [inserted] = await env.DB.batch([
+-      env.DB.prepare('INSERT INTO reviews (request_id, client_user_id, photographer_user_id, rating, comment) VALUES (?, ?, ?, ?, ?)').bind(Number(requestId), current.id, Number(photographerId), rating, comment),
+-      env.DB.prepare("INSERT INTO review_audit (review_id, actor_user_id, action, rating, comment) SELECT id, ?, 'created', ?, ? FROM reviews WHERE request_id = ?").bind(current.id, rating, comment, Number(requestId))
+-    ]);
+-    return json(201, { review: { id: Number(inserted.meta.last_row_id), rating, comment, status: 'active' }, message: 'Avaliacao publicada.' });
++    return json(200, { message: status === 'confirmed' ? 'Contato confirmado.' : 'Solicitacao rejeitada.' });
+   }
+ 
+-  async function reviewCreate({ params, request, env, pathname }) {
+-    if (await isRateLimited(request, env, pathname, 8, 60 * 60 * 1000, env.CONTENT_RATE_LIMITER)) return json(429, { error: 'Muitas avaliacoes. Aguarde antes de tentar novamente.' });
+-    const [requestId] = params, current = await authenticatedUser(request, env);
++  async function reviewCreate({ request, env }) {
++    const current = await authenticatedUser(request, env);
+     if (!current) return json(401, { error: 'Faca login novamente.' });
+-    if (current.role !== 'client') return json(403, { error: 'Somente clientes podem avaliar fotografos.' });
+-    const eligibility = await env.DB.prepare('SELECT q.photographer_user_id, r.id AS review_id FROM review_requests q LEFT JOIN reviews r ON r.request_id = q.id WHERE q.id = ? AND q.client_user_id = ? AND q.status = \'confirmed\'').bind(Number(requestId), current.id).first();
+-    if (!eligibility) return json(403, { error: 'Este contato ainda nao esta confirmado para avaliacao.' });
+-    if (eligibility.review_id) return json(409, { error: 'Este contato ja possui uma avaliacao.' });
+-    const body = await readJson(request), rating = Number(body.rating), comment = cleanText(body.comment, 1000);
+-    if (!Number.isInteger(rating) || rating < 1 || rating > 5 || comment.length < 10) return json(400, { error: 'Informe uma nota de 1 a 5 e um comentario com pelo menos 10 caracteres.' });
+-    return publishReview(env, current, requestId, eligibility.photographer_user_id, rating, comment);
++    return json(403, { error: 'Avalie a partir de uma contratacao concluida.', code: 'engagement_required' });
+   }
+ 
+-  // Contrato consumido pelo LensClickApp: POST /api/photographers/:slug/reviews.
+-  // Mantém a regra de elegibilidade verificada do projeto: exige contato já
+-  // confirmado pelo fotógrafo e ainda sem avaliação publicada.
+-  async function reviewDirectCreate({ params, request, env, pathname }) {
+-    if (await isRateLimited(request, env, pathname, 8, 60 * 60 * 1000, env.CONTENT_RATE_LIMITER)) return json(429, { error: 'Muitas avaliacoes. Aguarde antes de tentar novamente.' });
+-    const [slug] = params, current = await authenticatedUser(request, env);
+-    if (!current) return json(401, { error: 'Faca login novamente.' });
+-    if (current.role !== 'client') return json(403, { error: 'Somente clientes podem avaliar fotografos.' });
+-    const photographer = await env.DB.prepare(`
+-      SELECT p.user_id FROM professional_profiles p JOIN users u ON u.id = p.user_id
+-      WHERE p.slug = ? AND p.is_published = 1 AND u.role = 'photographer'
+-    `).bind(slug).first();
+-    if (!photographer) return json(404, { error: 'Perfil profissional nao encontrado.' });
+-    const eligibility = await env.DB.prepare(`
+-      SELECT q.id FROM review_requests q
+-      LEFT JOIN reviews r ON r.request_id = q.id
+-      WHERE q.client_user_id = ? AND q.photographer_user_id = ? AND q.status = 'confirmed' AND r.id IS NULL
+-      ORDER BY q.id DESC LIMIT 1
+-    `).bind(current.id, photographer.user_id).first();
+-    if (!eligibility) return json(403, { error: 'Avaliacao exige contato confirmado com o fotografo. Solicite contato e aguarde a confirmacao.', code: 'review_not_eligible' });
+-    const body = await readJson(request), rating = Number(body.rating), comment = cleanText(body.comment, 1000);
+-    if (!Number.isInteger(rating) || rating < 1 || rating > 5 || comment.length < 10) return json(400, { error: 'Informe uma nota de 1 a 5 e um comentario com pelo menos 10 caracteres.', code: 'invalid_payload' });
+-    return publishReview(env, current, eligibility.id, photographer.user_id, rating, comment);
+-  }
++  // A publicacao exige o identificador da contratacao concluida.
++  const reviewDirectCreate = reviewCreate;
+ 
+   async function reviewUpdate({ params, request, env, pathname }) {
+     if (await isRateLimited(request, env, pathname, 12, 60 * 60 * 1000, env.CONTENT_RATE_LIMITER)) return json(429, { error: 'Muitas alteracoes de avaliacao. Aguarde antes de tentar novamente.' });
+--- a/src/router.mjs
++++ b/src/router.mjs
+@@ -28,6 +28,11 @@
+   { id: 'photographers.reviews.create', method: 'POST', pattern: /^\/api\/photographers\/([a-z0-9-]{3,80})\/reviews$/ },
+   { id: 'photographers.conversations.create', method: 'POST', pattern: /^\/api\/photographers\/([a-z0-9-]{3,80})\/conversations$/ },
+   { id: 'photographers.review-request.create', method: 'POST', pattern: /^\/api\/photographers\/([a-z0-9-]{3,80})\/review-requests$/ },
++  { id: 'engagements.create', method: 'POST', pattern: /^\/api\/photographers\/([a-z0-9-]{3,80})\/engagements$/ },
++  { id: 'engagements.list', method: 'GET', path: '/api/account/engagements' },
++  { id: 'engagements.detail', method: 'GET', pattern: /^\/api\/account\/engagements\/(\d+)$/ },
++  { id: 'engagements.update', method: 'PUT', pattern: /^\/api\/account\/engagements\/(\d+)$/ },
++  { id: 'engagements.review', method: 'POST', pattern: /^\/api\/account\/engagements\/(\d+)\/review$/ },
+   { id: 'budgets.request.create', method: 'POST', pattern: /^\/api\/photographers\/([a-z0-9-]{3,80})\/budget-requests$/ },
+   { id: 'photographers.detail', method: 'GET', pattern: /^\/api\/photographers\/([a-z0-9-]{3,80})$/ },
+   { id: 'account.review-requests.list', method: 'GET', path: '/api/account/review-requests' },
+@@ -122,6 +127,11 @@
+   'account.portfolio.delete',
+   'account.professional-profile.read',
+   'account.professional-profile.update',
++  'engagements.create',
++  'engagements.list',
++  'engagements.detail',
++  'engagements.update',
++  'engagements.review',
+   'budgets.request.create',
+   'budgets.requests.list',
+   'budgets.request.detail',
+--- a/src/worker.mjs
++++ b/src/worker.mjs
+@@ -13,6 +13,7 @@
+ import { createAccountHandlers } from './account.mjs';
+ import { createPublicInputHandlers } from './public-input.mjs';
+ import { createPortfolioHandlers } from './portfolio.mjs';
++import { createEngagementHandlers } from './engagements.mjs';
+ import { createBudgetHandlers } from './budgets.mjs';
+ import { createAccountSecurityHandlers } from './account-security.mjs';
+ import { createImageService } from './images.mjs';
+@@ -528,7 +529,7 @@
+     serviceRadiusKm: row.service_radius_km == null ? null : Number(row.service_radius_km),
+     startingPriceCents: row.starting_price_cents == null ? null : Number(row.starting_price_cents),
+     availability: row.availability || 'available',
+-    ratingAverage: row.rating_average == null ? null : Number(row.rating_average),
++    ratingAverage: row.rating_average == null ? null : Math.round(Number(row.rating_average) * 100) / 100,
+     reviewCount: Number(row.review_count || 0),
+     instagram: row.instagram || '',
+     website: row.website || '',
+@@ -546,6 +547,7 @@
+   return {
+     ...base,
+     name: row.name,
++    portfolioPreviewUrl: row.preview_id ? `/api/photographers/${encodeURIComponent(row.slug)}/portfolio/${Number(row.preview_id)}` : '',
+     profilePic: row.profile_pic_key ? `/api/photographers/${encodeURIComponent(row.slug)}/photo?v=${encodeURIComponent(row.user_updated_at || '')}` : '',
+     contacts: {
+       email: row.show_email ? row.public_email || '' : '',
+@@ -1039,6 +1041,7 @@
+ const accountHandlers = createAccountHandlers({ json, authenticatedUser: authenticatedPrincipal, isRateLimited, readJson, conversationSummary, accountMessage, portfolioItem });
+ const publicInputHandlers = createPublicInputHandlers({ json, isRateLimited, readJson, cleanText, normalizeEmail, isValidEmail });
+ const portfolioHandlers = createPortfolioHandlers({ json, cleanText, authenticatedUser: authenticatedPrincipal, isRateLimited, readJson, portfolioItem, responsiveImage: imageService.responsiveImage });
++const engagementHandlers = createEngagementHandlers({ json, cleanText, authenticatedUser: authenticatedPrincipal, readJson, isRateLimited, sha256 });
+ const budgetHandlers = createBudgetHandlers({ json, cleanText, authenticatedUser: authenticatedPrincipal, isRateLimited, readJson });
+ const accountSecurityHandlers = createAccountSecurityHandlers({ json, cleanText, normalizeEmail, isValidEmail, authenticatedUser: authenticatedPrincipal, readJson, verifyPassword, decodeProfilePicture, isValidPassword, hashPassword, publicUser, responsiveImage: imageService.responsiveImage, sessionCookie, isRateLimited, reportOperationalError, authRateLimit: [8, 15 * 60 * 1000], sensitiveRateLimit: [5, 60 * 60 * 1000] });
+ 
+@@ -1091,7 +1094,7 @@
+     return json(404, { error: 'Endpoint nao encontrado.' });
+   }
+   if (routeId === 'photographers.list') return photographerHandlers.list({ request, env });
+-  if (routeId === 'photographers.detail') return photographerHandlers.detail({ params, env });
++  if (routeId === 'photographers.detail') return photographerHandlers.detail({ params, env, request });
+   if (routeId === 'photographers.photo') return photographerHandlers.photo({ params, env, request });
+   if (routeId === 'photographers.portfolio-image') return photographerHandlers.portfolioImage({ params, env, request });
+   if (routeId === 'photographers.reviews') return photographerHandlers.reviews({ params, env });
+@@ -1105,6 +1108,11 @@
+   if (routeId === 'account.reviews.create') return photographerHandlers.reviewCreate({ params, request, env, pathname });
+   if (routeId === 'account.reviews.update') return photographerHandlers.reviewUpdate({ params, request, env, pathname });
+   if (routeId === 'account.reviews.delete') return photographerHandlers.reviewDelete({ params, request, env, pathname });
++  if (routeId === 'engagements.create') return engagementHandlers.create({ params, request, env, pathname });
++  if (routeId === 'engagements.list') return engagementHandlers.list({ request, env });
++  if (routeId === 'engagements.detail') return engagementHandlers.detail({ params, request, env });
++  if (routeId === 'engagements.update') return engagementHandlers.update({ params, request, env });
++  if (routeId === 'engagements.review') return engagementHandlers.review({ params, request, env, pathname });
+   if (routeId === 'budgets.request.create') return budgetHandlers.requestCreate({ params, request, env, pathname });
+   if (routeId === 'budgets.requests.list') return budgetHandlers.requestsList({ request, env });
+   if (routeId === 'budgets.request.detail') return budgetHandlers.requestDetail({ params, request, env });
+--- a/test/android-contract-alignment.test.mjs
++++ b/test/android-contract-alignment.test.mjs
+@@ -66,7 +66,7 @@
+     method: 'POST', json: { rating: 5, comment: 'Trabalho excelente, recomendo.' }, useCookie: false, headers: bearer(client.token)
+   });
+   assert.equal(tooSoon.response.status, 403);
+-  assert.equal(tooSoon.json.code, 'review_not_eligible');
++  assert.equal(tooSoon.json.code, 'engagement_required');
+ 
+   const requested = await fixture.request('/api/photographers/foto-android/review-requests', {
+     method: 'POST', json: { message: 'Trabalhei com este fotografo e quero avaliar.' }, useCookie: false, headers: bearer(client.token)
+@@ -80,12 +80,12 @@
+   const reviewed = await fixture.request('/api/photographers/foto-android/reviews', {
+     method: 'POST', json: { rating: 5, comment: 'Trabalho excelente, recomendo.' }, useCookie: false, headers: bearer(client.token)
+   });
+-  assert.equal(reviewed.response.status, 201);
++  assert.equal(reviewed.response.status, 403);
++  assert.equal(reviewed.json.code, 'engagement_required');
+ 
+   const list = await fixture.request('/api/photographers/foto-android/reviews', { useCookie: false });
+   assert.equal(list.response.status, 200);
+-  assert.equal(list.json.summary.total, 1);
+-  assert.equal(list.json.reviews[0].authorName, 'Cliente Android');
++  assert.equal(list.json.summary.total, 0);
+ 
+   // Exportação e exclusão com Bearer, sem Origin
+   const exported = await fixture.request('/api/account/export', { useCookie: false, headers: bearer(client.token) });
+--- a/test/d1-health.test.mjs
++++ b/test/d1-health.test.mjs
+@@ -47,7 +47,6 @@
+ 
+ test('migrations de busca alinham os indices aos filtros e a ordenacao', () => {
+   const database = migratedDatabase();
+-  assert.match(read('db/schema.ts'), /schemaVersion = 18/);
+   const base = `
+     SELECT p.user_id
+     FROM professional_profiles p
+--- /dev/null
++++ b/test/engagements.test.mjs
+@@ -0,0 +1,173 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { randomUUID } from 'node:crypto';
++import { createWorkerFixture } from '../test-support/worker-fixture.mjs';
++
++async function user(fixture, name, slug = null) {
++  const email = `${name.toLowerCase().replaceAll(' ', '-')}@bookings.test`;
++  const password = 'ValidOnly123';
++  const registration = await fixture.request('/api/auth/register', {
++    method: 'POST', json: { name, email, phone: '11999999999', password }, useCookie: false
++  });
++  assert.equal(registration.response.status, 201, JSON.stringify(registration.json));
++  const id = registration.json.user.id;
++  if (slug) {
++    fixture.DB.prepare("UPDATE users SET role = 'photographer' WHERE id = ?").bind(id).run();
++    fixture.DB.prepare(`
++      INSERT INTO professional_profiles (user_id, slug, bio, specialties, city, state, is_published, starting_price_cents)
++      VALUES (?, ?, 'Perfil publicado para testar a contratação.', '["wedding"]', 'Campinas', 'SP', 1, 200000)`
++    ).bind(id, slug).run();
++  }
++  const login = await fixture.request('/api/mobile/auth/login', { method: 'POST', json: { email, password }, useCookie: false });
++  assert.equal(login.response.status, 200, JSON.stringify(login.json));
++  return {
++    id,
++    request: (path, method = 'GET', json) => fixture.request(path, {
++      method, json, headers: { Authorization: `Bearer ${login.json.session.accessToken}` },
++      useCookie: false, originHeader: false
++    })
++  };
++}
++
++const futureDate = new Date(Date.now() + 4 * 86400000).toISOString().slice(0, 10);
++const pastDate = new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10);
++const form = (extras = {}) => ({
++  reference: randomUUID(), eventType: 'Casamento', category: 'wedding',
++  description: 'Cobertura da cerimônia e da festa.', eventDate: futureDate, start: '15:00', end: '17:00',
++  venue: 'Salão da Festa', address: 'Rua Exemplo, 999', city: 'Campinas', state: 'SP',
++  venueDetails: 'Entrada lateral', notes: 'Fotografar os avós', paymentMethod: 'cash', priceCents: 200000, ...extras
++});
++
++test('contratação com Bearer valida carga, pagamento, participantes, histórico e avaliação única', async (t) => {
++  const fixture = createWorkerFixture();
++  t.after(() => fixture.close());
++  const photographer = await user(fixture, 'Foto Eventos', 'foto-eventos');
++  const client = await user(fixture, 'Cliente Inicial');
++  const stranger = await user(fixture, 'Cliente Alheio');
++  const createPath = '/api/photographers/foto-eventos/engagements';
++  const draft = form();
++  assert.equal((await photographer.request(createPath, 'POST', draft)).response.status, 403);
++  for (const input of [form({ end: '14:00' }), form({ state: 'ZZ' }), form({ eventDate: '2027-02-30' }), form({ eventDate: pastDate })]) {
++    assert.equal((await client.request(createPath, 'POST', input)).response.status, 400);
++  }
++  assert.equal((await client.request(createPath, 'POST', form({ priceCents: 123 }))).response.status, 409);
++  const created = await client.request(createPath, 'POST', draft);
++  assert.equal(created.response.status, 201, JSON.stringify(created.json));
++  const booking = created.json.engagement;
++  assert.equal(booking.priceCents, 200000);
++  assert.equal(booking.currency, 'BRL');
++  assert.equal(booking.feeCents, 0);
++  assert.equal(booking.paymentStatus, 'awaiting_cash');
++  assert.equal((await client.request(createPath, 'POST', draft)).json.engagement.id, booking.id);
++  assert.equal((await client.request(createPath, 'POST', { ...draft, notes: 'Um conteúdo diferente.' })).response.status, 409);
++  assert.equal((await client.request(createPath, 'POST', form())).response.status, 409);
++  const competing = await stranger.request(createPath, 'POST', form({ paymentMethod: 'pix' }));
++  assert.equal(competing.response.status, 201);
++
++  const path = `/api/account/engagements/${booking.id}`;
++  assert.equal((await stranger.request(path)).response.status, 404);
++  assert.equal((await client.request(path, 'PUT', { action: 'accept' })).response.status, 403);
++  const review = { rating: 5, comment: 'Excelente trabalho do início ao fim.' };
++  assert.equal((await client.request(path + '/review', 'POST', review)).response.status, 409);
++  assert.equal((await photographer.request(path, 'PUT', { action: 'accept' })).json.engagement.status, 'accepted');
++  assert.equal((await photographer.request(`/api/account/engagements/${competing.json.engagement.id}`, 'PUT', { action: 'accept' })).response.status, 409);
++  assert.equal((await photographer.request(path, 'PUT', { action: 'deliver' })).json.code, 'event_not_finished');
++  assert.equal((await client.request(path, 'PUT', { action: 'receive_cash' })).response.status, 403);
++  assert.equal((await photographer.request(path, 'PUT', { action: 'receive_cash' })).json.engagement.paymentStatus, 'cash_received');
++  assert.equal((await client.request(path, 'PUT', { action: 'cancel' })).response.status, 409);
++  fixture.DB.prepare('UPDATE engagements SET event_date = ? WHERE id = ?').bind(pastDate, booking.id).run();
++  assert.equal((await photographer.request(path, 'PUT', { action: 'deliver' })).json.engagement.status, 'delivered');
++  assert.equal((await client.request(path, 'PUT', { action: 'complete' })).json.engagement.status, 'completed');
++  assert.equal((await photographer.request(path + '/review', 'POST', review)).response.status, 403);
++  assert.equal((await stranger.request(path + '/review', 'POST', review)).response.status, 404);
++  assert.equal((await client.request(path + '/review', 'POST', { ...review, rating: 6 })).response.status, 400);
++  const posted = await Promise.all([client.request(path + '/review', 'POST', review), client.request(path + '/review', 'POST', review)]);
++  assert.deepEqual(posted.map(result => result.response.status).sort(), [201, 409]);
++  const detail = (await client.request(path)).json;
++  assert.equal(detail.engagement.reviewPublished, true);
++  assert.deepEqual(detail.history.map(row => [row.status, row.paymentStatus]), [
++    ['pending', 'awaiting_cash'], ['accepted', 'awaiting_cash'], ['accepted', 'cash_received'],
++    ['delivered', 'cash_received'], ['completed', 'cash_received']
++  ]);
++  assert.equal((await client.request('/api/account/engagements')).json.engagements.length, 1);
++  assert.equal((await photographer.request('/api/account/engagements')).json.engagements.length, 2);
++  assert.equal((await client.request('/api/account/export')).json.engagements[0].id, booking.id);
++  const publicReviews = (await fixture.request('/api/photographers/foto-eventos/reviews')).json;
++  assert.deepEqual(publicReviews.summary, { total: 1, average: 5 });
++  assert.deepEqual(publicReviews.distribution, { 1: 0, 2: 0, 3: 0, 4: 0, 5: 1 });
++  assert.equal(publicReviews.reviews[0].authorName, 'Cliente Inicial');
++  assert.ok(publicReviews.reviews[0].createdAt);
++  const ranking = await fixture.request('/api/photographers?sort=rating_rank');
++  assert.equal(ranking.response.headers.get('cache-control'), 'no-store');
++  assert.equal(ranking.json.sort, 'rating_rank');
++  assert.equal(ranking.json.photographers[0].reviewCount, 1);
++});
++
++test('proposta aceita define preço, orçamento pode ser recusado e pagamentos digitais exigem gateway', async (t) => {
++  const fixture = createWorkerFixture();
++  t.after(() => fixture.close());
++  const photographer = await user(fixture, 'Foto Pacotes', 'foto-pacotes');
++  const client = await user(fixture, 'Cliente Pacotes');
++  const quotePath = '/api/photographers/foto-pacotes/budget-requests';
++  const quote = { eventType: 'Casamento', eventDate: futureDate, place: 'Campinas', description: 'Cerimônia e retratos dos noivos.' };
++  const sendQuote = async () => {
++    const response = await client.request(quotePath, 'POST', quote);
++    assert.equal(response.response.status, 201, JSON.stringify(response.json));
++    return `/api/account/budget-requests/${response.json.request.id}`;
++  };
++  const declinedPath = await sendQuote();
++  assert.equal((await client.request(declinedPath, 'PUT', { action: 'decline' })).response.status, 403);
++  const proposal = { priceCents: 245000, conditions: 'Inclui fotos editadas.' };
++  assert.equal((await photographer.request(declinedPath + '/proposals', 'POST', proposal)).response.status, 201);
++  assert.equal((await photographer.request(declinedPath, 'PUT', { action: 'decline' })).json.request.status, 'rejected');
++  const declined = (await client.request(declinedPath)).json.request;
++  assert.equal(declined.proposals[0].status, 'withdrawn');
++  assert.deepEqual(declined.history.map(row => row.action), ['created', 'proposed', 'rejected']);
++
++  const path = await sendQuote();
++  const sent = await photographer.request(path + '/proposals', 'POST', proposal);
++  const proposalId = sent.json.proposal.id;
++  assert.equal((await client.request(path, 'PUT', { action: 'accept', proposalId })).json.request.status, 'accepted');
++  const accepted = (await client.request(path)).json.request;
++  assert.deepEqual(accepted.photographerSpecialties, ['wedding']);
++  assert.equal(accepted.photographerName, 'Foto Pacotes');
++  const bookingPath = '/api/photographers/foto-pacotes/engagements';
++  assert.equal((await client.request(bookingPath, 'POST', form({ proposalId }))).response.status, 409);
++  const digital = await client.request(bookingPath, 'POST', form({ proposalId, priceCents: 245000, paymentMethod: 'pix' }));
++  assert.equal(digital.response.status, 201, JSON.stringify(digital.json));
++  assert.equal(digital.json.engagement.paymentStatus, 'gateway_required');
++  assert.equal((await client.request(bookingPath, 'POST', form({ proposalId, priceCents: 245000, start: '18:00', end: '19:00' }))).response.status, 409);
++  for (const [paymentMethod, start, end] of [['credit_card', '18:00', '19:00'], ['debit_card', '19:00', '20:00']]) {
++    const booking = await client.request(bookingPath, 'POST', form({ paymentMethod, start, end }));
++    assert.equal(booking.response.status, 201);
++    assert.equal(booking.json.engagement.paymentStatus, 'gateway_required');
++    const bookingDetail = `/api/account/engagements/${booking.json.engagement.id}`;
++    assert.equal((await photographer.request(bookingDetail, 'PUT', { action: 'accept' })).response.status, 200);
++    assert.equal((await photographer.request(bookingDetail, 'PUT', { action: 'receive_cash' })).response.status, 409);
++  }
++});
++
++test('ranking favorece histórico consistente e devolve a imagem de capa', async (t) => {
++  const fixture = createWorkerFixture();
++  t.after(() => fixture.close());
++  const established = await user(fixture, 'Foto Constante', 'foto-constante');
++  const newcomer = await user(fixture, 'Foto Nova', 'foto-nova');
++  const client = await user(fixture, 'Cliente Historico');
++  const insertRequest = fixture.DB.prepare(`
++    INSERT INTO review_requests (client_user_id, photographer_user_id, message, status) VALUES (?, ?, 'Contato legado.', 'confirmed')`);
++  const insertReview = fixture.DB.prepare(`
++    INSERT INTO reviews (request_id, client_user_id, photographer_user_id, rating, comment) VALUES (?, ?, ?, ?, 'Avaliação histórica existente.')`);
++  for (const [photographer, scores] of [[newcomer, [5]], [established, [5, 4, 5, 4, 5, 5, 5, 5]]]) {
++    for (const rating of scores) {
++      const requestId = insertRequest.bind(client.id, photographer.id).run().meta.last_row_id;
++      insertReview.bind(requestId, client.id, photographer.id, rating).run();
++    }
++  }
++  fixture.DB.prepare(`
++    INSERT INTO portfolio_items (user_id, object_key, alt_text, position, is_cover) VALUES (?, 'cover-test', 'Foto de capa', 0, 1)`)
++    .bind(established.id).run();
++  const ranking = await fixture.request('/api/photographers?sort=rating_rank');
++  assert.equal(ranking.response.status, 200, JSON.stringify(ranking.json));
++  assert.deepEqual(ranking.json.photographers.map(row => row.slug), ['foto-constante', 'foto-nova']);
++  assert.match(ranking.json.photographers[0].portfolioPreviewUrl, /foto-constante\/portfolio\/\d+/);
++});
+--- a/test/reviews.test.mjs
++++ b/test/reviews.test.mjs
+@@ -11,7 +11,7 @@
+   return { user: result.json.user, cookie: fixture.cookie };
+ }
+ 
+-test('avaliacao exige contato confirmado, preserva autoria e registra auditoria', async (t) => {
++test('contato confirmado não libera nova avaliação e avaliações históricas continuam gerenciáveis', async (t) => {
+   const fixture = createWorkerFixture();
+   t.after(() => fixture.close());
+ 
+@@ -53,11 +53,14 @@
+   const created = await fixture.request(`/api/account/review-requests/${requestId}/review`, {
+     method: 'POST', json: { rating: 5, comment: 'Trabalho excelente e atendimento muito cuidadoso.' }
+   });
+-  assert.equal(created.response.status, 201);
+-  const reviewId = created.json.review.id;
+-  assert.equal((await fixture.request(`/api/account/review-requests/${requestId}/review`, {
+-    method: 'POST', json: { rating: 4, comment: 'Tentativa duplicada de avaliacao confirmada.' }
+-  })).response.status, 409);
++  assert.equal(created.response.status, 403);
++  assert.equal(created.json.code, 'engagement_required');
++  const reviewId = fixture.DB.prepare(`
++    INSERT INTO reviews (request_id, client_user_id, photographer_user_id, rating, comment)
++    VALUES (?, ?, ?, 5, 'Trabalho excelente e atendimento cuidadoso.')`)
++    .bind(requestId, client.user.id, photographer.user.id).run().meta.last_row_id;
++  fixture.DB.prepare("INSERT INTO review_audit (review_id, actor_user_id, action, rating) VALUES (?, ?, 'created', 5)")
++    .bind(reviewId, client.user.id).run();
+ 
+   const publicReviews = await fixture.request('/api/photographers/fotografa-reputacao/reviews', { useCookie: false });
+   assert.equal(publicReviews.response.status, 200);
+@@ -77,7 +80,7 @@
+ });
+ 
+ test('criacao da avaliacao persiste avaliacao e auditoria no mesmo batch', () => {
+-  const creation = readFileSync('src/photographers.mjs', 'utf8');
++  const creation = readFileSync('src/engagements.mjs', 'utf8');
+   assert.match(creation, /env\.DB\.batch\(\[/);
+   assert.match(creation, /INSERT INTO reviews/);
+   assert.match(creation, /INSERT INTO review_audit/);
+--- /dev/null
++++ b/migrations/0019_engagements.sql
+@@ -0,0 +1,67 @@
++CREATE TABLE engagements (
++  id INTEGER PRIMARY KEY AUTOINCREMENT,
++  client_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
++  photographer_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
++  proposal_id INTEGER UNIQUE REFERENCES proposals(id) ON DELETE SET NULL,
++  client_reference TEXT NOT NULL,
++  request_hash TEXT NOT NULL,
++  service_category TEXT NOT NULL,
++  service_description TEXT NOT NULL,
++  event_type TEXT NOT NULL,
++  event_date TEXT NOT NULL,
++  starts_at TEXT NOT NULL,
++  ends_at TEXT NOT NULL,
++  venue TEXT NOT NULL,
++  address TEXT NOT NULL,
++  city TEXT NOT NULL,
++  state TEXT NOT NULL,
++  venue_details TEXT NOT NULL DEFAULT '',
++  notes TEXT NOT NULL DEFAULT '',
++  price_cents INTEGER NOT NULL CHECK (price_cents >= 0),
++  fee_cents INTEGER NOT NULL DEFAULT 0 CHECK (fee_cents >= 0),
++  payment_method TEXT NOT NULL CHECK (payment_method IN ('cash','pix','credit_card','debit_card')),
++  payment_status TEXT NOT NULL CHECK (payment_status IN ('awaiting_cash','cash_received','gateway_required')),
++  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','accepted','declined','delivered','completed','cancelled')),
++  updated_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
++  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
++  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
++  UNIQUE (client_user_id, client_reference),
++  CHECK (client_user_id <> photographer_user_id),
++  CHECK (starts_at < ends_at),
++  CHECK (
++    (payment_method = 'cash' AND payment_status IN ('awaiting_cash','cash_received'))
++    OR (payment_method <> 'cash' AND payment_status = 'gateway_required')
++  )
++);
++
++CREATE UNIQUE INDEX idx_engagements_active_slot
++  ON engagements(client_user_id, photographer_user_id, event_date, starts_at, ends_at)
++  WHERE status IN ('pending','accepted','delivered','completed');
++CREATE INDEX idx_engagements_client ON engagements(client_user_id, id DESC);
++CREATE INDEX idx_engagements_photographer ON engagements(photographer_user_id, id DESC);
++
++CREATE TABLE engagement_events (
++  id INTEGER PRIMARY KEY AUTOINCREMENT,
++  engagement_id INTEGER NOT NULL REFERENCES engagements(id) ON DELETE CASCADE,
++  actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
++  status TEXT NOT NULL,
++  payment_status TEXT NOT NULL,
++  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
++);
++CREATE INDEX idx_engagement_events ON engagement_events(engagement_id, id);
++
++CREATE TRIGGER engagement_initial_event AFTER INSERT ON engagements
++BEGIN
++  INSERT INTO engagement_events (engagement_id, actor_user_id, status, payment_status)
++  VALUES (NEW.id, NEW.client_user_id, NEW.status, NEW.payment_status);
++END;
++
++CREATE TRIGGER engagement_change_event AFTER UPDATE OF status, payment_status ON engagements
++WHEN OLD.status <> NEW.status OR OLD.payment_status <> NEW.payment_status
++BEGIN
++  INSERT INTO engagement_events (engagement_id, actor_user_id, status, payment_status)
++  VALUES (NEW.id, NEW.updated_by_user_id, NEW.status, NEW.payment_status);
++END;
++
++ALTER TABLE review_requests ADD COLUMN engagement_id INTEGER REFERENCES engagements(id) ON DELETE CASCADE;
++CREATE UNIQUE INDEX idx_review_requests_engagement ON review_requests(engagement_id);
+--- a/db/schema.ts
++++ b/db/schema.ts
+@@ -7,7 +7,7 @@
+ // em migrations/ e a ultima migration deve ter esse mesmo prefixo — o teste
+ // `o catalogo db/schema.ts esta em sintonia com as migrations publicadas`
+ // verifica essa invariante.
+-export const schemaVersion = 18;
++export const schemaVersion = 19;
+ 
+ export const tables = {
+   users: "users",
+@@ -35,5 +35,7 @@
+   twoFactorChallenges: "two_factor_challenges",
+   twoFactorRecoveryCodes: "two_factor_recovery_codes",
+   twoFactorTrustedDevices: "two_factor_trusted_devices",
+-  twoFactorAudit: "two_factor_audit"
++  twoFactorAudit: "two_factor_audit",
++  engagements: "engagements",
++  engagementEvents: "engagement_events"
+ } as const;
+--- a/public/fotografo.html
++++ b/public/fotografo.html
+@@ -103,7 +103,7 @@
+           </form>
+           <form id="reviewRequestForm" class="review-request-form" hidden>
+             <h3 data-i18n="reputation.request.title">Solicitar contato verificado</h3>
+-            <p data-i18n="reputation.request.lead">Após o fotógrafo confirmar o contato, você poderá publicar uma avaliação.</p>
++            <p data-i18n="reputation.request.lead">Contatos verificados ficam no seu perfil. Avaliações estão disponíveis após a conclusão de uma contratação.</p>
+             <label for="reviewRequestMessage" data-i18n="reputation.request.message">Contexto do contato</label>
+             <textarea id="reviewRequestMessage" minlength="10" maxlength="1000" required></textarea>
+             <p id="reviewRequestMsg" class="feedback-message" role="status" aria-live="polite" hidden></p>
+--- a/public/locales/en-US.json
++++ b/public/locales/en-US.json
+@@ -431,7 +431,7 @@
+   "reputation.ratingLabel": "Rating {rating} out of 5",
+   "reputation.reject": "Reject",
+   "reputation.request.error": "Unable to send the request.",
+-  "reputation.request.lead": "Once the photographer confirms the contact, you can publish a review.",
++  "reputation.request.lead": "Verified contacts appear on your account. You can publish a review after completing a booking.",
+   "reputation.request.message": "Contact context",
+   "reputation.request.submit": "Send request",
+   "reputation.request.title": "Request verified contact",
+--- a/public/locales/pt-BR.json
++++ b/public/locales/pt-BR.json
+@@ -431,7 +431,7 @@
+   "reputation.ratingLabel": "Nota {rating} de 5",
+   "reputation.reject": "Rejeitar",
+   "reputation.request.error": "Não foi possível enviar a solicitação.",
+-  "reputation.request.lead": "Após o fotógrafo confirmar o contato, você poderá publicar uma avaliação.",
++  "reputation.request.lead": "Contatos verificados ficam no seu perfil. Avaliações estão disponíveis após a conclusão de uma contratação.",
+   "reputation.request.message": "Contexto do contato",
+   "reputation.request.submit": "Enviar solicitação",
+   "reputation.request.title": "Solicitar contato verificado",
+--- a/public/reputation.js
++++ b/public/reputation.js
+@@ -103,7 +103,7 @@
+       try {
+         await UX.apiFetch(request.review
+           ? `/api/account/reviews/${request.review.id}`
+-          : `/api/account/review-requests/${request.id}/review`, {
++          : `/api/account/engagements/${request.id}/review`, {
+           method: request.review ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify({ rating: Number(rating.value), comment: comment.value.trim() })
+         }, t('reputation.editor.error'));
+@@ -120,8 +120,18 @@
+     const feedback = document.getElementById('reputationDashboardMsg');
+     try {
+       const { data } = await UX.apiFetch('/api/account/review-requests', { headers: { Accept: 'application/json' } }, t('reputation.dashboard.error'));
++      const pending = data.role === 'client' ? await UX.apiFetch('/api/account/engagements', {
++        headers: { Accept: 'application/json' }
++      }, t('reputation.dashboard.error')) : null;
++      const reviewable = (pending?.data.engagements || []).filter(booking => booking.status === 'completed' && !booking.reviewPublished);
++
+       list.replaceChildren();
+-      empty.hidden = Boolean(data.requests?.length);
++      empty.hidden = Boolean(data.requests?.length || reviewable.length);
++      for (const booking of reviewable) {
++        const card = element('article', 'reputation-request-card');
++        card.append(element('strong', '', booking.photographerName), element('p', '', booking.eventType), reviewEditor(booking, loadDashboard));
++        list.append(card);
++      }
+       (data.requests || []).forEach((request) => {
+         const card = element('article', 'reputation-request-card');
+         const header = element('header');
+@@ -147,7 +157,7 @@
+           });
+           card.append(actions);
+         }
+-        if (data.role === 'client' && request.status === 'confirmed' && request.review?.status !== 'deleted') {
++        if (data.role === 'client' && request.review?.status === 'active') {
+           card.append(reviewEditor(request, loadDashboard));
+           if (request.review) {
+             const remove = element('button', 'danger-outline-button', t('reputation.editor.delete'));

@@ -9,7 +9,8 @@ data class PublicPhotographer(
     val startingPriceCents: Long?,
     val ratingAverage: Double?,
     val reviewCount: Int,
-    val photoPath: String = ""
+    val photoPath: String = "",
+    val portfolioPreviewUrl: String = ""
 )
 
 data class PublicPhotographerPage(
@@ -36,6 +37,9 @@ data class PublicPhotographerContacts(val email: String, val phone: String)
 
 interface PublicPhotographersGateway {
     suspend fun list(city: String, specialty: String?, page: Int): PublicPhotographerPage
+
+    suspend fun listTopRated(page: Int): PublicPhotographerPage
+
     /**
      * Fetches the public profile and its embedded portfolio for a slug.
      *

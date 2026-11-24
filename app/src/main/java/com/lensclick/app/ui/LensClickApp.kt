@@ -1,5 +1,6 @@
 package com.lensclick.app.ui
 
+import android.widget.DatePicker
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -39,7 +40,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -85,6 +86,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -123,20 +125,25 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.lensclick.app.BuildConfig
 import com.lensclick.app.R
 import com.lensclick.app.data.local.FairPhotographer
 import com.lensclick.app.data.local.Photographer
 import com.lensclick.app.data.local.User
 import com.lensclick.app.data.local.readFairPhotographers
 import com.lensclick.app.data.remote.auth.MobileAuthErrorCode
+import com.lensclick.app.data.remote.auth.MobileAuthException
 import com.lensclick.app.data.remote.loadPublicPortfolioPreview
 import com.lensclick.app.util.TotpQrCode
 import com.lensclick.app.domain.BudgetRequest
@@ -154,24 +161,46 @@ import com.lensclick.app.ui.theme.LensPaper as Paper
 import com.lensclick.app.ui.theme.LensSand as Sand
 import com.lensclick.app.ui.theme.LensSurface as SurfaceHigh
 import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.math.BigDecimal
+import java.util.Calendar
+import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class Screen {
     Onboarding, AccountType, Login, SignUp, PhotographerSignUp,
-    Home, Search, Photographer, Quote, Budgets, Conversations, Chat, Account,
-    ProDashboard, ProRequests, ProAgenda, ProProfile, ProPortfolio
+    Home, Search, Budgets, Conversations, Account,
+    ProDashboard, ProRequests, ProAgenda, ProProfile, ProPortfolio,
+    Settings, AccountData, AccountSecurity, Notifications, Support, About, ReviewRequests,
+    PhotographerRanking, Engagements, DemoBudgets
 }
 private const val SearchRoute = "Search?specialty={specialty}"
 private const val PhotographerRoute = "Photographer/{slug}"
 private const val QuoteRoute = "Quote/{slug}"
+private const val QuoteForHireRoute = "QuoteForHire/{slug}"
+private const val PendingClientRoute = "pendingClientRoute"
+private const val PendingPortfolioAction = "pendingPortfolioAction"
+private const val HireRoute = "Hire/{slug}?budget={budget}"
+private const val EngagementRoute = "Engagement/{id}?created={created}"
+private const val ReviewEngagementsRoute = "ReviewEngagements/{slug}"
+private const val ChatRoute = "Chat/{conversationId}"
+private const val BudgetDetailRoute = "BudgetDetail/{id}"
 private const val FairCatalogRoute = "Feira"
 private const val FairProfileRoute = "Feira/{slug}"
-private val GuestBrowsingScreens = setOf(Screen.Search, Screen.Budgets)
+private val GuestBrowsingScreens = setOf(Screen.Home, Screen.Search, Screen.Budgets, Screen.Conversations, Screen.Account)
+private val ResumeAfterLogin = setOf(Screen.Budgets, Screen.Conversations, Screen.Account)
+private val AuthenticationScreens = setOf(Screen.Onboarding, Screen.AccountType, Screen.Login, Screen.SignUp, Screen.PhotographerSignUp)
+private val PublicRoutes = (AuthenticationScreens + GuestBrowsingScreens).map { it.name }.toSet() +
+    setOf(SearchRoute, PhotographerRoute, FairCatalogRoute, FairProfileRoute, Screen.PhotographerRanking.name, Screen.DemoBudgets.name)
 
 @Composable
 fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickViewModel.Factory)) {
     val navController = rememberNavController()
     val context = LocalContext.current
-    val fairPhotographers = remember(context) { readFairPhotographers(context) }
+    val fairPhotographers = remember(context, AppLanguage.current) { readFairPhotographers(context) }
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val currentEntry by navController.currentBackStackEntryAsState()
@@ -181,6 +210,7 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
     val favorites by viewModel.favorites.collectAsStateWithLifecycle()
     val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
     val authentication by viewModel.authentication.collectAsStateWithLifecycle()
+    val finishingPhotographerRegistration by viewModel.finishingPhotographerRegistration.collectAsStateWithLifecycle()
     val currentPhotographer = photographers.firstOrNull { it.userId == currentUser?.id }
     fun resetToRoute(route: String) {
         focusManager.clearFocus()
@@ -192,44 +222,85 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
     }
     fun resetTo(target: Screen) = resetToRoute(target.name)
 
+    fun openGuestTab(route: String, restoreTabState: Boolean = true) {
+        focusManager.clearFocus()
+        keyboardController?.hide()
+        navController.navigate(route) {
+            popUpTo(Screen.Onboarding.name) { saveState = true }
+            restoreState = restoreTabState
+            launchSingleTop = true
+        }
+    }
+
     fun go(target: Screen) {
-        val guestBrowsing = currentUser == null && target in GuestBrowsingScreens
-        if (target in setOf(Screen.Home, Screen.Search, Screen.Budgets, Screen.Conversations, Screen.Account,
-                Screen.ProDashboard, Screen.ProRequests, Screen.ProAgenda, Screen.ProProfile, Screen.ProPortfolio) &&
-                !guestBrowsing) {
-            resetTo(target)
-        } else {
-            focusManager.clearFocus()
-            keyboardController?.hide()
-            navController.navigate(target.name) {
-                if (guestBrowsing) {
-                    popUpTo(Screen.Onboarding.name) { saveState = true }
-                    restoreState = true
+        when {
+            currentUser == null && target in GuestBrowsingScreens -> openGuestTab(target.name)
+            target in GuestBrowsingScreens || target in setOf(
+                Screen.ProDashboard, Screen.ProRequests, Screen.ProAgenda, Screen.ProProfile, Screen.ProPortfolio
+            ) -> resetTo(target)
+            else -> {
+                focusManager.clearFocus()
+                keyboardController?.hide()
+                navController.navigate(target.name) {
+                    launchSingleTop = true
                 }
-                launchSingleTop = true
             }
         }
     }
 
+    fun openConversation(id: Long) {
+        navController.navigate("Chat/$id") { launchSingleTop = true }
+    }
+
+    fun openPublicPhotographer(slug: String) {
+        navController.navigate("Photographer/${Uri.encode(slug)}") { launchSingleTop = true }
+    }
+
+    fun openClientRoute(entry: NavBackStackEntry, route: String) {
+        if (currentUser == null) {
+            entry.savedStateHandle[PendingPortfolioAction] = null
+            entry.savedStateHandle[PendingClientRoute] = route
+            go(Screen.Login)
+        } else {
+            navController.navigate(route) { launchSingleTop = true }
+        }
+    }
+
+    fun openHire(entry: NavBackStackEntry, slug: String, hasPrice: Boolean) {
+        val encodedSlug = Uri.encode(slug)
+        openClientRoute(entry, if (hasPrice) "Hire/$encodedSlug" else "QuoteForHire/$encodedSlug")
+    }
+
+    val onBack: () -> Unit = { navController.popBackStack() }
+
     LaunchedEffect(currentEntry?.destination?.route, authentication) {
         val route = currentEntry?.destination?.route ?: return@LaunchedEffect
         if (authentication is AuthenticationState.Authenticated &&
-            route in setOf(Screen.Onboarding.name, Screen.AccountType.name, Screen.Login.name, Screen.SignUp.name, Screen.PhotographerSignUp.name)
+            AuthenticationScreens.any { it.name == route }
         ) {
             val user = (authentication as AuthenticationState.Authenticated).user
+            val previous = navController.previousBackStackEntry
+            val pendingRoute = previous?.savedStateHandle?.remove<String>(PendingClientRoute)
+            val pendingAction = previous?.savedStateHandle?.get<String>(PendingPortfolioAction)
+            if (route == Screen.Login.name && user.role == "client" && (pendingRoute != null || pendingAction != null)) {
+                navController.popBackStack()
+                if (pendingRoute != null) navController.navigate(pendingRoute)
+                return@LaunchedEffect
+            }
+            val returnTab = ResumeAfterLogin.firstOrNull { it.name == previous?.destination?.route }
             val destination = when {
                 user.role == "photographer" -> Screen.ProDashboard
-                route == Screen.Login.name &&
-                    navController.previousBackStackEntry?.destination?.route == Screen.Budgets.name -> Screen.Budgets
+                route == Screen.Login.name && returnTab != null -> returnTab
                 else -> Screen.Home
             }
             resetTo(destination)
+        } else if (authentication == AuthenticationState.LogoutCompleted && route == Screen.Account.name) {
+            resetTo(Screen.Login)
         } else if (authentication is AuthenticationState.Error && route == Screen.Onboarding.name) {
             resetTo(Screen.Login)
         } else if (authentication !is AuthenticationState.Authenticated &&
             authentication !is AuthenticationState.TwoFactorRequired &&
-            Screen.entries.any { it.name == route && it !in GuestBrowsingScreens && it !in setOf(
-                Screen.Onboarding, Screen.AccountType, Screen.Login, Screen.SignUp, Screen.PhotographerSignUp) }) {
+            authentication !is AuthenticationState.Loading && route !in PublicRoutes) {
             resetTo(Screen.Login)
         }
     }
@@ -267,16 +338,27 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
             ) }
             composable(Screen.PhotographerSignUp.name) { PhotographerSignUpScreen(
                 error = (authentication as? AuthenticationState.Error)?.code?.registrationMessage(),
-                onDone = { name, email, password, specialty, city, price, bio, result ->
-                    viewModel.registerPhotographer(name, email, password, specialty, city, price, bio, result)
+                finishingRegistration = finishingPhotographerRegistration,
+                onDone = { name, email, password, phone, profile, result ->
+                    viewModel.registerPhotographer(name, email, password, phone, profile, result)
                 },
                 onLogin = { viewModel.clearAuthenticationError(); go(Screen.Login) }
             ) }
-            composable(Screen.Home.name) {
+            composable(Screen.Home.name) { entry ->
                 HomeScreen(
+                    viewModel = viewModel,
                     photographers = fairPhotographers,
                     onNavigate = ::go,
-                    onCategory = { specialty -> resetToRoute("Search?specialty=$specialty") },
+                    onCategory = { specialty ->
+                        val route = "Search?specialty=${Uri.encode(specialty)}"
+                        if (currentUser == null) openGuestTab(route, restoreTabState = false)
+                        else resetToRoute(route)
+                    },
+                    onRankedProfile = ::openPublicPhotographer,
+                    onRankedRequest = if (currentUser?.role == "photographer") null else { photographer ->
+                        if (photographer.startingPriceCents != null) openHire(entry, photographer.slug, hasPrice = true)
+                        else openClientRoute(entry, "Quote/${Uri.encode(photographer.slug)}")
+                    },
                     onFair = { navController.navigate(FairCatalogRoute) },
                     onFairPhotographer = { slug -> navController.navigate("Feira/$slug") }
                 )
@@ -295,10 +377,22 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
                     initialSpecialty = entry.arguments?.getString("specialty"),
                     fairPhotographers = fairPhotographers,
                     onNavigate = ::go,
-                    onPhotographer = { slug -> navController.navigate("Photographer/$slug") },
+                    onPhotographer = ::openPublicPhotographer,
+                    onRankedProfile = ::openPublicPhotographer,
+                    onRankedRequest = if (currentUser?.role == "photographer") null else { photographer ->
+                        if (photographer.startingPriceCents != null) openHire(entry, photographer.slug, hasPrice = true)
+                        else openClientRoute(entry, "Quote/${Uri.encode(photographer.slug)}")
+                    },
                     onFair = { navController.navigate(FairCatalogRoute) },
                     onFairPhotographer = { slug -> navController.navigate("Feira/$slug") }
                 )
+            }
+            composable(Screen.PhotographerRanking.name) {
+                // Resume old back stacks in discovery, where the ranking is now shown inline.
+                LaunchedEffect(Unit) {
+                    if (currentUser == null) openGuestTab(Screen.Search.name, restoreTabState = false)
+                    else resetTo(Screen.Search)
+                }
             }
             composable(FairCatalogRoute) {
                 FairCatalogScreen(
@@ -311,23 +405,82 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
                 val slug = entry.arguments?.getString("slug")
                 val photographer = fairPhotographers.firstOrNull { it.summary.slug == slug }
                 if (photographer == null) {
-                    ProfileStatus("Perfil de demonstração indisponível.", "Voltar") { navController.popBackStack() }
+                    ProfileStatus(localized("Perfil de demonstração indisponível."), localized("Voltar")) { navController.popBackStack() }
                 } else {
-                    FairProfileScreen(photographer, onBack = { navController.popBackStack() })
+                    val localDemo = BuildConfig.DEBUG && currentUser?.role != "photographer"
+                    FairProfileScreen(
+                        photographer, onBack = onBack,
+                        onHire = if (localDemo) ({ openHire(entry, photographer.summary.slug, hasPrice = true) }) else null,
+                        onQuote = if (localDemo) ({
+                            openClientRoute(entry, "Quote/${Uri.encode(photographer.summary.slug)}")
+                        }) else null,
+                        contactActions = {
+                            if (localDemo) {
+                                PortfolioContactActions(
+                                    viewModel, entry, photographer.summary.slug, photographer.summary.name,
+                                    currentUser, { go(Screen.Login) }, ::openConversation
+                                )
+                            }
+                        }
+                    )
                 }
             }
             composable(PhotographerRoute) { entry ->
                 val slug = entry.arguments?.getString("slug").orEmpty()
-                PhotographerScreen(viewModel, slug, onBack = { navController.popBackStack() }, onQuote = { navController.navigate("Quote/$slug") })
-            }
-            composable(QuoteRoute) { entry ->
-                val slug = entry.arguments?.getString("slug").orEmpty()
-                QuoteScreen(
-                    onBack = { navController.popBackStack() },
-                    onSent = { type, date, place, duration, description, details ->
-                        viewModel.createBudgetRequest(slug, BudgetRequestDraft(type, date, place, duration, description, details)) { success -> if (success) go(Screen.Budgets) }
+                PhotographerScreen(
+                    viewModel, slug, currentUser, onBack,
+                    onQuote = { openClientRoute(entry, "Quote/${Uri.encode(slug)}") },
+                    onHire = { hasPrice -> openHire(entry, slug, hasPrice) },
+                    onReview = { openClientRoute(entry, "ReviewEngagements/${Uri.encode(slug)}") },
+                    contactActions = { name ->
+                        PortfolioContactActions(viewModel, entry, slug, name, currentUser, { go(Screen.Login) }, ::openConversation)
                     }
                 )
+            }
+            composable(HireRoute, arguments = listOf(navArgument("budget") {
+                type = NavType.LongType
+                defaultValue = 0L
+            })) { entry ->
+                val args = requireNotNull(entry.arguments)
+                HireScreen(viewModel, args.getString("slug").orEmpty(), args.getLong("budget").takeIf { it > 0 }, onBack) { id ->
+                    navController.navigate("Engagement/$id?created=true") { popUpTo(HireRoute) { inclusive = true } }
+                }
+            }
+            composable(Screen.Engagements.name) {
+                EngagementsScreen(viewModel, currentUser?.role == "photographer", null, onBack) { id ->
+                    navController.navigate("Engagement/$id")
+                }
+            }
+            composable(ReviewEngagementsRoute) { entry ->
+                EngagementsScreen(viewModel, false, entry.arguments?.getString("slug"), onBack) { id ->
+                    navController.navigate("Engagement/$id")
+                }
+            }
+            composable(EngagementRoute, arguments = listOf(
+                navArgument("id") { type = NavType.LongType },
+                navArgument("created") { type = NavType.BoolType; defaultValue = false }
+            )) { entry ->
+                val args = requireNotNull(entry.arguments)
+                EngagementDetailsScreen(viewModel, args.getLong("id"), currentUser?.role == "photographer", args.getBoolean("created"), onBack)
+            }
+            composable(Screen.DemoBudgets.name) { DemoBudgetsScreen(onBack) }
+            listOf(QuoteRoute to false, QuoteForHireRoute to true).forEach { (route, forHire) ->
+                composable(route) { entry ->
+                    val slug = entry.arguments?.getString("slug").orEmpty()
+                    QuoteScreen(
+                        forHire = forHire,
+                        onBack = onBack,
+                        onSend = { draft, completed ->
+                            viewModel.createBudgetRequest(slug, draft) { success ->
+                                if (success) {
+                                    if (navController.currentBackStackEntry == entry) go(Screen.Budgets)
+                                } else {
+                                    completed(viewModel.budgetError.value ?: MobileAuthErrorCode.SERVER)
+                                }
+                            }
+                        }
+                    )
+                }
             }
             composable(Screen.Budgets.name) {
                 BudgetsScreen(
@@ -336,31 +489,67 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
                     favorites = favorites,
                     signedIn = authentication is AuthenticationState.Authenticated,
                     onNavigate = ::go,
+                    onLogin = { go(Screen.Login) },
+                    onBudget = { id -> navController.navigate("BudgetDetail/$id") { launchSingleTop = true } },
+                    onEngagements = { go(Screen.Engagements) },
+                    onDemo = { go(Screen.DemoBudgets) },
+                    onPhotographer = ::openPublicPhotographer
+                )
+            }
+            composable(BudgetDetailRoute, arguments = listOf(navArgument("id") { type = NavType.LongType })) { entry ->
+                val id = requireNotNull(entry.arguments).getLong("id")
+                BudgetDetailScreen(viewModel, id, canRespond = currentUser?.role == "client", onBack) { slug ->
+                    navController.navigate("Hire/${Uri.encode(slug)}?budget=$id")
+                }
+            }
+            composable(Screen.Conversations.name) {
+                ConversationsScreen(
+                    viewModel,
+                    signedIn = authentication is AuthenticationState.Authenticated,
+                    onConversation = ::openConversation,
+                    onNavigate = ::go,
                     onLogin = { go(Screen.Login) }
                 )
             }
-            composable(Screen.Conversations.name) { ConversationsScreen(viewModel, photographers, onNavigate = ::go) }
-            composable(Screen.Chat.name) { ChatScreen(viewModel, onBack = { navController.popBackStack() }) }
+            // Earlier versions saved the chat destination without a conversation ID.
+            composable("Chat") {
+                LaunchedEffect(Unit) { go(Screen.Conversations) }
+            }
+            composable(ChatRoute, arguments = listOf(navArgument("conversationId") { type = NavType.LongType })) { entry ->
+                val id = requireNotNull(entry.arguments).getLong("conversationId")
+                ChatScreen(viewModel, id, onBack)
+            }
+            composable(Screen.Settings.name) {
+                SettingsScreen(viewModel, onBack, ::go, onProfessionalActivated = { resetTo(Screen.ProDashboard) })
+            }
+            composable(Screen.AccountData.name) { AccountDataScreen(viewModel, onBack) }
+            composable(Screen.AccountSecurity.name) { AccountSecurityScreen(viewModel, onBack) }
+            composable(Screen.Notifications.name) { NotificationsScreen(viewModel, onBack, ::openConversation) }
+            composable(Screen.Support.name) { SupportScreen(onBack) }
+            composable(Screen.About.name) { AboutScreen(onBack) }
+            composable(Screen.ReviewRequests.name) { ReviewRequestsScreen(viewModel, onBack) }
             composable(Screen.Account.name) { AccountScreen(
-                viewModel = viewModel,
                 user = currentUser,
                 authentication = authentication,
                 canUseProfessionalMode = currentUser?.role == "photographer",
                 onNavigate = ::go,
+                onLogin = { go(Screen.Login) },
                 onProfessionalMode = { resetTo(Screen.ProDashboard) },
                 onLogout = { viewModel.logout() }
             ) }
             composable(Screen.ProDashboard.name) { PhotographerDashboardScreen(currentPhotographer, budgets, ::go, onClientMode = { resetTo(Screen.Home) }) }
-            composable(Screen.ProRequests.name) { PhotographerRequestsScreen(viewModel, budgets, ::go) }
+            composable(Screen.ProRequests.name) { PhotographerRequestsScreen(viewModel, budgets, ::go) { id ->
+                navController.navigate("BudgetDetail/$id") { launchSingleTop = true }
+            } }
             composable(Screen.ProAgenda.name) { PhotographerAgendaScreen(agenda, ::go) }
             composable(Screen.ProProfile.name) { ProfessionalProfileScreen(viewModel, ::go, onClientMode = { resetTo(Screen.Home) }, onLogout = { viewModel.logout() }) }
-            composable(Screen.ProPortfolio.name) { PortfolioScreen(viewModel, ::go) }
+            composable(Screen.ProPortfolio.name) { PortfolioScreen(viewModel, ::go, ::openPublicPhotographer) }
         }
     }
 }
 
 @Composable
-private fun BrandMark(modifier: Modifier = Modifier) {
+internal fun BrandMark(modifier: Modifier = Modifier) {
     Row(
         modifier = modifier.clearAndSetSemantics { contentDescription = "LensClick" },
         verticalAlignment = Alignment.CenterVertically,
@@ -433,9 +622,9 @@ private fun OnboardingScreen(onStart: () -> Unit, onLogin: () -> Unit, onBrowse:
         HorizontalDivider(Modifier.padding(top = 14.dp, bottom = 22.dp), color = Line)
         Text(
             buildAnnotatedString {
-                append("Encontre o\n")
+                append(localized("Encontre o\n"))
                 withStyle(SpanStyle(color = Accent, fontStyle = FontStyle.Italic)) {
-                    append("fotógrafo ideal.")
+                    append(localized("fotógrafo ideal."))
                 }
             },
             color = Ink,
@@ -443,7 +632,7 @@ private fun OnboardingScreen(onStart: () -> Unit, onLogin: () -> Unit, onBrowse:
             modifier = Modifier.semantics { heading() }
         )
         Text(
-            "Conheça fotógrafos profissionais, explore portfólios e peça orçamentos.",
+            localized("Conheça fotógrafos profissionais, explore portfólios e peça orçamentos."),
             color = Muted,
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(top = 10.dp, bottom = 20.dp)
@@ -460,21 +649,21 @@ private fun OnboardingScreen(onStart: () -> Unit, onLogin: () -> Unit, onBrowse:
                 .background(Ink)
         )
         Spacer(Modifier.height(22.dp))
-        PrimaryButton("Explorar fotógrafos", onBrowse)
+        PrimaryButton(localized("Explorar fotógrafos"), onBrowse)
         Spacer(Modifier.height(8.dp))
-        SecondaryButton("Criar conta", onStart)
-        CenterLink("Já tem uma conta?", "Entrar", onLogin)
+        SecondaryButton(localized("Criar conta"), onStart)
+        CenterLink(localized("Já tem uma conta?"), localized("Entrar"), onLogin)
     }
 }
 
 @Composable
 private fun AccountTypeScreen(onClient: () -> Unit, onPhotographer: () -> Unit, onLogin: () -> Unit) {
-    AuthFrame("Como você deseja usar o LensClick?", "Escolha o tipo de conta para continuar.") {
-        AccountTypeOption("Sou Cliente", "Quero contratar serviços fotográficos", Icons.Default.Person, onClient)
+    AuthFrame(localized("Como você deseja usar o LensClick?"), localized("Escolha o tipo de conta para continuar.")) {
+        AccountTypeOption(localized("Sou Cliente"), localized("Quero contratar serviços fotográficos"), Icons.Default.Person, onClient)
         Spacer(Modifier.height(12.dp))
-        AccountTypeOption("Sou Fotógrafo", "Quero divulgar meu trabalho e receber orçamentos", Icons.Default.Add, onPhotographer)
+        AccountTypeOption(localized("Sou Fotógrafo"), localized("Quero divulgar meu trabalho e receber orçamentos"), Icons.Default.Add, onPhotographer)
         Spacer(Modifier.height(12.dp))
-        CenterLink("Já possui conta?", "Entrar", onLogin)
+        CenterLink(localized("Já possui conta?"), localized("Entrar"), onLogin)
     }
 }
 
@@ -534,88 +723,93 @@ private fun LoginScreen(
     var password by remember { mutableStateOf("") }
     val challenge = authentication as? AuthenticationState.TwoFactorRequired
     var totpCode by remember(challenge?.challengeToken) { mutableStateOf("") }
-    var recoveryOpen by rememberSaveable { mutableStateOf(false) }
+    val context = LocalContext.current
+    var recoveryFailed by remember { mutableStateOf(false) }
     val submitting = authentication is AuthenticationState.Loading
     val is2FA = challenge != null
     val errorMessage = when (authentication) {
         is AuthenticationState.Error -> authentication.code.loginMessage()
-        AuthenticationState.SessionExpired -> "Sua sessão expirou ou foi revogada. Entre novamente."
+        AuthenticationState.SessionExpired -> localized("Sua sessão expirou ou foi revogada. Entre novamente.")
         else -> null
     }
     val completedMessage = authentication == AuthenticationState.LogoutCompleted
 
     BackHandler(enabled = is2FA, onBack = onCancel2Fa)
-    AuthFrame(if (is2FA) "Verificação 2FA" else "Bem-vindo de volta!", if (is2FA) "Digite o código do seu autenticador" else "Entre para continuar") {
+    AuthFrame(if (is2FA) localized("Verificação 2FA") else localized("Bem-vindo de volta!"), if (is2FA) localized("Digite o código do seu autenticador") else localized("Entre para continuar")) {
         if (challenge != null) {
-            Text("Insira o código de 6 dígitos do app TOTP ou um código de recuperação.", color = Muted, fontSize = 12.sp, textAlign = TextAlign.Center)
+            Text(localized("Insira o código de 6 dígitos do app TOTP ou um código de recuperação."), color = Muted, fontSize = 12.sp, textAlign = TextAlign.Center)
             Spacer(Modifier.height(16.dp))
-            LensField("Código TOTP / Recuperação", totpCode, { totpCode = it }, KeyboardType.Ascii)
+            LensField(localized("Código TOTP / Recuperação"), totpCode, { totpCode = it }, KeyboardType.Ascii)
             Spacer(Modifier.height(20.dp))
             if (challenge.verifying) {
-                AuthStatusBanner("Verificando o código...", loading = true)
+                AuthStatusBanner(localized("Verificando o código..."), loading = true)
             } else if (challenge.error != null) {
                 AuthStatusBanner(challenge.error.twoFactorMessage(), loading = false, error = true)
             }
-            PrimaryButton("Confirmar código", {
+            PrimaryButton(localized("Confirmar código"), {
                 onVerify2Fa(totpCode)
                 totpCode = ""
             }, enabled = totpCode.isNotBlank() && !challenge.verifying)
-            TextButton(onClick = onCancel2Fa, enabled = !challenge.verifying) { Text("Voltar ao login") }
+            TextButton(onClick = onCancel2Fa, enabled = !challenge.verifying) { Text(localized("Voltar ao login")) }
         } else {
-            LensField("E-mail", email, { email = it }, KeyboardType.Email)
+            LensField(localized("E-mail"), email, { email = it }, KeyboardType.Email)
             Spacer(Modifier.height(14.dp))
-            LensField("Senha", password, { password = it }, password = true)
-            TextButton(onClick = { recoveryOpen = true }, contentPadding = PaddingValues(0.dp)) { Text("Esqueci minha senha", color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Medium) }
+            LensField(localized("Senha"), password, { password = it }, password = true)
+            TextButton(
+                onClick = { recoveryFailed = !context.openLensClickPage("/recuperar-senha") },
+                enabled = !submitting,
+                contentPadding = PaddingValues(0.dp)
+            ) { Text(localized("Esqueci minha senha"), color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Medium) }
+            if (recoveryFailed) AuthStatusBanner(localized("Não foi possível abrir a página de recuperação."), loading = false, error = true)
             Spacer(Modifier.height(26.dp))
             if (submitting) {
-                AuthStatusBanner("Conectando à sua conta...", loading = true)
+                AuthStatusBanner(localized("Conectando à sua conta..."), loading = true)
             } else if (errorMessage != null) {
                 AuthStatusBanner(errorMessage, loading = false, error = true)
             } else if (completedMessage) {
-                AuthStatusBanner("Você saiu da conta com segurança.", loading = false)
+                AuthStatusBanner(localized("Você saiu da conta com segurança."), loading = false)
             }
-            PrimaryButton(if (submitting) "Entrando..." else "Entrar", {
+            PrimaryButton(if (submitting) localized("Entrando...") else localized("Entrar"), {
                 onLogin(email, password)
                 password = ""
             }, enabled = email.isNotBlank() && password.isNotBlank() && !submitting)
             Spacer(Modifier.height(12.dp))
-            CenterLink("Não tem uma conta?", "Cadastre-se", onSignUp)
+            CenterLink(localized("Não tem uma conta?"), localized("Cadastre-se"), onSignUp)
         }
     }
 
-    if (recoveryOpen) ActionDialog("Recuperar senha", "Enviaremos as instruções de recuperação para $email.") { recoveryOpen = false }
 }
 
 private fun MobileAuthErrorCode.loginMessage(): String = when (this) {
     MobileAuthErrorCode.INVALID_INPUT,
-    MobileAuthErrorCode.UNAUTHENTICATED -> "E-mail ou senha inválidos."
-    MobileAuthErrorCode.INVALID_TWO_FACTOR_CHALLENGE -> "O desafio de verificação expirou. Entre novamente."
-    MobileAuthErrorCode.RATE_LIMITED -> "Muitas tentativas. Aguarde antes de tentar novamente."
-    MobileAuthErrorCode.NETWORK -> "Não foi possível conectar. Verifique sua internet."
-    MobileAuthErrorCode.SERVER -> "O serviço está indisponível. Tente novamente."
-    else -> "Não foi possível entrar. Tente novamente."
+    MobileAuthErrorCode.UNAUTHENTICATED -> localized("E-mail ou senha inválidos.")
+    MobileAuthErrorCode.INVALID_TWO_FACTOR_CHALLENGE -> localized("O desafio de verificação expirou. Entre novamente.")
+    MobileAuthErrorCode.RATE_LIMITED -> localized("Muitas tentativas. Aguarde antes de tentar novamente.")
+    MobileAuthErrorCode.NETWORK -> localized("Não foi possível conectar. Verifique sua internet.")
+    MobileAuthErrorCode.SERVER -> localized("O serviço está indisponível. Tente novamente.")
+    else -> localized("Não foi possível entrar. Tente novamente.")
 }
 
 private fun MobileAuthErrorCode.registrationMessage(): String = when (this) {
-    MobileAuthErrorCode.CONFLICT -> "Este e-mail já está cadastrado. Entre na sua conta ou use outro e-mail."
-    MobileAuthErrorCode.INVALID_INPUT -> "Confira os dados informados e tente novamente."
-    MobileAuthErrorCode.RATE_LIMITED -> "Muitas tentativas. Aguarde alguns minutos antes de tentar novamente."
-    MobileAuthErrorCode.NETWORK -> "Não foi possível conectar. Verifique sua internet e tente novamente."
-    MobileAuthErrorCode.SERVER -> "O serviço está indisponível. Tente novamente em instantes."
-    else -> "Não foi possível criar a conta. Tente novamente."
+    MobileAuthErrorCode.CONFLICT -> localized("Este e-mail já está cadastrado. Entre na sua conta ou use outro e-mail.")
+    MobileAuthErrorCode.INVALID_INPUT -> localized("Confira os dados informados e tente novamente.")
+    MobileAuthErrorCode.RATE_LIMITED -> localized("Muitas tentativas. Aguarde alguns minutos antes de tentar novamente.")
+    MobileAuthErrorCode.NETWORK -> localized("Não foi possível conectar. Verifique sua internet e tente novamente.")
+    MobileAuthErrorCode.SERVER -> localized("O serviço está indisponível. Tente novamente em instantes.")
+    else -> localized("Não foi possível criar a conta. Tente novamente.")
 }
 
 private fun MobileAuthErrorCode.twoFactorMessage(): String = when (this) {
-    MobileAuthErrorCode.INVALID_INPUT -> "Código inválido. Confira o código e tente novamente."
-    MobileAuthErrorCode.FORBIDDEN -> "A senha atual está incorreta."
-    MobileAuthErrorCode.UNAUTHENTICATED -> "Sua sessão expirou. Entre novamente."
-    MobileAuthErrorCode.NETWORK -> "Não foi possível conectar. Verifique sua internet."
-    MobileAuthErrorCode.RATE_LIMITED -> "Muitas tentativas. Aguarde antes de tentar novamente."
-    else -> "Não foi possível concluir a verificação. Tente novamente."
+    MobileAuthErrorCode.INVALID_INPUT -> localized("Código inválido. Confira o código e tente novamente.")
+    MobileAuthErrorCode.FORBIDDEN -> localized("A senha atual está incorreta.")
+    MobileAuthErrorCode.UNAUTHENTICATED -> localized("Sua sessão expirou. Entre novamente.")
+    MobileAuthErrorCode.NETWORK -> localized("Não foi possível conectar. Verifique sua internet.")
+    MobileAuthErrorCode.RATE_LIMITED -> localized("Muitas tentativas. Aguarde antes de tentar novamente.")
+    else -> localized("Não foi possível concluir a verificação. Tente novamente.")
 }
 
 @Composable
-private fun AuthStatusBanner(message: String, loading: Boolean, error: Boolean = false) {
+internal fun AuthStatusBanner(message: String, loading: Boolean, error: Boolean = false) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -657,70 +851,92 @@ private fun SignUpScreen(
     var email by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var busy by rememberSaveable { mutableStateOf(false) }
-    AuthFrame("Criar conta de cliente", "Preencha seus dados para começar") {
-        LensField("Nome completo", name, { name = it })
+    AuthFrame(localized("Criar conta de cliente"), localized("Preencha seus dados para começar")) {
+        LensField(localized("Nome completo"), name, { name = it })
         Spacer(Modifier.height(12.dp))
-        LensField("E-mail", email, { email = it }, KeyboardType.Email)
+        LensField(localized("E-mail"), email, { email = it }, KeyboardType.Email)
         Spacer(Modifier.height(12.dp))
-        LensField("Senha (mínimo 8 caracteres)", password, { password = it }, password = true)
+        LensField(localized("Senha (mínimo 8 caracteres)"), password, { password = it }, password = true)
         Spacer(Modifier.height(16.dp))
         if (error != null) {
             AuthStatusBanner(error, loading = false, error = true)
             Spacer(Modifier.height(10.dp))
         }
-        PrimaryButton("Criar minha conta", {
+        PrimaryButton(localized("Criar minha conta"), {
             busy = true
             onDone(name, email, password) { busy = false }
         }, enabled = name.isNotBlank() && email.isNotBlank() && password.length >= 8 && !busy)
         Spacer(Modifier.height(12.dp))
-        CenterLink("Já tem conta?", "Entrar", onLogin)
+        CenterLink(localized("Já tem conta?"), localized("Entrar"), onLogin)
     }
 }
 
 @Composable
 private fun PhotographerSignUpScreen(
     error: String? = null,
-    onDone: (String, String, String, String, String, String, String, (Boolean) -> Unit) -> Unit,
+    finishingRegistration: Boolean,
+    onDone: (String, String, String, String, ProfessionalProfile, (Boolean) -> Unit) -> Unit,
     onLogin: () -> Unit
 ) {
     var name by rememberSaveable { mutableStateOf("") }
     var email by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    var specialty by rememberSaveable { mutableStateOf("Casamento") }
+    var phone by rememberSaveable { mutableStateOf("") }
+    var specialty by rememberSaveable { mutableStateOf("wedding") }
     var city by rememberSaveable { mutableStateOf("") }
     var price by rememberSaveable { mutableStateOf("") }
     var bio by rememberSaveable { mutableStateOf("") }
-    var busy by rememberSaveable { mutableStateOf(false) }
-    AuthFrame("Criar conta de Fotógrafo", "Cadastre seu perfil profissional no LensClick") {
-        LensField("Nome profissional", name, { name = it })
+    var busy by remember { mutableStateOf(false) }
+    val priceCents = parsePriceCents(price)
+    AuthFrame(localized("Criar conta de Fotógrafo"), localized("Cadastre seu perfil profissional no LensClick")) {
+        LensField(localized("Nome profissional"), name, { name = it })
         Spacer(Modifier.height(10.dp))
-        LensField("E-mail", email, { email = it }, KeyboardType.Email)
+        LensField(localized("E-mail"), email, { email = it }, KeyboardType.Email)
         Spacer(Modifier.height(10.dp))
-        LensField("Senha (mín. 8 caracteres)", password, { password = it }, password = true)
+        LensField(localized("Telefone"), phone, { phone = it }, KeyboardType.Phone)
         Spacer(Modifier.height(10.dp))
-        LensField("Especialidade principal", specialty, { specialty = it })
+        LensField(localized("Senha (mín. 8 caracteres)"), password, { password = it }, password = true)
         Spacer(Modifier.height(10.dp))
-        LensField("Cidade de atuação", city, { city = it })
+        Text(localized("Especialidade principal"), color = Ink, style = MaterialTheme.typography.labelLarge)
+        Row(
+            Modifier.horizontalScroll(rememberScrollState()).selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            listOf("wedding", "portrait", "events", "family", "corporate", "product", "fashion", "newborn", "nature", "real-estate").forEach { option ->
+                FilterChip(specialtyLabel(option), selected = option == specialty) { specialty = option }
+            }
+        }
         Spacer(Modifier.height(10.dp))
-        LensField("Preço inicial (R$)", price, { price = it }, KeyboardType.Number)
+        LensField(localized("Cidade de atuação"), city, { city = it })
         Spacer(Modifier.height(10.dp))
-        LensField("Apresentação / Bio", bio, { bio = it }, maxLines = 3)
+        LensField(localized("Preço inicial (R$)"), price, { price = it }, KeyboardType.Decimal)
+        if (price.isNotBlank() && priceCents == null) Text(localized("Informe um valor válido, como 1200,50."), color = MaterialTheme.colorScheme.error)
+        Spacer(Modifier.height(10.dp))
+        LensField(localized("Apresentação / Bio"), bio, { bio = it }, singleLine = false, maxLines = 3)
         Spacer(Modifier.height(16.dp))
-        if (error != null) {
-            AuthStatusBanner(error, loading = false, error = true)
+        if (busy) AuthStatusBanner(localized("Configurando conta profissional…"), loading = true)
+        if (error != null && !busy) {
+            AuthStatusBanner(if (finishingRegistration) localized("Sua conta foi criada. Confira os dados e tente concluir o perfil profissional.") else error, loading = false, error = true)
             Spacer(Modifier.height(10.dp))
         }
-        PrimaryButton("Cadastrar como Fotógrafo", {
+        PrimaryButton(if (finishingRegistration) localized("Concluir cadastro profissional") else localized("Cadastrar como Fotógrafo"), {
             busy = true
-            onDone(name, email, password, specialty, city, price, bio) { busy = false }
-        }, enabled = name.isNotBlank() && email.isNotBlank() && password.length >= 8 && city.isNotBlank() && !busy)
+            onDone(name, email, password, phone, ProfessionalProfile(
+                bio = bio.trim(),
+                specialties = listOf(specialty),
+                city = city.trim(),
+                startingPriceCents = priceCents
+            )) { busy = false }
+        }, enabled = name.trim().length >= 2 && email.isNotBlank() &&
+            (password.length >= 8 || finishingRegistration) && phone.trim().length in 8..30 &&
+            city.trim().length >= 2 && (price.isBlank() || priceCents != null) && !busy)
         Spacer(Modifier.height(12.dp))
-        CenterLink("Já tem conta?", "Entrar", onLogin)
+        CenterLink(localized("Já tem conta?"), localized("Entrar"), onLogin)
     }
 }
 
 @Composable
-private fun LensField(
+internal fun LensField(
     label: String,
     value: String,
     onValue: (String) -> Unit,
@@ -759,7 +975,7 @@ internal fun lensFieldColors() = OutlinedTextFieldDefaults.colors(
 )
 
 @Composable
-private fun PrimaryButton(text: String, onClick: () -> Unit, enabled: Boolean = true) {
+internal fun PrimaryButton(text: String, onClick: () -> Unit, enabled: Boolean = true) {
     Button(
         onClick = onClick,
         enabled = enabled,
@@ -792,7 +1008,7 @@ private fun LogoutButton(onLogout: () -> Unit, enabled: Boolean = true) {
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
     ) {
-        Text("Sair da conta", fontWeight = FontWeight.SemiBold)
+        Text(localized("Sair da conta"), fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -808,9 +1024,7 @@ private fun CenterLink(prefix: String, action: String, onClick: () -> Unit) {
     }
 }
 
-@Composable private fun ActionDialog(title: String, message: String, onDismiss: () -> Unit) {
-    AlertDialog(onDismissRequest = onDismiss, title = { Text(title, color = Ink, fontWeight = FontWeight.Bold) }, text = { Text(message, color = Muted, fontSize = 13.sp) }, confirmButton = { TextButton(onClick = onDismiss) { Text("OK", color = Ink, fontWeight = FontWeight.Bold) } }, containerColor = SurfaceHigh)
-}
+
 
 @Composable
 internal fun AppPage(
@@ -880,7 +1094,8 @@ private fun AppNavigation(current: Screen, onNavigate: (Screen) -> Unit, tabs: L
                     .padding(4.dp)
                     .height(IntrinsicSize.Min)
             ) {
-                tabs.forEach { (screen, label, icon) ->
+                tabs.forEach { (screen, sourceLabel, icon) ->
+                    val label = localized(sourceLabel)
                     val selected = current == screen
                     val tint = if (selected) Accent else Muted
                     val weight = if (largeLabels) {
@@ -936,7 +1151,7 @@ internal fun SectionTitle(title: String, onMore: (() -> Unit)? = null) {
             modifier = Modifier.weight(1f).semantics { heading() }
         )
         if (onMore != null) {
-            TextButton(onClick = onMore) { Text("Ver todos") }
+            TextButton(onClick = onMore) { Text(localized("Ver todos")) }
         }
     }
 }
@@ -952,11 +1167,16 @@ internal fun PageTitle(title: String, modifier: Modifier = Modifier) {
 }
 
 internal fun specialtyLabel(code: String): String = when (code.lowercase()) {
-    "wedding", "casamento" -> "Casamento"
-    "portrait", "retrato" -> "Retrato"
-    "corporate", "corporativo" -> "Corporativo"
-    "family", "família", "familia" -> "Família"
-    "events", "eventos" -> "Eventos"
+    "wedding", "casamento" -> localized("Casamento")
+    "portrait", "retrato" -> localized("Retrato")
+    "corporate", "corporativo" -> localized("Corporativo")
+    "family", "família", "familia" -> localized("Família")
+    "events", "eventos" -> localized("Eventos")
+    "product" -> localized("Produtos")
+    "fashion" -> localized("Moda")
+    "newborn" -> localized("Recém-nascidos")
+    "nature" -> localized("Natureza")
+    "real-estate" -> localized("Imóveis")
     else -> code.replaceFirstChar { it.uppercase() }
 }
 
@@ -1028,8 +1248,8 @@ private fun FairCatalogScreen(
     onBack: () -> Unit,
     onPhotographer: (String) -> Unit
 ) {
-    FairFrame("Perfis da feira", onBack) {
-        Text("Fotógrafos fictícios com portfólios de exemplo.", color = Muted, style = MaterialTheme.typography.bodyMedium)
+    FairFrame(localized("Perfis da feira"), onBack) {
+        Text(localized("Fotógrafos fictícios com portfólios de exemplo."), color = Muted, style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.height(14.dp))
         photographers.forEach { photographer ->
             DiscoveryPhotographerCard(photographer.summary, portrait = photographer.portrait) {
@@ -1041,7 +1261,13 @@ private fun FairCatalogScreen(
 }
 
 @Composable
-private fun FairProfileScreen(photographer: FairPhotographer, onBack: () -> Unit) {
+private fun FairProfileScreen(
+    photographer: FairPhotographer,
+    onBack: () -> Unit,
+    onHire: (() -> Unit)?,
+    onQuote: (() -> Unit)?,
+    contactActions: @Composable () -> Unit
+) {
     FairFrame(photographer.summary.name, onBack) {
         Image(
             painter = painterResource(photographer.portrait),
@@ -1057,10 +1283,18 @@ private fun FairProfileScreen(photographer: FairPhotographer, onBack: () -> Unit
             style = MaterialTheme.typography.labelLarge
         )
         Spacer(Modifier.height(12.dp))
-        Text("Perfil fictício para demonstração.", color = Accent, style = MaterialTheme.typography.labelLarge)
+        Text(localized("Perfil fictício para demonstração."), color = Accent, style = MaterialTheme.typography.labelLarge)
+        if (onHire != null && onQuote != null) {
+            Text(localized("Pedidos de demonstração ficam no ambiente local."), color = Muted)
+            Spacer(Modifier.height(10.dp))
+            PortfolioActions(onHire, onQuote)
+            Spacer(Modifier.height(8.dp))
+            contactActions()
+            Spacer(Modifier.height(12.dp))
+        }
         Text(photographer.bio, color = Muted, style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(18.dp))
-        SectionTitle("Portfólio")
+        SectionTitle(localized("Portfólio"))
         Spacer(Modifier.height(8.dp))
         photographer.photos.forEach { photo ->
             Image(
@@ -1075,6 +1309,22 @@ private fun FairProfileScreen(photographer: FairPhotographer, onBack: () -> Unit
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(top = 6.dp, bottom = 16.dp)
             )
+        }
+        SectionTitle(localized("Avaliações"))
+        Text(localized("Este perfil de demonstração não tem avaliações de clientes."), color = Muted)
+    }
+}
+
+@Composable
+private fun PortfolioActions(onHire: () -> Unit, onQuote: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        PrimaryButton(localized("Contratar"), onHire)
+        OutlinedButton(
+            onClick = onQuote,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            shape = MaterialTheme.shapes.medium
+        ) {
+            Text(localized("Solicitar orçamento"), textAlign = TextAlign.Center)
         }
     }
 }
@@ -1099,15 +1349,20 @@ private fun PublicPortfolioPhoto(item: PortfolioItem, modifier: Modifier) {
 }
 
 @Composable
-private fun PhotographerScreen(viewModel: LensClickViewModel, slug: String, onBack: () -> Unit, onQuote: () -> Unit) {
-    val favorites by viewModel.favorites.collectAsStateWithLifecycle()
-    val favorite = favorites.any { it.slug == slug }
+private fun PhotographerScreen(
+    viewModel: LensClickViewModel,
+    slug: String,
+    user: User?,
+    onBack: () -> Unit,
+    onQuote: () -> Unit,
+    onHire: (Boolean) -> Unit,
+    onReview: () -> Unit,
+    contactActions: @Composable (String) -> Unit
+) {
     val state by viewModel.publicProfile.collectAsStateWithLifecycle()
     val publicReviews by viewModel.publicReviews.collectAsStateWithLifecycle()
-    var reviewDialogOpen by rememberSaveable { mutableStateOf(false) }
-    var reviewRating by rememberSaveable { mutableIntStateOf(5) }
-    var reviewComment by rememberSaveable { mutableStateOf("") }
-
+    val reviewState = publicReviews?.takeIf { it.slug == slug }
+    val reviews = reviewState?.data
     LaunchedEffect(slug) {
         viewModel.loadPublicPhotographer(slug)
         viewModel.loadReviews(slug)
@@ -1115,8 +1370,8 @@ private fun PhotographerScreen(viewModel: LensClickViewModel, slug: String, onBa
 
     when (val result = state) {
         PublicProfileState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Ink) }
-        PublicProfileState.Error -> ProfileStatus("Não foi possível carregar este perfil.", "Tentar novamente") { viewModel.loadPublicPhotographer(slug) }
-        PublicProfileState.NotFoundOrUnpublished -> ProfileStatus("Este perfil não está disponível ou ainda não foi publicado.", "Voltar", onBack)
+        PublicProfileState.Error -> ProfileStatus(localized("Não foi possível carregar este perfil."), localized("Tentar novamente")) { viewModel.loadPublicPhotographer(slug) }
+        PublicProfileState.NotFoundOrUnpublished -> ProfileStatus(localized("Este perfil não está disponível ou ainda não foi publicado."), localized("Voltar"), onBack)
         is PublicProfileState.Ready -> {
             val profile = result.profile
             Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
@@ -1158,30 +1413,34 @@ private fun PhotographerScreen(viewModel: LensClickViewModel, slug: String, onBa
                                         modifier = Modifier.padding(top = 5.dp)
                                     )
                                 }
-                                profile.profile.ratingAverage?.let {
-                                    Text(
-                                        "★ $it (${profile.profile.reviewCount} avaliações)",
-                                        color = Accent,
-                                        style = MaterialTheme.typography.labelLarge,
-                                        modifier = Modifier.padding(top = 8.dp)
-                                    )
-                                }
+                                val average = if (reviews == null) profile.profile.ratingAverage else reviews.summary.average
+                                val count = reviews?.summary?.total ?: profile.profile.reviewCount
+                                val rating = photographerRatingLabel(average, count)
+                                Text(
+                                    if (rating == null) localized("Sem avaliações") else "★ $rating",
+                                    color = if (rating == null) Muted else Accent,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    modifier = Modifier.padding(top = 8.dp)
+                                )
                             }
-                            Spacer(Modifier.height(22.dp))
-                            SectionTitle("Sobre mim")
-                            Text(
-                                profile.bio.ifBlank { "Este fotógrafo ainda não adicionou uma apresentação." },
-                                color = Muted,
-                                style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier.padding(top = 6.dp)
-                            )
+                            Spacer(Modifier.height(12.dp))
+                            if (user?.role != "photographer") {
+                                PortfolioActions(
+                                    onHire = { onHire(profile.profile.startingPriceCents != null) },
+                                    onQuote = onQuote
+                                )
+                            }
+                            if (user?.role != "photographer") {
+                                Spacer(Modifier.height(8.dp))
+                                contactActions(profile.profile.name)
+                            }
                             Spacer(Modifier.height(22.dp))
                             HorizontalDivider(color = Line)
                             Spacer(Modifier.height(17.dp))
-                            SectionTitle("Portfólio")
+                            SectionTitle(localized("Portfólio"))
                             Spacer(Modifier.height(10.dp))
                             if (profile.portfolio.isEmpty()) {
-                                Text("Este fotógrafo ainda não publicou imagens.", color = Muted, fontSize = 12.sp)
+                                Text(localized("Este fotógrafo ainda não publicou imagens."), color = Muted, fontSize = 12.sp)
                             } else {
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                     items(profile.portfolio, key = { it.id }) { item ->
@@ -1201,139 +1460,377 @@ private fun PhotographerScreen(viewModel: LensClickViewModel, slug: String, onBa
                             }
 
                             Spacer(Modifier.height(24.dp))
-                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    "Avaliações",
-                                    color = Ink,
-                                    style = MaterialTheme.typography.titleLarge,
-                                    modifier = Modifier.weight(1f).semantics { heading() }
-                                )
-                                TextButton(onClick = { reviewDialogOpen = true }) {
-                                    Icon(Icons.Default.Star, contentDescription = null, tint = Accent, modifier = Modifier.size(16.dp))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("Avaliar", color = Ink, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            PortfolioReviews(
+                                reviewState,
+                                onRetry = { viewModel.loadReviews(slug) },
+                                onReview = onReview.takeIf { user?.role != "photographer" }
+                            )
+                            Spacer(Modifier.height(20.dp))
+                            if (profile.profile.specialties.isNotEmpty()) {
+                                SectionTitle(localized("Serviços e preços"))
+                                val startingPrice = profile.profile.startingPriceCents
+                                profile.profile.specialties.forEach { code ->
+                                    val price = startingPrice?.let { localized("A partir de {0}", moneyInReais(it)) }
+                                        ?: localized("Sob orçamento")
+                                    Text("${specialtyLabel(code)} · $price", color = Muted,
+                                        style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 5.dp))
                                 }
+                                Spacer(Modifier.height(22.dp))
                             }
-                            Spacer(Modifier.height(8.dp))
-                            val reviewsList = publicReviews?.reviews ?: emptyList()
-                            if (reviewsList.isEmpty()) {
-                                Text("Ainda não há avaliações enviadas para este fotógrafo.", color = Muted, fontSize = 12.sp)
-                            } else {
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    reviewsList.forEach { r ->
-                                        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(12.dp)).padding(12.dp)) {
-                                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                                Text(r.authorName, color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                                Text("★ ${r.rating}", color = Accent, fontSize = 12.sp)
-                                            }
-                                            if (r.comment.isNotBlank()) {
-                                                Text(r.comment, color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                            Spacer(Modifier.height(20.dp))
+                            Spacer(Modifier.height(22.dp))
+                            SectionTitle(localized("Sobre mim"))
+                            Text(
+                                profile.bio.ifBlank { localized("Este fotógrafo ainda não adicionou uma apresentação.") },
+                                color = Muted,
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.padding(top = 6.dp)
+                            )
                         }
-                    }
-                }
-                HorizontalDivider(color = Line)
-                Row(
-                    Modifier.fillMaxWidth().background(SurfaceHigh).padding(horizontal = 22.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Button(onQuote, Modifier.weight(1f).heightIn(min = 52.dp), shape = MaterialTheme.shapes.medium) {
-                        Text("Solicitar orçamento", textAlign = TextAlign.Center)
-                    }
-                    OutlinedButton(
-                        { if (favorite) { favorites.firstOrNull { it.slug == slug }?.let { viewModel.removeFavorite(it.photographerId) {} } } else { viewModel.addFavorite(slug) {} } },
-                        Modifier.size(54.dp),
-                        contentPadding = PaddingValues(0.dp),
-                        shape = CircleShape,
-                        border = BorderStroke(1.dp, if (favorite) Accent else Ink)
-                    ) {
-                        Icon(
-                            if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                            contentDescription = if (favorite) "Remover dos favoritos" else "Adicionar aos favoritos",
-                            tint = if (favorite) Accent else Ink,
-                            modifier = Modifier.size(22.dp)
-                        )
                     }
                 }
             }
 
-            if (reviewDialogOpen) {
-                AlertDialog(
-                    onDismissRequest = { reviewDialogOpen = false },
-                    title = { Text("Avaliar Fotógrafo", color = Ink, fontWeight = FontWeight.Bold) },
-                    text = {
-                        Column {
-                            Text("Selecione sua nota de 1 a 5 estrelas:", color = Muted, fontSize = 12.sp)
-                            Row(Modifier.padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                (1..5).forEach { star ->
-                                    Text(
-                                        if (star <= reviewRating) "★" else "☆",
-                                        fontSize = 24.sp,
-                                        color = Accent,
-                                        modifier = Modifier.clickable { reviewRating = star }
-                                    )
-                                }
-                            }
-                            LensField("Comentário", reviewComment, { reviewComment = it }, maxLines = 3)
-                        }
-                    },
-                    confirmButton = {
-                        Button(onClick = {
-                            viewModel.submitReview(slug, reviewRating, reviewComment) {
-                                reviewDialogOpen = false
-                                reviewComment = ""
-                            }
-                        }) { Text("Enviar Avaliação") }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { reviewDialogOpen = false }) { Text("Cancelar") }
+
+        }
+    }
+}
+
+
+private enum class PortfolioAction { Favorite, Chat }
+
+@Composable
+private fun PortfolioContactActions(
+    viewModel: LensClickViewModel,
+    entry: NavBackStackEntry,
+    slug: String,
+    name: String,
+    user: User?,
+    onLogin: () -> Unit,
+    onConversation: (Long) -> Unit
+) {
+    val favorites by viewModel.favorites.collectAsStateWithLifecycle()
+    val currentFavorite = favorites.firstOrNull { it.slug == slug }
+    val pendingAction by entry.savedStateHandle.getStateFlow<String?>(PendingPortfolioAction, null).collectAsStateWithLifecycle()
+    var favoriteBusy by remember { mutableStateOf(false) }
+    var chatLoading by remember { mutableStateOf(false) }
+    var composing by rememberSaveable { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
+    fun execute(action: PortfolioAction) {
+        if (user == null) {
+            entry.savedStateHandle.remove<String>(PendingClientRoute)
+            entry.savedStateHandle[PendingPortfolioAction] = action.name
+            onLogin()
+            return
+        }
+        error = null
+        when (action) {
+            PortfolioAction.Favorite -> {
+                favoriteBusy = true
+                val onResult: (Boolean) -> Unit = { success ->
+                    favoriteBusy = false
+                    if (!success) error = localized("Não foi possível atualizar o favorito. Tente novamente.")
+                }
+                if (currentFavorite == null) viewModel.addFavorite(slug, onResult)
+                else viewModel.removeFavorite(currentFavorite.photographerId, onResult)
+            }
+            PortfolioAction.Chat -> {
+                chatLoading = true
+                scope.launch {
+                    try {
+                        val id = viewModel.findPortfolioConversation(slug)
+                        if (id == null) composing = true else onConversation(id)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (failure: Exception) {
+                        error = failure.remoteErrorCode().accountActionMessage(localized("Não foi possível carregar as conversas."))
+                    } finally {
+                        chatLoading = false
                     }
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(user?.id, pendingAction) {
+        val action = PortfolioAction.entries.firstOrNull { it.name == pendingAction }
+        if (user?.role == "client" && action != null) {
+            entry.savedStateHandle[PendingPortfolioAction] = null
+            execute(action)
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = { execute(PortfolioAction.Favorite) },
+                enabled = !favoriteBusy,
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp).semantics {
+                    if (currentFavorite != null) contentDescription = localized("Remover dos favoritos")
+                },
+                shape = MaterialTheme.shapes.medium,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+            ) {
+                Icon(
+                    if (currentFavorite != null) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                    contentDescription = null, modifier = Modifier.size(17.dp)
                 )
+                Spacer(Modifier.width(6.dp))
+                Text(if (currentFavorite != null) localized("Favoritado") else localized("Favoritar"))
+            }
+            OutlinedButton(
+                onClick = { execute(PortfolioAction.Chat) },
+                enabled = !chatLoading,
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                shape = MaterialTheme.shapes.medium,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+            ) {
+                if (chatLoading) CircularProgressIndicator(Modifier.size(17.dp), strokeWidth = 2.dp)
+                else Icon(Icons.Default.Email, contentDescription = null, modifier = Modifier.size(17.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(localized("Conversar"))
+            }
+        }
+        error?.let { AuthStatusBanner(it, loading = false, error = true) }
+    }
+
+    if (composing) {
+        ContactMessageDialog(
+            title = localized("Conversar com {0}", name),
+            field = localized("Mensagem"), length = 1..2_000,
+            onClose = { composing = false }
+        ) { message, completed ->
+            viewModel.startConversation(slug, message) { response ->
+                response.onSuccess { id ->
+                    composing = false
+                    onConversation(id)
+                }.onFailure {
+                    val code = it.remoteErrorCode()
+                    completed(if (code == MobileAuthErrorCode.CONFLICT) localized("Esta conversa foi encerrada.")
+                        else code.accountActionMessage(localized("Não foi possível iniciar a conversa.")))
+                }
             }
         }
     }
 }
 
 @Composable
-private fun BackButton(onBack: () -> Unit) {
+private fun PortfolioReviews(
+    reviewState: PhotographerReviewsState?,
+    onRetry: () -> Unit,
+    onReview: (() -> Unit)? = null,
+    showRating: Boolean = false
+) {
+    val reviews = reviewState?.data
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            localized("Avaliações"),
+            color = Ink,
+            style = MaterialTheme.typography.titleLarge,
+            modifier = Modifier.weight(1f).semantics { heading() }
+        )
+        if (onReview != null) {
+            TextButton(onClick = onReview) {
+                Icon(Icons.Default.Star, contentDescription = null, tint = Accent, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(localized("Avaliar"), color = Ink, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+    if (showRating && reviews != null) {
+        val rating = photographerRatingLabel(reviews.summary.average, reviews.summary.total)
+        rating?.let { Text("★ $it", color = Accent, style = MaterialTheme.typography.labelLarge) }
+    }
+    Spacer(Modifier.height(8.dp))
+    if (reviewState?.failed == true) {
+        Text(localized("Não foi possível carregar as avaliações."), color = Muted, fontSize = 12.sp)
+        TextButton(onClick = onRetry) { Text(localized("Tentar novamente")) }
+    } else if (reviews == null) {
+        Text(localized("Carregando avaliações…"), color = Muted, fontSize = 12.sp)
+    } else if (reviews.reviews.isEmpty()) {
+        Text(localized("Ainda não há avaliações enviadas para este fotógrafo."), color = Muted, fontSize = 12.sp)
+    } else {
+        reviews.summary.distribution?.let { counts ->
+            ReviewDistribution(counts, reviews.summary.total)
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            reviews.reviews.forEach { r ->
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(12.dp)).padding(12.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(r.authorName, color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(localized("★ {0} de 5", r.rating), color = Accent, fontSize = 12.sp)
+                    }
+                    if (r.comment.isNotBlank()) {
+                        Text(r.comment, color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                    }
+                    Text(displayCalendarDate(r.createdAt), color = Muted, fontSize = 11.sp)
+                }
+            }
+        }
+    }
+}
+
+private fun Throwable.remoteErrorCode() =
+    (this as? MobileAuthException)?.code ?: MobileAuthErrorCode.SERVER
+
+@Composable
+private fun ContactMessageDialog(
+    title: String,
+    field: String,
+    length: IntRange,
+    onClose: () -> Unit,
+    onSend: (String, (String) -> Unit) -> Unit
+) {
+    var message by rememberSaveable { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    AlertDialog(
+        onDismissRequest = { if (!busy) onClose() },
+        title = { Text(title, color = Ink) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                LensField(field, message, { message = it }, singleLine = false, maxLines = 4)
+                if (busy) AuthStatusBanner(localized("Enviando…"), loading = true)
+                error?.let { AuthStatusBanner(it, loading = false, error = true) }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                busy = true
+                error = null
+                onSend(message.trim()) { failure ->
+                    busy = false
+                    error = failure
+                }
+            }, enabled = !busy && message.trim().length in length) { Text(localized("Enviar")) }
+        },
+        dismissButton = { TextButton(onClick = onClose, enabled = !busy) { Text(localized("Cancelar")) } },
+        containerColor = SurfaceHigh
+    )
+}
+
+@Composable
+internal fun BackButton(onBack: () -> Unit) {
     IconButton(onClick = onBack) {
-        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar", tint = Accent)
+        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = localized("Voltar"), tint = Accent)
     }
 }
 
 @Composable
-private fun QuoteScreen(onBack: () -> Unit, onSent: (String, String, String, String, String, String) -> Unit) {
-    var type by rememberSaveable { mutableStateOf("Casamento") }
+private fun QuoteScreen(
+    forHire: Boolean,
+    onBack: () -> Unit,
+    onSend: (BudgetRequestDraft, (MobileAuthErrorCode) -> Unit) -> Unit
+) {
+    var type by rememberSaveable { mutableStateOf(localized("Casamento")) }
     var date by rememberSaveable { mutableStateOf("") }
     var place by rememberSaveable { mutableStateOf("") }
     var duration by rememberSaveable { mutableStateOf("") }
     var description by rememberSaveable { mutableStateOf("") }
     var details by rememberSaveable { mutableStateOf("") }
+    var submitting by remember { mutableStateOf(false) }
+    var failure by rememberSaveable { mutableStateOf<String?>(null) }
+    var calendarOpen by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding().verticalScroll(rememberScrollState()).padding(20.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             BackButton(onBack)
             Spacer(Modifier.width(10.dp))
-            PageTitle("Solicitar orçamento", Modifier.weight(1f))
+            PageTitle(if (forHire) localized("Contratar com orçamento") else localized("Solicitar orçamento"), Modifier.weight(1f))
+        }
+        if (forHire) {
+            Text(localized("Peça um orçamento para definir o valor. Depois de aceitar a proposta, você poderá escolher como pagar."), color = Muted)
         }
         Spacer(Modifier.height(16.dp))
-        LensField("Tipo de evento", type, { type = it })
+        LensField(localized("Tipo de evento"), type, { type = it })
         Spacer(Modifier.height(10.dp))
-        LensField("Data prevista", date, { date = it }, KeyboardType.Number)
+        OutlinedButton(
+            onClick = { calendarOpen = true },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+            enabled = !submitting,
+            shape = MaterialTheme.shapes.medium
+        ) {
+            val formatted = displayCalendarDate(date)
+            Text(if (date.isBlank()) localized("Selecionar data prevista") else localized("Data prevista · {0}", formatted))
+        }
         Spacer(Modifier.height(10.dp))
-        LensField("Local / Cidade", place, { place = it })
+        LensField(localized("Local / Cidade"), place, { place = it })
         Spacer(Modifier.height(10.dp))
-        LensField("Duração estimada", duration, { duration = it })
+        LensField(localized("Duração estimada"), duration, { duration = it })
         Spacer(Modifier.height(10.dp))
-        LensField("Descrição do evento", description, { description = it }, maxLines = 3)
+        LensField(localized("Descrição do evento (mín. 10 caracteres)"), description, { description = it }, singleLine = false, maxLines = 3)
         Spacer(Modifier.height(10.dp))
-        LensField("Informações adicionais", details, { details = it }, maxLines = 2)
+        LensField(localized("Informações adicionais"), details, { details = it }, singleLine = false, maxLines = 2)
         Spacer(Modifier.height(24.dp))
-        PrimaryButton("Enviar solicitação", { onSent(type, date, place, duration, description, details) }, enabled = date.isNotBlank() && place.isNotBlank())
+        if (submitting) AuthStatusBanner(localized("Enviando solicitação…"), loading = true)
+        failure?.let { AuthStatusBanner(it, loading = false, error = true) }
+        PrimaryButton(localized("Enviar solicitação"), {
+            submitting = true
+            failure = null
+            onSend(BudgetRequestDraft(type, date, place, duration, description, details)) { error ->
+                submitting = false
+                failure = when (error) {
+                    MobileAuthErrorCode.CONFLICT -> localized("Já existe um pedido em andamento com este fotógrafo.")
+                    MobileAuthErrorCode.INVALID_INPUT -> localized("Revise o tipo, a data, o local e a descrição do evento.")
+                    MobileAuthErrorCode.FORBIDDEN -> localized("A plataforma aceita pedidos de orçamento de contas de cliente.")
+                    else -> error.accountActionMessage(localized("Não foi possível enviar a solicitação."))
+                }
+            }
+        }, enabled = !submitting && type.trim().length >= 2 && place.trim().length >= 2 &&
+            date.isNotBlank() && description.trim().length >= 10)
+    }
+    if (calendarOpen) {
+        QuoteDatePicker(date, onDismiss = { calendarOpen = false }) {
+            date = it
+            calendarOpen = false
+        }
+    }
+}
+
+@Composable
+private fun QuoteDatePicker(date: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    val initial = remember(date) {
+        Calendar.getInstance().apply {
+            if (date.isNotBlank()) {
+                val (year, month, day) = date.split('-').map(String::toInt)
+                set(year, month - 1, day)
+            }
+        }
+    }
+    var chosenYear by rememberSaveable { mutableIntStateOf(initial.get(Calendar.YEAR)) }
+    var chosenMonth by rememberSaveable { mutableIntStateOf(initial.get(Calendar.MONTH)) }
+    var chosenDay by rememberSaveable { mutableIntStateOf(initial.get(Calendar.DAY_OF_MONTH)) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(shape = MaterialTheme.shapes.large, color = SurfaceHigh) {
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(vertical = 12.dp)) {
+                Text(
+                    localized("Selecionar data prevista"),
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    style = MaterialTheme.typography.titleMedium, color = Ink
+                )
+                // The calendar is a child view. The Compose dialog owns the window and its activity token.
+                AndroidView(
+                    factory = { context ->
+                        DatePicker(AppLanguage.pickerContext(context)).apply {
+                            init(chosenYear, chosenMonth, chosenDay) { _, selectedYear, selectedMonth, selectedDay ->
+                                chosenYear = selectedYear
+                                chosenMonth = selectedMonth
+                                chosenDay = selectedDay
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(Modifier.align(Alignment.End).padding(horizontal = 8.dp)) {
+                    TextButton(onClick = onDismiss) { Text(localized("Cancelar")) }
+                    TextButton(onClick = {
+                        onConfirm(String.format(Locale.ROOT, "%04d-%02d-%02d", chosenYear, chosenMonth + 1, chosenDay))
+                    }) { Text(localized("Confirmar")) }
+                }
+            }
+        }
     }
 }
 
@@ -1344,55 +1841,68 @@ private fun BudgetsScreen(
     favorites: List<Favorite>,
     signedIn: Boolean,
     onNavigate: (Screen) -> Unit,
-    onLogin: () -> Unit
+    onLogin: () -> Unit,
+    onBudget: (Long) -> Unit,
+    onEngagements: () -> Unit,
+    onDemo: () -> Unit,
+    onPhotographer: (String) -> Unit
 ) = AppPage(Screen.Budgets, onNavigate) {
     if (!signedIn) {
-        Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(22.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            PageTitle("Orçamentos e favoritos")
-            Text(
-                "Entre na sua conta para acompanhar seus pedidos e ver os fotógrafos que você salvou.",
-                color = Muted,
-                style = MaterialTheme.typography.bodyLarge
-            )
-            PrimaryButton("Entrar na conta", onLogin)
-        }
+        GuestTabSignIn(
+            localized("Orçamentos e favoritos"),
+            localized("Entre na sua conta para acompanhar seus pedidos e ver os fotógrafos que você salvou."),
+            onLogin,
+            onDemo
+        )
         return@AppPage
     }
 
     var tab by rememberSaveable { mutableIntStateOf(0) }
     Column(Modifier.padding(top = 12.dp)) {
-        PageTitle("Meus Pedidos & Favoritos", Modifier.padding(start = 22.dp, end = 22.dp, top = 8.dp, bottom = 12.dp))
+        PageTitle(localized("Meus Pedidos & Favoritos"), Modifier.padding(start = 22.dp, end = 22.dp, top = 8.dp, bottom = 12.dp))
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp).horizontalScroll(rememberScrollState()).selectableGroup(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            FilterChip("Orçamentos (${budgets.size})", tab == 0) { tab = 0 }
-            FilterChip("Favoritos (${favorites.size})", tab == 1) { tab = 1 }
+            FilterChip(localized("Orçamentos ({0})", budgets.size), tab == 0) { tab = 0 }
+            FilterChip(localized("Favoritos ({0})", favorites.size), tab == 1) { tab = 1 }
         }
-        Spacer(Modifier.height(14.dp))
+        Row(Modifier.padding(horizontal = 16.dp).horizontalScroll(rememberScrollState())) {
+            TextButton(onClick = onEngagements) { Text(localized("Contratações")) }
+            TextButton(onClick = onDemo) { Text(localized("Orçamentos de demonstração")) }
+        }
         if (tab == 0) {
             if (budgets.isEmpty()) {
-                EmptyMessage("Nenhum pedido de orçamento encontrado.")
+                EmptyMessage(localized("Nenhum pedido de orçamento encontrado."))
             } else {
                 LazyColumn(contentPadding = PaddingValues(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(budgets, key = { it.id }) { b ->
-                        BudgetCard(b)
+                        BudgetCard(b, onOpen = { onBudget(b.id) })
                     }
                 }
             }
         } else {
             if (favorites.isEmpty()) {
-                EmptyMessage("Você ainda não salvou fotógrafos favoritos.")
+                EmptyMessage(localized("Você ainda não salvou fotógrafos favoritos."))
             } else {
                 LazyColumn(contentPadding = PaddingValues(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(favorites, key = { it.photographerId }) { f ->
+                        var removing by remember { mutableStateOf(false) }
+                        var failed by remember { mutableStateOf(false) }
                         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(14.dp)).padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Column {
+                            Column(
+                                Modifier.weight(1f).clickable(role = Role.Button) { onPhotographer(f.slug) }
+                            ) {
                                 Text(f.name, color = Ink, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                                 Text(f.slug, color = Muted, fontSize = 12.sp)
                             }
-                            OutlinedButton(onClick = { viewModel.removeFavorite(f.photographerId) {} }) { Text("Remover") }
+                            OutlinedButton(onClick = {
+                                removing = true
+                                failed = false
+                                viewModel.removeFavorite(f.photographerId) { success ->
+                                    removing = false
+                                    failed = !success
+                                }
+                            }, enabled = !removing) { Text(localized("Remover")) }
                         }
+                        if (failed) AuthStatusBanner(localized("Não foi possível remover o favorito."), loading = false, error = true)
                     }
                 }
             }
@@ -1401,43 +1911,160 @@ private fun BudgetsScreen(
 }
 
 @Composable
-private fun BudgetCard(b: BudgetRequest) {
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(16.dp)).padding(16.dp)) {
+private fun BudgetCard(b: BudgetRequest, onOpen: (() -> Unit)? = null) {
+    val action = if (onOpen == null) Modifier else Modifier.clickable(role = Role.Button, onClick = onOpen)
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(16.dp)).then(action).padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(b.eventType, color = Ink, fontSize = 15.sp, fontWeight = FontWeight.Bold)
             FilterChip(budgetStatusLabel(b.status), selected = true)
         }
+        if (onOpen != null) Text(localized("Ver detalhes"), color = Accent, style = MaterialTheme.typography.labelMedium)
         Spacer(Modifier.height(6.dp))
-        Text("Data: ${b.eventDate} • Local: ${b.place}", color = Muted, fontSize = 12.sp)
+        Text(localized("Data: {0} • Local: {1}", displayCalendarDate(b.eventDate), b.place), color = Muted, fontSize = 12.sp)
         if (b.description.isNotBlank()) Text(b.description, color = Ink, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
     }
 }
 
+@Composable
+private fun BudgetDetailScreen(
+    viewModel: LensClickViewModel,
+    id: Long,
+    canRespond: Boolean,
+    onBack: () -> Unit,
+    onHire: (String) -> Unit
+) {
+    var budget by remember(id) { mutableStateOf<BudgetRequest?>(null) }
+    var loading by remember(id) { mutableStateOf(true) }
+    var busy by remember(id) { mutableStateOf(false) }
+    var error by remember(id) { mutableStateOf<String?>(null) }
+    var confirmingCancel by rememberSaveable(id) { mutableStateOf(false) }
+
+    fun load() {
+        loading = true
+        error = null
+        viewModel.loadBudgetDetail(id) { result ->
+            loading = false
+            result.onSuccess { budget = it }
+                .onFailure { error = it.remoteErrorCode().accountActionMessage(localized("Não foi possível carregar este orçamento.")) }
+        }
+    }
+    LaunchedEffect(id) { load() }
+
+    fun complete(success: Boolean) {
+        busy = false
+        if (success) {
+            load()
+        } else {
+            error = viewModel.budgetError.value?.accountActionMessage(localized("Não foi possível atualizar o pedido."))
+                ?: localized("Não foi possível atualizar o pedido.")
+        }
+    }
+    SettingsPage(localized("Detalhes do orçamento"), onBack) {
+        if (loading) AuthStatusBanner(localized("Carregando orçamento…"), loading = true)
+        if (busy) AuthStatusBanner(localized("Atualizando pedido…"), loading = true)
+        error?.let {
+            AuthStatusBanner(it, loading = false, error = true)
+            TextButton(onClick = { load() }, enabled = !loading && !busy) { Text(localized("Atualizar")) }
+        }
+        if (!loading) budget?.let { request ->
+            BudgetCard(request)
+            if (request.duration.isNotBlank()) Text(localized("Duração · {0}", request.duration), color = Muted)
+            if (request.additionalInfo.isNotBlank()) Text(request.additionalInfo, color = Muted)
+            request.proposals.forEach { proposal ->
+                Column(
+                    Modifier.fillMaxWidth().background(SurfaceHigh, MaterialTheme.shapes.medium).padding(14.dp)
+                ) {
+                    val value = moneyInReais(proposal.priceCents)
+                    Text(value, color = Ink, style = MaterialTheme.typography.titleMedium)
+                    if (proposal.conditions.isNotBlank()) Text(proposal.conditions, color = Muted)
+                    if (canRespond && request.status == "proposed" && proposal.status == "pending") {
+                        Row {
+                            TextButton(onClick = {
+                                busy = true
+                                error = null
+                                viewModel.decideRequest(id, proposal.id, true, ::complete)
+                            }, enabled = !busy) { Text(localized("Aceitar proposta")) }
+                            TextButton(onClick = {
+                                busy = true
+                                error = null
+                                viewModel.decideRequest(id, proposal.id, false, ::complete)
+                            }, enabled = !busy) { Text(localized("Recusar proposta")) }
+                        }
+                    }
+                }
+            }
+            if (canRespond && request.status == "accepted" && request.photographerSlug.isNotBlank() &&
+                request.proposals.any { it.status == "accepted" }
+            ) {
+                PrimaryButton(localized("Contratar com esta proposta"), { onHire(request.photographerSlug) })
+            }
+            if (request.history.isNotEmpty()) {
+                SectionTitle(localized("Histórico"))
+                request.history.forEach { event ->
+                    Text("${displayCalendarDate(event.createdAt)} · ${budgetEventLabel(event.action)}", color = Muted)
+                }
+            }
+            if (request.status in setOf("pending", "proposed")) {
+                TextButton(onClick = { confirmingCancel = true }, enabled = !busy) {
+                    Text(if (canRespond) localized("Cancelar pedido") else localized("Recusar orçamento"))
+                }
+            }
+        }
+    }
+    if (confirmingCancel) {
+        AlertDialog(
+            onDismissRequest = { confirmingCancel = false },
+            title = { Text(if (canRespond) localized("Cancelar pedido?") else localized("Recusar orçamento?")) },
+            text = { Text(localized("O pedido será encerrado para você e para o fotógrafo.")) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmingCancel = false
+                    busy = true
+                    error = null
+                    viewModel.closeBudgetRequest(id, decline = !canRespond, ::complete)
+                }) { Text(if (canRespond) localized("Confirmar cancelamento") else localized("Confirmar recusa")) }
+            },
+            dismissButton = { TextButton(onClick = { confirmingCancel = false }) { Text(localized("Voltar")) } }
+        )
+    }
+}
+
 private fun budgetStatusLabel(status: String): String = when (status.lowercase()) {
-    "pending" -> "Aguardando"
-    "proposed" -> "Proposta recebida"
-    "accepted" -> "Aceito"
-    "rejected" -> "Recusado"
-    "cancelled" -> "Cancelado"
+    "pending" -> localized("Aguardando")
+    "proposed" -> localized("Em negociação")
+    "accepted" -> localized("Aceito")
+    "rejected" -> localized("Recusado")
+    "cancelled" -> localized("Cancelado")
     else -> status
 }
 
 @Composable
-private fun ConversationsScreen(viewModel: LensClickViewModel, photographers: List<Photographer>, onNavigate: (Screen) -> Unit) = AppPage(Screen.Conversations, onNavigate) {
-    var query by rememberSaveable { mutableStateOf("") }
-    val conversations by viewModel.conversations.collectAsStateWithLifecycle()
-
-    LaunchedEffect(Unit) {
-        viewModel.loadConversations()
+private fun ConversationsScreen(
+    viewModel: LensClickViewModel,
+    signedIn: Boolean,
+    onConversation: (Long) -> Unit,
+    onNavigate: (Screen) -> Unit,
+    onLogin: () -> Unit
+) = AppPage(Screen.Conversations, onNavigate) {
+    if (!signedIn) {
+        GuestTabSignIn(localized("Mensagens"), localized("Entre na sua conta para ver suas conversas com fotógrafos."), onLogin)
+        return@AppPage
     }
 
+    var query by rememberSaveable { mutableStateOf("") }
+    val conversations by viewModel.conversations.collectAsStateWithLifecycle()
+    val loading by viewModel.conversationsLoading.collectAsStateWithLifecycle()
+    val failed by viewModel.conversationsFailed.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) { viewModel.loadConversations() }
+
     Column(Modifier.padding(top = 12.dp)) {
-        PageTitle("Conversas", Modifier.padding(start = 22.dp, end = 22.dp, top = 8.dp, bottom = 12.dp))
+        PageTitle(localized("Conversas"), Modifier.padding(start = 22.dp, end = 22.dp, top = 8.dp, bottom = 12.dp))
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-            placeholder = { Text("Buscar conversa", color = Muted, fontSize = 12.sp) },
+            placeholder = { Text(localized("Buscar conversa"), color = Muted, fontSize = 12.sp) },
             singleLine = true,
             shape = RoundedCornerShape(17.dp),
             colors = lensFieldColors()
@@ -1445,9 +2072,17 @@ private fun ConversationsScreen(viewModel: LensClickViewModel, photographers: Li
         Spacer(Modifier.height(12.dp))
         val filtered = conversations.filter { it.counterpartName.contains(query, true) || it.lastMessage.contains(query, true) }
         LazyColumn(contentPadding = PaddingValues(horizontal = 20.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (filtered.isEmpty()) {
-                item { EmptyMessage("Nenhuma conversa encontrada.") }
-            } else {
+            if (loading && conversations.isEmpty()) {
+                item { AuthStatusBanner(localized("Carregando conversas…"), loading = true) }
+            } else if (failed) {
+                item {
+                    AuthStatusBanner(localized("Não foi possível carregar as conversas."), loading = false, error = true)
+                    TextButton(onClick = viewModel::loadConversations) { Text(localized("Tentar novamente")) }
+                }
+            } else if (filtered.isEmpty()) {
+                item { EmptyMessage(localized("Nenhuma conversa encontrada.")) }
+            }
+            if (filtered.isNotEmpty()) {
                 items(filtered, key = { it.id }) { c ->
                     Row(
                         Modifier
@@ -1455,10 +2090,7 @@ private fun ConversationsScreen(viewModel: LensClickViewModel, photographers: Li
                             .clip(MaterialTheme.shapes.medium)
                             .background(SurfaceHigh)
                             .border(1.dp, Line, MaterialTheme.shapes.medium)
-                            .clickable {
-                                viewModel.loadMessages(c.id)
-                                onNavigate(Screen.Chat)
-                            }
+                            .clickable(role = Role.Button) { onConversation(c.id) }
                             .padding(horizontal = 10.dp, vertical = 11.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -1466,7 +2098,7 @@ private fun ConversationsScreen(viewModel: LensClickViewModel, photographers: Li
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(c.counterpartName, color = Ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                            Text(c.lastMessage.ifBlank { "Nenhuma mensagem ainda." }, color = Muted, fontSize = 12.sp, maxLines = 1)
+                            Text(c.lastMessage.ifBlank { localized("Nenhuma mensagem ainda.") }, color = Muted, fontSize = 12.sp, maxLines = 1)
                         }
                         if (c.unreadCount > 0) {
                             Box(Modifier.size(10.dp).clip(CircleShape).background(Ink))
@@ -1487,59 +2119,88 @@ private fun ProfileStatus(message: String, action: String, onAction: () -> Unit)
 }
 
 @Composable
-private fun ChatScreen(viewModel: LensClickViewModel, onBack: () -> Unit) {
-    var input by rememberSaveable { mutableStateOf("") }
-    val messages by viewModel.messages.collectAsStateWithLifecycle()
+private fun ChatScreen(viewModel: LensClickViewModel, conversationId: Long, onBack: () -> Unit) {
+    var input by rememberSaveable(conversationId) { mutableStateOf("") }
+    var sending by remember(conversationId) { mutableStateOf(false) }
+    var sendError by remember(conversationId) { mutableStateOf<String?>(null) }
+    val chat by viewModel.chat.collectAsStateWithLifecycle()
     val conversations by viewModel.conversations.collectAsStateWithLifecycle()
-    val currentConv = conversations.firstOrNull()
+    val conversation = conversations.firstOrNull { it.id == conversationId }
+    val currentChat = chat?.takeIf { it.conversationId == conversationId }
+    val messages = currentChat?.messages
+    val listState = rememberLazyListState()
 
-    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+    LaunchedEffect(conversationId) {
+        viewModel.loadMessages(conversationId)
+        if (conversation == null) viewModel.loadConversations()
+    }
+    LaunchedEffect(messages?.lastOrNull()?.id) {
+        if (!messages.isNullOrEmpty()) listState.scrollToItem(messages.lastIndex)
+    }
+
+    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) {
         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             BackButton(onBack)
-            Avatar(initialsForDisplay(currentConv?.counterpartName ?: "Chat"), Modifier.size(42.dp))
+            Avatar(initialsForDisplay(conversation?.counterpartName ?: "Chat"), Modifier.size(42.dp))
             Spacer(Modifier.width(10.dp))
-            Column {
-                Text(currentConv?.counterpartName ?: "Mensagens", color = Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                Text("Conversa via LensClick", color = Muted, fontSize = 12.sp)
+            Column(Modifier.weight(1f)) {
+                Text(conversation?.counterpartName ?: localized("Mensagens"), color = Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text(localized("Conversa via LensClick"), color = Muted, fontSize = 12.sp)
             }
-            Spacer(Modifier.weight(1f))
             CompactLogo(34)
         }
-        LazyColumn(Modifier.weight(1f).padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (messages.isEmpty()) {
-                item { Bubble("Inicie a conversa digitando uma mensagem abaixo.", false) }
-            } else {
-                items(messages) { m ->
-                    Bubble(m.text, m.isMine)
+        LazyColumn(
+            Modifier.weight(1f).padding(horizontal = 18.dp),
+            state = listState,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            when {
+                currentChat?.loadFailed == true -> item {
+                    AuthStatusBanner(localized("Não foi possível carregar as mensagens."), loading = false, error = true)
+                    TextButton(onClick = { viewModel.loadMessages(conversationId) }) { Text(localized("Tentar novamente")) }
                 }
+                messages == null -> item { AuthStatusBanner(localized("Carregando mensagens…"), loading = true) }
+                messages.isEmpty() -> item { EmptyMessage(localized("Nenhuma mensagem nesta conversa.")) }
+                else -> items(messages, key = { it.id }) { message -> Bubble(message.text, message.isMine) }
             }
         }
         HorizontalDivider(color = Line)
-        Row(Modifier.fillMaxWidth().background(SurfaceHigh).imePadding().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        sendError?.let { AuthStatusBanner(it, loading = false, error = true) }
+        Row(Modifier.fillMaxWidth().background(SurfaceHigh).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = input,
                 onValueChange = { input = it },
+                readOnly = sending,
                 modifier = Modifier.weight(1f),
-                placeholder = { Text("Digite sua mensagem...", color = Muted, fontSize = 12.sp) },
+                placeholder = { Text(localized("Digite sua mensagem..."), color = Muted, fontSize = 12.sp) },
                 shape = RoundedCornerShape(18.dp),
                 colors = lensFieldColors()
             )
             Spacer(Modifier.width(9.dp))
             Button(
                 onClick = {
-                    if (input.isNotBlank() && currentConv != null) {
-                        val textToSend = input
-                        input = ""
-                        viewModel.sendMessage(currentConv.id, textToSend) {}
+                    sending = true
+                    sendError = null
+                    viewModel.sendMessage(conversationId, input.trim()) { error ->
+                        sending = false
+                        if (error == null) {
+                            input = ""
+                        } else {
+                            sendError = if (error == MobileAuthErrorCode.CONFLICT) localized("Esta conversa foi encerrada.")
+                            else error.accountActionMessage(localized("Não foi possível enviar a mensagem. Tente novamente."))
+                        }
                     }
                 },
                 modifier = Modifier.size(54.dp),
                 contentPadding = PaddingValues(0.dp),
                 shape = CircleShape,
-                enabled = input.isNotBlank()
+                enabled = input.isNotBlank() && input.trim().length <= 2_000 && messages != null && !sending
             ) {
-                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Enviar mensagem", modifier = Modifier.size(22.dp))
+                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = localized("Enviar mensagem"), modifier = Modifier.size(22.dp))
             }
+        }
+        if (input.trim().length > 2_000) {
+            Text(localized("A mensagem deve ter até 2.000 caracteres."), color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 14.dp))
         }
     }
 }
@@ -1563,26 +2224,26 @@ private fun ChatScreen(viewModel: LensClickViewModel, onBack: () -> Unit) {
 @Composable
 private fun PhotographerDashboardScreen(p: Photographer?, budgets: List<BudgetRequest>, onNavigate: (Screen) -> Unit, onClientMode: () -> Unit) = PhotographerPage(Screen.ProDashboard, onNavigate) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
-        PageTitle("Painel do fotógrafo")
+        PageTitle(localized("Painel do fotógrafo"))
         Spacer(Modifier.height(18.dp))
-        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(18.dp)).padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Avatar(p?.initials ?: "FT", Modifier.size(56.dp)); Spacer(Modifier.width(14.dp)); Column { Text(p?.name ?: "Perfil Profissional", color = Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold); Text(p?.specialty ?: "Fotografia", color = Muted, fontSize = 12.sp) } }
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(18.dp)).padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Avatar(p?.initials ?: "FT", Modifier.size(56.dp)); Spacer(Modifier.width(14.dp)); Column { Text(p?.name ?: localized("Perfil Profissional"), color = Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold); Text(p?.specialty ?: localized("Fotografia"), color = Muted, fontSize = 12.sp) } }
         Spacer(Modifier.height(20.dp))
-        SectionTitle("Métricas")
+        SectionTitle(localized("Métricas"))
         Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            ProMetric("Pedidos", "${budgets.size}", Modifier.weight(1f))
-            ProMetric("Agenda", "${budgets.count { it.status == "accepted" }}", Modifier.weight(1f))
-            ProMetric("Avaliação", "—", Modifier.weight(1f))
+            ProMetric(localized("Pedidos"), "${budgets.size}", Modifier.weight(1f))
+            ProMetric(localized("Agenda"), "${budgets.count { it.status == "accepted" }}", Modifier.weight(1f))
+            ProMetric(localized("Avaliação"), "—", Modifier.weight(1f))
         }
         Spacer(Modifier.height(22.dp))
-        SectionTitle("Ações Rápidas")
+        SectionTitle(localized("Ações Rápidas"))
         Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            ProAction("Editar Perfil", "Informações e preços", Modifier.weight(1f)) { onNavigate(Screen.ProProfile) }
-            ProAction("Portfólio", "Gerenciar imagens", Modifier.weight(1f)) { onNavigate(Screen.ProPortfolio) }
+            ProAction(localized("Editar Perfil"), localized("Informações e preços"), Modifier.weight(1f)) { onNavigate(Screen.ProProfile) }
+            ProAction(localized("Portfólio"), localized("Gerenciar imagens"), Modifier.weight(1f)) { onNavigate(Screen.ProPortfolio) }
         }
         Spacer(Modifier.height(22.dp))
-        OutlinedButton(onClick = onClientMode, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, FieldBorder)) { Text("Alternar para modo cliente", color = Ink, fontWeight = FontWeight.SemiBold) }
+        OutlinedButton(onClick = onClientMode, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, FieldBorder)) { Text(localized("Alternar para modo cliente"), color = Ink, fontWeight = FontWeight.SemiBold) }
     }
 }
 
@@ -1590,12 +2251,18 @@ private fun PhotographerDashboardScreen(p: Photographer?, budgets: List<BudgetRe
 @Composable private fun ProAction(title: String, desc: String, modifier: Modifier, onClick: () -> Unit) { Column(modifier.clip(RoundedCornerShape(16.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(16.dp)).clickable(onClick = onClick).padding(14.dp)) { Text(title, color = Ink, fontSize = 14.sp, fontWeight = FontWeight.Bold); Text(desc, color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp)) } }
 
 @Composable
-private fun PhotographerRequestsScreen(viewModel: LensClickViewModel, budgets: List<BudgetRequest>, onNavigate: (Screen) -> Unit) = PhotographerPage(Screen.ProRequests, onNavigate) {
+private fun PhotographerRequestsScreen(
+    viewModel: LensClickViewModel, budgets: List<BudgetRequest>, onNavigate: (Screen) -> Unit, onBudget: (Long) -> Unit
+) = PhotographerPage(Screen.ProRequests, onNavigate) {
     var proposeTarget by remember { mutableStateOf<BudgetRequest?>(null) }
     Column(Modifier.padding(top = 12.dp)) {
-        PageTitle("Pedidos de Orçamento", Modifier.padding(start = 22.dp, end = 22.dp, top = 8.dp, bottom = 12.dp))
+        Row(Modifier.padding(horizontal = 16.dp).horizontalScroll(rememberScrollState())) {
+            TextButton(onClick = { onNavigate(Screen.Engagements) }) { Text(localized("Contratações recebidas")) }
+            TextButton(onClick = { onNavigate(Screen.DemoBudgets) }) { Text(localized("Orçamentos de demonstração")) }
+        }
+        PageTitle(localized("Pedidos de Orçamento"), Modifier.padding(start = 22.dp, end = 22.dp, top = 8.dp, bottom = 12.dp))
         if (budgets.isEmpty()) {
-            EmptyMessage("Nenhum pedido recebido no momento.")
+            EmptyMessage(localized("Nenhum pedido recebido no momento."))
         } else {
             LazyColumn(contentPadding = PaddingValues(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(budgets, key = { it.id }) { b ->
@@ -1605,10 +2272,11 @@ private fun PhotographerRequestsScreen(viewModel: LensClickViewModel, budgets: L
                             FilterChip(budgetStatusLabel(b.status), selected = true)
                         }
                         Spacer(Modifier.height(6.dp))
-                        Text("Cliente: ${b.counterpartName} • Data: ${b.eventDate}", color = Muted, fontSize = 12.sp)
+                        Text(localized("Cliente: {0} • Data: {1}", b.counterpartName, displayCalendarDate(b.eventDate)), color = Muted, fontSize = 12.sp)
                         if (b.description.isNotBlank()) Text(b.description, color = Ink, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
                         Spacer(Modifier.height(12.dp))
-                        PrimaryButton("Enviar proposta", { proposeTarget = b }, enabled = b.status == "pending")
+                        TextButton(onClick = { onBudget(b.id) }) { Text(localized("Ver detalhes")) }
+                        if (b.status == "pending") PrimaryButton(localized("Enviar proposta"), { proposeTarget = b })
                     }
                 }
             }
@@ -1618,9 +2286,10 @@ private fun PhotographerRequestsScreen(viewModel: LensClickViewModel, budgets: L
     proposeTarget?.let { b ->
         ProposeDialog(
             onDismiss = { proposeTarget = null },
-            onSend = { priceCents, conditions ->
-                viewModel.proposeToRequest(b.id, priceCents, conditions) {
-                    proposeTarget = null
+            onSend = { priceCents, conditions, completed ->
+                viewModel.proposeToRequest(b.id, priceCents, conditions) { success ->
+                    if (success) proposeTarget = null
+                    else completed(viewModel.budgetError.value)
                 }
             }
         )
@@ -1628,39 +2297,55 @@ private fun PhotographerRequestsScreen(viewModel: LensClickViewModel, budgets: L
 }
 
 @Composable
-private fun ProposeDialog(onDismiss: () -> Unit, onSend: (Long, String) -> Unit) {
+private fun ProposeDialog(onDismiss: () -> Unit, onSend: (Long, String, (MobileAuthErrorCode?) -> Unit) -> Unit) {
     var priceStr by rememberSaveable { mutableStateOf("") }
     var conditions by rememberSaveable { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val cents = parsePriceCents(priceStr)
     AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Enviar Proposta", color = Ink, fontWeight = FontWeight.Bold) },
+        onDismissRequest = { if (!busy) onDismiss() },
+        title = { Text(localized("Enviar Proposta"), color = Ink, fontWeight = FontWeight.Bold) },
         text = {
-            Column {
-                LensField("Valor total (R$)", priceStr, { priceStr = it }, KeyboardType.Number)
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                LensField(localized("Valor total (R$)"), priceStr, { priceStr = it }, KeyboardType.Decimal)
                 Spacer(Modifier.height(10.dp))
-                LensField("Condições / Detalhes", conditions, { conditions = it }, maxLines = 3)
+                LensField(localized("Condições / Detalhes"), conditions, { conditions = it }, singleLine = false, maxLines = 3)
+                if (priceStr.isNotBlank() && cents == null) Text(localized("Informe um valor válido, como 1200,50."), color = MaterialTheme.colorScheme.error)
+                if (busy) AuthStatusBanner(localized("Enviando proposta…"), loading = true)
+                error?.let { AuthStatusBanner(it, loading = false, error = true) }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    val cents = (priceStr.toDoubleOrNull() ?: 0.0) * 100
-                    onSend(cents.toLong(), conditions)
+                    busy = true
+                    error = null
+                    onSend(requireNotNull(cents), conditions) { code ->
+                        busy = false
+                        error = if (code == MobileAuthErrorCode.CONFLICT) localized("Já existe uma proposta pendente ou o pedido foi encerrado.")
+                        else code?.accountActionMessage(localized("Não foi possível enviar a proposta.")) ?: localized("Não foi possível enviar a proposta.")
+                    }
                 },
-                enabled = priceStr.isNotBlank()
-            ) { Text("Enviar Proposta") }
+                enabled = cents != null && !busy
+            ) { Text(localized("Enviar Proposta")) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text(localized("Cancelar")) } },
         containerColor = SurfaceHigh
     )
 }
 
+private fun parsePriceCents(text: String): Long? = text.trim()
+    .takeIf { it.matches(Regex("[0-9]+([,.][0-9]{1,2})?")) }
+    ?.replace(',', '.')?.toBigDecimalOrNull()?.movePointRight(2)
+    ?.takeIf { it <= BigDecimal.valueOf(100_000_000) }?.toLong()
+
 @Composable
 private fun PhotographerAgendaScreen(agenda: List<BudgetRequest>, onNavigate: (Screen) -> Unit) = PhotographerPage(Screen.ProAgenda, onNavigate) {
     Column(Modifier.padding(top = 12.dp)) {
-        PageTitle("Minha Agenda", Modifier.padding(start = 22.dp, end = 22.dp, top = 8.dp, bottom = 12.dp))
+        PageTitle(localized("Minha Agenda"), Modifier.padding(start = 22.dp, end = 22.dp, top = 8.dp, bottom = 12.dp))
         if (agenda.isEmpty()) {
-            EmptyMessage("Nenhum evento agendado ou aceito.")
+            EmptyMessage(localized("Nenhum evento agendado ou aceito."))
         } else {
             LazyColumn(contentPadding = PaddingValues(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(agenda, key = { it.id }) { e ->
@@ -1682,8 +2367,11 @@ private fun ProfessionalProfileScreen(
     LaunchedEffect(Unit) { viewModel.loadProfessionalProfile() }
     when (val result = state) {
         ProfessionalProfileState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Ink) }
-        ProfessionalProfileState.Error -> ProfileStatus("Não foi possível carregar seu perfil profissional.", "Tentar novamente") { viewModel.loadProfessionalProfile() }
-        is ProfessionalProfileState.Ready -> ProfessionalProfileForm(result, viewModel, onClientMode, onLogout)
+        ProfessionalProfileState.Error -> ProfileStatus(localized("Não foi possível carregar seu perfil profissional."), localized("Tentar novamente")) { viewModel.loadProfessionalProfile() }
+        is ProfessionalProfileState.Ready -> ProfessionalProfileForm(
+            result, viewModel, onClientMode, onLogout,
+            onSettings = { onNavigate(Screen.Settings) }
+        )
     }
 }
 
@@ -1692,18 +2380,24 @@ private fun ProfessionalProfileForm(
     state: ProfessionalProfileState.Ready,
     viewModel: LensClickViewModel,
     onClientMode: () -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    onSettings: () -> Unit
 ) {
     var bio by rememberSaveable(state.profile) { mutableStateOf(state.profile.bio) }
     var city by rememberSaveable(state.profile) { mutableStateOf(state.profile.city) }
     var stateCode by rememberSaveable(state.profile) { mutableStateOf(state.profile.state) }
-    var priceStr by rememberSaveable(state.profile) { mutableStateOf(state.profile.startingPriceCents?.let { "${it / 100}" }.orEmpty()) }
+    var priceStr by rememberSaveable(state.profile) {
+        mutableStateOf(state.profile.startingPriceCents?.let { BigDecimal.valueOf(it, 2).toPlainString() }.orEmpty())
+    }
     var radiusStr by rememberSaveable(state.profile) { mutableStateOf(state.profile.serviceRadiusKm?.toString().orEmpty()) }
     var publicEmail by rememberSaveable(state.profile) { mutableStateOf(state.profile.publicEmail) }
     var publicPhone by rememberSaveable(state.profile) { mutableStateOf(state.profile.publicPhone) }
     var instagram by rememberSaveable(state.profile) { mutableStateOf(state.profile.instagram) }
     var website by rememberSaveable(state.profile) { mutableStateOf(state.profile.website) }
     var isPublished by rememberSaveable(state.profile) { mutableStateOf(state.profile.isPublished) }
+    val priceCents = parsePriceCents(priceStr)
+    val radius = radiusStr.trim().toIntOrNull()
+    val validRadius = radiusStr.isBlank() || (radius != null && radius in 0..1_000)
 
     Column(
         Modifier
@@ -1711,42 +2405,50 @@ private fun ProfessionalProfileForm(
             .verticalScroll(rememberScrollState())
             .padding(20.dp)
     ) {
-        PageTitle("Perfil Profissional")
-        Text("Configure como seu perfil aparece para os clientes", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+        PageTitle(localized("Perfil Profissional"))
+        Text(localized("Configure como seu perfil aparece para os clientes"), color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
         Spacer(Modifier.height(18.dp))
-        LensField("Bio / Apresentação", bio, { bio = it }, maxLines = 4)
+        LensField(localized("Bio / Apresentação"), bio, { bio = it }, singleLine = false, maxLines = 4)
         Spacer(Modifier.height(10.dp))
-        LensField("Cidade", city, { city = it })
+        LensField(localized("Cidade"), city, { city = it })
         Spacer(Modifier.height(10.dp))
-        LensField("Estado (UF)", stateCode, { stateCode = it })
+        LensField(localized("Estado (UF)"), stateCode, { stateCode = it })
         Spacer(Modifier.height(10.dp))
-        LensField("Preço Inicial (R$)", priceStr, { priceStr = it }, KeyboardType.Number)
+        LensField(localized("Preço Inicial (R$)"), priceStr, { priceStr = it }, KeyboardType.Decimal)
+        if (priceStr.isNotBlank() && priceCents == null) {
+            Text(localized("Informe um preço válido, como 1200,50."), color = MaterialTheme.colorScheme.error)
+        }
         Spacer(Modifier.height(10.dp))
-        LensField("Raio de Atendimento (km)", radiusStr, { radiusStr = it }, KeyboardType.Number)
+        LensField(localized("Raio de Atendimento (km)"), radiusStr, { radiusStr = it }, KeyboardType.Number)
+        if (!validRadius) {
+            Text(localized("Informe um raio entre 0 e 1.000 km."), color = MaterialTheme.colorScheme.error)
+        }
         Spacer(Modifier.height(10.dp))
-        LensField("E-mail Público", publicEmail, { publicEmail = it }, KeyboardType.Email)
+        LensField(localized("E-mail Público"), publicEmail, { publicEmail = it }, KeyboardType.Email)
         Spacer(Modifier.height(10.dp))
-        LensField("Telefone Público", publicPhone, { publicPhone = it }, KeyboardType.Phone)
+        LensField(localized("Telefone Público"), publicPhone, { publicPhone = it }, KeyboardType.Phone)
         Spacer(Modifier.height(10.dp))
         LensField("Instagram", instagram, { instagram = it })
         Spacer(Modifier.height(10.dp))
-        LensField("Website", website, { website = it }, KeyboardType.Uri)
+        LensField(localized("Website"), website, { website = it }, KeyboardType.Uri)
         Spacer(Modifier.height(16.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("Publicar perfil na busca", color = Ink, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-            FilterChip(if (isPublished) "Publicado" else "Rascunho", selected = isPublished) { isPublished = !isPublished }
+            Text(localized("Publicar perfil na busca"), color = Ink, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            FilterChip(if (isPublished) localized("Publicado") else localized("Rascunho"), selected = isPublished) { isPublished = !isPublished }
+        }
+        if (isPublished && state.error == MobileAuthErrorCode.INVALID_INPUT) {
+            Text(localized("Para publicar, preencha a apresentação, especialidade, cidade, UF e um contato público, e adicione sua foto de perfil."), color = Muted)
+            WebSettingsLinks(localized("Gerenciar foto e especialidades no site") to "/perfil")
         }
         Spacer(Modifier.height(24.dp))
         if (state.saving) {
-            AuthStatusBanner("Salvando perfil...", loading = true)
+            AuthStatusBanner(localized("Salvando perfil..."), loading = true)
         } else if (state.saved) {
-            AuthStatusBanner("Perfil salvo com sucesso!", loading = false)
+            AuthStatusBanner(localized("Perfil salvo com sucesso!"), loading = false)
         } else if (state.error != null) {
             AuthStatusBanner(profileErrorMessage(state.error), loading = false, error = true)
         }
-        PrimaryButton("Salvar Perfil", {
-            val priceCents = priceStr.toDoubleOrNull()?.let { (it * 100).toLong() }
-            val radius = radiusStr.toIntOrNull()
+        PrimaryButton(localized("Salvar Perfil"), {
             viewModel.saveProfessionalProfile(
                 state.profile.copy(
                     bio = bio,
@@ -1761,49 +2463,105 @@ private fun ProfessionalProfileForm(
                     isPublished = isPublished
                 )
             )
-        }, enabled = !state.saving)
+        }, enabled = !state.saving && (priceStr.isBlank() || priceCents != null) && validRadius)
         Spacer(Modifier.height(12.dp))
-        OutlinedButton(onClick = onClientMode, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, FieldBorder)) { Text("Modo Cliente", color = Ink, fontWeight = FontWeight.SemiBold) }
+        SecondaryButton(localized("Configurações"), onSettings)
+        Spacer(Modifier.height(12.dp))
+        OutlinedButton(onClick = onClientMode, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, FieldBorder)) { Text(localized("Modo Cliente"), color = Ink, fontWeight = FontWeight.SemiBold) }
         Spacer(Modifier.height(12.dp))
         LogoutButton(onLogout, enabled = !state.saving)
     }
 }
 
 private fun profileErrorMessage(code: MobileAuthErrorCode): String = when (code) {
-    MobileAuthErrorCode.INVALID_INPUT -> "Dados do perfil inválidos. Verifique os campos."
-    MobileAuthErrorCode.UNAUTHENTICATED -> "Sua sessão expirou. Faça login novamente."
-    MobileAuthErrorCode.RATE_LIMITED -> "Muitas alterações. Aguarde um instante."
-    MobileAuthErrorCode.NETWORK -> "Não foi possível conectar. Verifique sua rede."
-    else -> "Erro ao salvar perfil. Tente novamente."
+    MobileAuthErrorCode.INVALID_INPUT -> localized("Dados do perfil inválidos. Verifique os campos.")
+    MobileAuthErrorCode.UNAUTHENTICATED -> localized("Sua sessão expirou. Faça login novamente.")
+    MobileAuthErrorCode.RATE_LIMITED -> localized("Muitas alterações. Aguarde um instante.")
+    MobileAuthErrorCode.NETWORK -> localized("Não foi possível conectar. Verifique sua rede.")
+    else -> localized("Erro ao salvar perfil. Tente novamente.")
 }
 
 @Composable
-private fun PortfolioScreen(viewModel: LensClickViewModel, onNavigate: (Screen) -> Unit) = PhotographerPage(Screen.ProPortfolio, onNavigate) {
+private fun PortfolioScreen(
+    viewModel: LensClickViewModel, onNavigate: (Screen) -> Unit, onPublicProfile: (String) -> Unit
+) = PhotographerPage(Screen.ProPortfolio, onNavigate) {
     val state by viewModel.portfolio.collectAsStateWithLifecycle()
+    val professional by viewModel.professionalProfile.collectAsStateWithLifecycle()
+    val publicReviews by viewModel.publicReviews.collectAsStateWithLifecycle()
+    val publishedSlug = (professional as? ProfessionalProfileState.Ready)?.profile
+        ?.takeIf { it.isPublished }?.slug?.takeIf(String::isNotBlank)
     val context = LocalContext.current
-    var uploadDialogUri by remember { mutableStateOf<Uri?>(null) }
+    val scope = rememberCoroutineScope()
+    var upload by remember { mutableStateOf<ByteArray?>(null) }
+    var preparing by remember { mutableStateOf(false) }
+    var fileError by remember { mutableStateOf<String?>(null) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) uploadDialogUri = uri
+        if (uri != null) {
+            preparing = true
+            scope.launch {
+                upload = withContext(Dispatchers.IO) { readPortfolioUpload(context, uri) }
+                preparing = false
+                if (upload == null) fileError = localized("Não foi possível ler a imagem. Escolha outra foto.")
+            }
+        }
     }
 
-    LaunchedEffect(Unit) { viewModel.loadPortfolio() }
+    LaunchedEffect(Unit) {
+        viewModel.loadPortfolio()
+        viewModel.loadProfessionalProfile()
+    }
+    LaunchedEffect(publishedSlug) {
+        publishedSlug?.let(viewModel::loadReviews)
+    }
 
     Column(Modifier.padding(top = 12.dp)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            PageTitle("Portfólio")
-            Button(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) { Text("+ Adicionar") }
+            PageTitle(localized("Portfólio"))
+            Button(onClick = {
+                fileError = null
+                try {
+                    picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                } catch (_: android.content.ActivityNotFoundException) {
+                    fileError = localized("Não foi possível abrir o seletor de fotos.")
+                }
+            }, enabled = (state as? PortfolioState.Ready)?.busy == false && !preparing) { Text(localized("+ Adicionar")) }
         }
+        if (publishedSlug != null) {
+            TextButton(onClick = { onPublicProfile(publishedSlug) }, modifier = Modifier.padding(horizontal = 20.dp)) {
+                Text(localized("Ver portfólio público"))
+            }
+        }
+        if (preparing) AuthStatusBanner(localized("Preparando imagem…"), loading = true)
+        fileError?.let { AuthStatusBanner(it, loading = false, error = true) }
         when (val result = state) {
             PortfolioState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Ink) }
-            PortfolioState.Error -> ProfileStatus("Erro ao carregar portfólio.", "Tentar novamente") { viewModel.loadPortfolio() }
+            PortfolioState.Error -> ProfileStatus(localized("Erro ao carregar portfólio."), localized("Tentar novamente")) { viewModel.loadPortfolio() }
             is PortfolioState.Ready -> {
-                val itemsList = result.items
-                if (itemsList.isEmpty()) {
-                    EmptyMessage("Nenhuma imagem no seu portfólio.")
-                } else {
-                    LazyColumn(contentPadding = PaddingValues(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        itemsIndexed(itemsList, key = { _, item -> item.id }) { index, item ->
-                            PortfolioItemCard(item, itemsList, index == 0, viewModel)
+                if (result.busy) AuthStatusBanner(localized("Atualizando portfólio…"), loading = true)
+                result.error?.let {
+                    val message = when (it) {
+                        MobileAuthErrorCode.INVALID_INPUT -> localized("Revise a categoria, a descrição e o tamanho da imagem.")
+                        MobileAuthErrorCode.CONFLICT -> localized("O portfólio chegou ao limite ou foi alterado. Atualize a lista.")
+                        else -> it.accountActionMessage(localized("Não foi possível atualizar o portfólio."))
+                    }
+                    AuthStatusBanner(message, loading = false, error = true)
+                }
+                result.message?.let { AuthStatusBanner(it, loading = false) }
+                LazyColumn(
+                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (result.items.isEmpty()) item { EmptyMessage(localized("Nenhuma imagem no seu portfólio.")) }
+                    items(result.items, key = { it.id }) { item ->
+                        PortfolioItemCard(item, enabled = !result.busy) { viewModel.removePortfolioItem(item.id) }
+                    }
+                    if (publishedSlug != null) item {
+                        Column(Modifier.fillMaxWidth()) {
+                            PortfolioReviews(
+                                publicReviews?.takeIf { it.slug == publishedSlug },
+                                onRetry = { viewModel.loadReviews(publishedSlug) },
+                                showRating = true
+                            )
                         }
                     }
                 }
@@ -1811,53 +2569,44 @@ private fun PortfolioScreen(viewModel: LensClickViewModel, onNavigate: (Screen) 
         }
     }
 
-    uploadDialogUri?.let { uri ->
-        val upload = readPortfolioUpload(context, uri)
-        if (upload == null) {
-            uploadDialogUri = null
-        } else {
-            PortfolioMetadataDialog(
-                caption = "",
-                altText = "",
-                category = "portrait",
-                title = "Adicionar Imagem",
-                onDismiss = { uploadDialogUri = null },
-                onConfirm = { altText, caption, category ->
-                    viewModel.addPortfolioImage(upload.bytes, upload.contentType, altText, caption, category)
-                    uploadDialogUri = null
-                }
-            )
-        }
+    upload?.let { bytes ->
+        PortfolioMetadataDialog(
+            caption = "",
+            altText = "",
+            category = "portrait",
+            title = localized("Adicionar Imagem"),
+            onDismiss = { upload = null },
+            onConfirm = { altText, caption, category ->
+                viewModel.addPortfolioImage(bytes, "image/jpeg", altText, caption, category)
+                upload = null
+            }
+        )
     }
 }
 
 @Composable
-private fun PortfolioItemCard(item: PortfolioItem, allItems: List<PortfolioItem>, isFirst: Boolean, viewModel: LensClickViewModel) {
+private fun PortfolioItemCard(item: PortfolioItem, enabled: Boolean, onRemove: () -> Unit) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(16.dp)).padding(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             BrandPhoto(Modifier.size(70.dp))
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(item.caption.ifBlank { item.altText.ifBlank { "Imagem do portfólio" } }, color = Ink, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                Text("Categoria: ${item.category}", color = Muted, fontSize = 12.sp)
-                if (item.isCover) Text("★ Capa", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(item.caption.ifBlank { item.altText.ifBlank { localized("Imagem do portfólio") } }, color = Ink, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text(localized("Categoria: {0}", item.category), color = Muted, fontSize = 12.sp)
+                if (item.isCover) Text(localized("★ Capa"), color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
-            TextButton(onClick = { viewModel.removePortfolioItem(item.id) }) { Text("Excluir", color = MaterialTheme.colorScheme.error) }
+            TextButton(onClick = onRemove, enabled = enabled) { Text(localized("Excluir"), color = MaterialTheme.colorScheme.error) }
         }
     }
 }
 
-private class PortfolioUpload(val bytes: ByteArray, val contentType: String)
-
-private fun readPortfolioUpload(context: Context, uri: Uri): PortfolioUpload? {
+private fun readPortfolioUpload(context: Context, uri: Uri): ByteArray? {
     return try {
         val resolver = context.contentResolver
-        val type = resolver.getType(uri) ?: "image/jpeg"
         val bitmap = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) } ?: return null
         val scaled = scalePortfolioBitmap(bitmap, 1200)
         val out = ByteArrayOutputStream()
-        scaled.compress(Bitmap.CompressFormat.JPEG, 80, out)
-        PortfolioUpload(out.toByteArray(), type)
+        if (scaled.compress(Bitmap.CompressFormat.JPEG, 80, out)) out.toByteArray() else null
     } catch (_: Exception) {
         null
     }
@@ -1870,7 +2619,7 @@ private fun scalePortfolioBitmap(bitmap: Bitmap, maxDim: Int): Bitmap {
     val ratio = w.toFloat() / h.toFloat()
     val newW = if (w > h) maxDim else (maxDim * ratio).toInt()
     val newH = if (w > h) (maxDim / ratio).toInt() else maxDim
-    return Bitmap.createScaledBitmap(bitmap, newW, newH, true)
+    return Bitmap.createScaledBitmap(bitmap, newW.coerceAtLeast(1), newH.coerceAtLeast(1), true)
 }
 
 @Composable
@@ -1890,15 +2639,17 @@ private fun PortfolioMetadataDialog(
         title = { Text(title, color = Ink, fontWeight = FontWeight.Bold) },
         text = {
             Column {
-                LensField("Legenda", c, { c = it })
+                LensField(localized("Legenda"), c, { c = it })
                 Spacer(Modifier.height(10.dp))
-                LensField("Texto Alternativo (Alt)", a, { a = it })
+                LensField(localized("Texto Alternativo (mín. 3 caracteres)"), a, { a = it })
                 Spacer(Modifier.height(10.dp))
-                LensField("Categoria", cat, { cat = it })
+                LensField(localized("Categoria"), cat, { cat = it })
             }
         },
-        confirmButton = { Button(onClick = { onConfirm(a, c, cat) }) { Text("Confirmar") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
+        confirmButton = {
+            Button(onClick = { onConfirm(a.trim(), c.trim(), cat.trim()) }, enabled = a.trim().length >= 3) { Text(localized("Confirmar")) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(localized("Cancelar")) } },
         containerColor = SurfaceHigh
     )
 }
@@ -1913,7 +2664,7 @@ private fun QrCodeImage(content: String) {
     if (bitmap != null) {
         Image(
             bitmap = bitmap.asImageBitmap(),
-            contentDescription = "QR Code para configurar o aplicativo autenticador",
+            contentDescription = localized("QR Code para configurar o aplicativo autenticador"),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(220.dp)
@@ -1922,7 +2673,7 @@ private fun QrCodeImage(content: String) {
             contentScale = ContentScale.Fit
         )
     } else {
-        Text("Não foi possível gerar o QR Code. Use a chave manual abaixo.", color = Muted, fontSize = 12.sp)
+        Text(localized("Não foi possível gerar o QR Code. Use a chave manual abaixo."), color = Muted, fontSize = 12.sp)
     }
 }
 
@@ -1940,28 +2691,28 @@ private fun TwoFactorEnrollmentDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Ativar verificação em duas etapas", color = Ink, fontWeight = FontWeight.Bold) },
+        title = { Text(localized("Ativar verificação em duas etapas"), color = Ink, fontWeight = FontWeight.Bold) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 when {
-                    loading -> AuthStatusBanner("Preparando o autenticador...", loading = true)
-                    ready == null -> AuthStatusBanner("Não foi possível iniciar a configuração.", loading = false, error = true)
+                    loading -> AuthStatusBanner(localized("Preparando o autenticador..."), loading = true)
+                    ready == null -> AuthStatusBanner(localized("Não foi possível iniciar a configuração."), loading = false, error = true)
                     else -> {
-                        Text("Escaneie o QR Code com seu aplicativo autenticador.", color = Muted, fontSize = 12.sp)
+                        Text(localized("Escaneie o QR Code com seu aplicativo autenticador."), color = Muted, fontSize = 12.sp)
                         QrCodeImage(ready.setup.otpauthUrl)
-                        Text("Chave para configuração manual", color = Muted, fontSize = 12.sp)
+                        Text(localized("Chave para configuração manual"), color = Muted, fontSize = 12.sp)
                         Text(ready.setup.secret, color = Ink, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.height(12.dp))
-                        Text("Guarde os códigos de recuperação em um local seguro.", color = Muted, fontSize = 12.sp)
+                        Text(localized("Guarde os códigos de recuperação em um local seguro."), color = Muted, fontSize = 12.sp)
                         ready.setup.recoveryCodes.forEach { recoveryCode ->
                             Text(recoveryCode, color = Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         }
                         Spacer(Modifier.height(12.dp))
-                        LensField("Código de 6 dígitos", code, { entered ->
+                        LensField(localized("Código de 6 dígitos"), code, { entered ->
                             code = entered.filter { it in '0'..'9' }.take(6)
                         }, KeyboardType.Number)
                         if (ready.verifying) {
-                            AuthStatusBanner("Verificando o código...", loading = true)
+                            AuthStatusBanner(localized("Verificando o código..."), loading = true)
                         } else if (ready.error != null) {
                             AuthStatusBanner(ready.error.twoFactorMessage(), loading = false, error = true)
                         }
@@ -1971,7 +2722,7 @@ private fun TwoFactorEnrollmentDialog(
         },
         confirmButton = {
             if (state == TwoFactorEnrollmentState.Error) {
-                Button(onClick = onRetry) { Text("Tentar novamente") }
+                Button(onClick = onRetry) { Text(localized("Tentar novamente")) }
             } else if (ready != null) {
                 Button(
                     onClick = {
@@ -1979,43 +2730,36 @@ private fun TwoFactorEnrollmentDialog(
                         code = ""
                     },
                     enabled = code.length == 6 && !busy
-                ) { Text("Ativar 2FA") }
+                ) { Text(localized("Ativar 2FA")) }
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text("Cancelar") } },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text(localized("Cancelar")) } },
         containerColor = SurfaceHigh
     )
 }
 
 @Composable
 private fun AccountScreen(
-    viewModel: LensClickViewModel,
     user: User?,
     authentication: AuthenticationState,
     canUseProfessionalMode: Boolean,
     onNavigate: (Screen) -> Unit,
+    onLogin: () -> Unit,
     onProfessionalMode: () -> Unit,
     onLogout: () -> Unit
 ) = AppPage(Screen.Account, onNavigate) {
-    var selectedAction by rememberSaveable { mutableStateOf<String?>(null) }
-    val twoFactorStatus by viewModel.twoFactorStatus.collectAsStateWithLifecycle()
-    val twoFactorEnrollment by viewModel.twoFactorEnrollment.collectAsStateWithLifecycle()
-
-    var exportDialogOpen by rememberSaveable { mutableStateOf(false) }
-    var exportDataJson by rememberSaveable { mutableStateOf<String?>(null) }
-    var deleteDialogOpen by rememberSaveable { mutableStateOf(false) }
-    var deletePassword by remember { mutableStateOf("") }
-    var accountErrorMsg by rememberSaveable { mutableStateOf<String?>(null) }
-
-    var disable2FaOpen by rememberSaveable { mutableStateOf(false) }
+    if (user == null) {
+        GuestTabSignIn(localized("Seu perfil"), localized("Entre na sua conta para acessar seus dados e configurações."), onLogin)
+        return@AppPage
+    }
 
     val actions = listOf(
-        "Meus dados" to Icons.Default.Person,
-        "Configurações" to Icons.Default.Settings,
-        "Segurança (2FA)" to Icons.Default.Lock,
-        "Notificações" to Icons.Default.Email,
-        "Ajuda e suporte" to Icons.AutoMirrored.Filled.List,
-        "Sobre o Lens Click" to Icons.Default.Info
+        Triple(localized("Meus dados"), Icons.Default.Person, Screen.AccountData),
+        Triple(localized("Configurações"), Icons.Default.Settings, Screen.Settings),
+        Triple(localized("Segurança (2FA)"), Icons.Default.Lock, Screen.AccountSecurity),
+        Triple(localized("Notificações"), Icons.Default.Email, Screen.Notifications),
+        Triple(localized("Ajuda e suporte"), Icons.AutoMirrored.Filled.List, Screen.Support),
+        Triple(localized("Sobre o Lens Click"), Icons.Default.Info, Screen.About)
     )
     val loggingOut = authentication is AuthenticationState.Loading
 
@@ -2023,37 +2767,33 @@ private fun AccountScreen(
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             Icon(
                 Icons.Default.Settings,
-                contentDescription = "Configurações",
+                contentDescription = localized("Configurações"),
                 tint = Ink,
                 modifier = Modifier
                     .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                     .clip(CircleShape)
-                    .clickable { selectedAction = "Configurações" }
+                    .clickable { onNavigate(Screen.Settings) }
                     .semantics { role = Role.Button }
                     .padding(12.dp)
             )
         }
-        if (user == null) {
-            AccountEmptyState()
-        } else {
-            Avatar(initialsForDisplay(user.name), Modifier.size(86.dp))
-            Spacer(Modifier.height(10.dp))
-            Text(user.name, color = Ink, style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
-            Text(user.email, color = Muted, fontSize = 13.sp)
-            Text(if (canUseProfessionalMode) "Modo cliente • conta de fotógrafo" else "Conta de cliente", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
-            Spacer(Modifier.height(22.dp))
-        }
+        Avatar(initialsForDisplay(user.name), Modifier.size(86.dp))
+        Spacer(Modifier.height(10.dp))
+        Text(user.name, color = Ink, style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
+        Text(user.email, color = Muted, fontSize = 13.sp)
+        Text(if (canUseProfessionalMode) localized("Modo cliente • conta de fotógrafo") else localized("Conta de cliente"), color = Accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
+        Spacer(Modifier.height(22.dp))
         if (canUseProfessionalMode) {
-            OutlinedButton(onClick = onProfessionalMode, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, FieldBorder)) { Text("Voltar ao modo fotógrafo", color = Ink, fontWeight = FontWeight.SemiBold) }
+            OutlinedButton(onClick = onProfessionalMode, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, FieldBorder)) { Text(localized("Voltar ao modo fotógrafo"), color = Ink, fontWeight = FontWeight.SemiBold) }
             Spacer(Modifier.height(14.dp))
         }
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(12.dp))) {
-            actions.forEach { (label, icon) ->
+            actions.forEach { (label, icon, destination) ->
                 Row(
                     Modifier
                         .fillMaxWidth()
                         .sizeIn(minHeight = 56.dp)
-                        .clickable { selectedAction = label }
+                        .clickable(role = Role.Button) { onNavigate(destination) }
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(14.dp)
@@ -2070,119 +2810,143 @@ private fun AccountScreen(
         Spacer(Modifier.height(8.dp))
     }
 
-    selectedAction?.let { action ->
-        when (action) {
-            "Meus dados" -> {
-                AlertDialog(
-                    onDismissRequest = { selectedAction = null },
-                    title = { Text("Meus Dados (LGPD)", color = Ink, fontWeight = FontWeight.Bold) },
-                    text = {
-                        Column {
-                            Text("Gerencie seus dados e privacidade de acordo com a LGPD.", color = Muted, fontSize = 12.sp)
-                            Spacer(Modifier.height(14.dp))
-                            PrimaryButton("Exportar meus dados", {
-                                viewModel.exportAccountData(
-                                    onSuccess = { rawJson ->
-                                        exportDataJson = rawJson
-                                        exportDialogOpen = true
-                                    },
-                                    onError = { err -> accountErrorMsg = err }
-                                )
-                            })
-                            Spacer(Modifier.height(10.dp))
-                            OutlinedButton(
-                                onClick = { deleteDialogOpen = true },
-                                modifier = Modifier.fillMaxWidth().height(50.dp),
-                                shape = RoundedCornerShape(16.dp),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
-                            ) { Text("Excluir minha conta", color = MaterialTheme.colorScheme.error) }
-                        }
-                    },
-                    confirmButton = { TextButton(onClick = { selectedAction = null }) { Text("Fechar") } },
-                    containerColor = SurfaceHigh
-                )
-            }
-            "Segurança (2FA)", "Segurança" -> {
-                val status = twoFactorStatus
-                AlertDialog(
-                    onDismissRequest = { selectedAction = null },
-                    title = { Text("Segurança & 2FA", color = Ink, fontWeight = FontWeight.Bold) },
-                    text = {
-                        Column {
-                            if (status == null) {
-                                Text("Status da verificação em duas etapas indisponível.", color = Muted, fontSize = 12.sp)
-                                TextButton(onClick = viewModel::loadTwoFactorStatus) { Text("Consultar status") }
-                            } else if (status.enabled) {
-                                FilterChip("2FA Ativado", selected = true)
-                                Spacer(Modifier.height(16.dp))
-                                OutlinedButton(
-                                    onClick = {
-                                        selectedAction = null
-                                        disable2FaOpen = true
-                                    },
-                                    modifier = Modifier.fillMaxWidth()
-                                ) { Text("Desativar 2FA", color = MaterialTheme.colorScheme.error) }
-                            } else {
-                                FilterChip("2FA Desativado", selected = false)
-                                Spacer(Modifier.height(16.dp))
-                                PrimaryButton("Configurar 2FA (TOTP)", {
-                                    selectedAction = null
-                                    viewModel.setupTwoFactor()
-                                })
-                            }
-                        }
-                    },
-                    confirmButton = { TextButton(onClick = { selectedAction = null }) { Text("Fechar") } },
-                    containerColor = SurfaceHigh
-                )
-            }
-            else -> {
-                ActionDialog(action, "Esta área foi conectada aos serviços e configurações da sua conta.") { selectedAction = null }
+}
+
+@Composable
+private fun AccountDataScreen(viewModel: LensClickViewModel, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var pendingJson by remember { mutableStateOf<String?>(null) }
+    var choosingFile by rememberSaveable { mutableStateOf(false) }
+    var exportBusy by remember { mutableStateOf(false) }
+    var exportError by remember { mutableStateOf<String?>(null) }
+    var exportSaved by rememberSaveable { mutableStateOf(false) }
+    var deleteDialogOpen by rememberSaveable { mutableStateOf(false) }
+
+    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        choosingFile = false
+        val json = pendingJson
+        pendingJson = null
+        if (uri != null) {
+            exportBusy = true
+            scope.launch {
+                try {
+                    val data = json ?: viewModel.fetchAccountExport()
+                    withContext(Dispatchers.IO) {
+                        val output = context.contentResolver.openOutputStream(uri)
+                            ?: throw IOException("Output stream unavailable")
+                        output.bufferedWriter(Charsets.UTF_8).use { it.write(data) }
+                    }
+                    exportSaved = true
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: Exception) {
+                    exportError = failure.remoteErrorCode().accountActionMessage(localized("Não foi possível salvar o arquivo."))
+                } finally {
+                    exportBusy = false
+                }
             }
         }
     }
 
-    if (exportDialogOpen && exportDataJson != null) {
-        AlertDialog(
-            onDismissRequest = { exportDialogOpen = false },
-            title = { Text("Dados Exportados (JSON)", color = Ink, fontWeight = FontWeight.Bold) },
-            text = {
-                Column(Modifier.verticalScroll(rememberScrollState())) {
-                    Text(exportDataJson!!, color = Ink, fontSize = 12.sp)
+    SettingsPage(localized("Meus Dados (LGPD)"), onBack) {
+        Text(localized("Exporte uma cópia dos seus dados ou gerencie a exclusão da conta."), color = Muted)
+        WebSettingsLinks(localized("Editar dados e foto no site") to "/perfil")
+        PrimaryButton(localized("Exportar meus dados"), {
+            exportBusy = true
+            exportSaved = false
+            exportError = null
+            scope.launch {
+                try {
+                    pendingJson = viewModel.fetchAccountExport()
+                    choosingFile = true
+                    filePicker.launch("lensclick-dados.json")
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: Exception) {
+                    choosingFile = false
+                    pendingJson = null
+                    exportError = failure.remoteErrorCode().accountActionMessage(localized("Não foi possível exportar os dados."))
+                } finally {
+                    exportBusy = false
                 }
-            },
-            confirmButton = { TextButton(onClick = { exportDialogOpen = false }) { Text("OK") } },
-            containerColor = SurfaceHigh
-        )
+            }
+        }, enabled = !exportBusy && !choosingFile)
+        OutlinedButton(
+            onClick = { deleteDialogOpen = true },
+            enabled = !exportBusy && !choosingFile,
+            modifier = Modifier.fillMaxWidth().height(50.dp),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+        ) { Text(localized("Excluir minha conta"), color = MaterialTheme.colorScheme.error) }
+        if (exportBusy) AuthStatusBanner(localized("Exportando seus dados…"), loading = true)
+        if (exportSaved) AuthStatusBanner(localized("Cópia dos seus dados salva em JSON."), loading = false)
+        exportError?.let { AuthStatusBanner(it, loading = false, error = true) }
     }
 
     if (deleteDialogOpen) {
+        var password by remember { mutableStateOf("") }
+        var busy by remember { mutableStateOf(false) }
+        var error by remember { mutableStateOf<String?>(null) }
         AlertDialog(
-            onDismissRequest = { deleteDialogOpen = false },
-            title = { Text("Excluir Conta Permanentemente", color = Ink, fontWeight = FontWeight.Bold) },
+            onDismissRequest = { if (!busy) deleteDialogOpen = false },
+            title = { Text(localized("Excluir Conta Permanentemente"), color = Ink, fontWeight = FontWeight.Bold) },
             text = {
-                Column {
-                    Text("Esta ação é irreversível. Digite sua senha atual para confirmar a exclusão da conta:", color = Muted, fontSize = 12.sp)
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Text(localized("Esta ação é irreversível. Digite sua senha atual para confirmar a exclusão da conta."), color = Muted, fontSize = 12.sp)
                     Spacer(Modifier.height(12.dp))
-                    LensField("Senha atual", deletePassword, { deletePassword = it }, password = true)
+                    LensField(localized("Senha atual"), password, { password = it }, password = true)
+                    if (busy) AuthStatusBanner(localized("Excluindo conta…"), loading = true)
+                    error?.let { AuthStatusBanner(it, loading = false, error = true) }
                 }
             },
             confirmButton = {
-                Button(
-                    onClick = {
-                        viewModel.deleteAccount(
-                            password = deletePassword,
-                            onSuccess = { deleteDialogOpen = false },
-                            onError = { err -> accountErrorMsg = err }
-                        )
-                    },
-                    colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.error, Color.White),
-                    enabled = deletePassword.isNotBlank()
-                ) { Text("Excluir Permanentemente") }
+                Button(onClick = {
+                    busy = true
+                    error = null
+                    viewModel.deleteAccount(
+                        password,
+                        onSuccess = { deleteDialogOpen = false },
+                        onError = { error = it; busy = false }
+                    )
+                }, colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.error, Color.White),
+                    enabled = password.isNotBlank() && !busy
+                ) { Text(localized("Excluir Permanentemente")) }
             },
-            dismissButton = { TextButton(onClick = { deleteDialogOpen = false }) { Text("Cancelar") } },
+            dismissButton = { TextButton(onClick = { deleteDialogOpen = false }, enabled = !busy) { Text(localized("Cancelar")) } },
             containerColor = SurfaceHigh
         )
+    }
+}
+
+@Composable
+private fun AccountSecurityScreen(viewModel: LensClickViewModel, onBack: () -> Unit) {
+    val status by viewModel.twoFactorStatus.collectAsStateWithLifecycle()
+    val loading by viewModel.twoFactorStatusLoading.collectAsStateWithLifecycle()
+    val twoFactorEnrollment by viewModel.twoFactorEnrollment.collectAsStateWithLifecycle()
+    var disable2FaOpen by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) { viewModel.loadTwoFactorStatus() }
+
+    SettingsPage(localized("Segurança & 2FA"), onBack) {
+        Text(localized("Verificação em duas etapas"), color = Muted, style = MaterialTheme.typography.titleMedium)
+        when {
+            loading -> AuthStatusBanner(localized("Consultando a verificação…"), loading = true)
+            status == null -> {
+                AuthStatusBanner(localized("Não foi possível consultar o status da verificação."), loading = false, error = true)
+                TextButton(onClick = viewModel::loadTwoFactorStatus) { Text(localized("Consultar status")) }
+            }
+            status?.enabled == true -> {
+                FilterChip(localized("2FA Ativado"), selected = true)
+                OutlinedButton(
+                    onClick = { disable2FaOpen = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(localized("Desativar 2FA"), color = MaterialTheme.colorScheme.error) }
+            }
+            else -> {
+                FilterChip(localized("2FA Desativado"))
+                PrimaryButton(localized("Configurar 2FA (TOTP)"), viewModel::setupTwoFactor)
+            }
+        }
     }
 
     if (twoFactorEnrollment != TwoFactorEnrollmentState.Idle) {
@@ -2201,16 +2965,16 @@ private fun AccountScreen(
         var errorMessage by remember { mutableStateOf<String?>(null) }
         AlertDialog(
             onDismissRequest = { if (!submitting) disable2FaOpen = false },
-            title = { Text("Desativar 2FA", color = Ink, fontWeight = FontWeight.Bold) },
+            title = { Text(localized("Desativar 2FA"), color = Ink, fontWeight = FontWeight.Bold) },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
-                    Text("Informe sua senha atual e um código do autenticador ou de recuperação. Ao desativar o 2FA, todas as sessões serão encerradas.", color = Muted, fontSize = 12.sp)
+                    Text(localized("Informe sua senha atual e um código do autenticador ou de recuperação. Ao desativar o 2FA, todas as sessões serão encerradas."), color = Muted, fontSize = 12.sp)
                     Spacer(Modifier.height(12.dp))
-                    LensField("Senha atual", password, { password = it }, password = true)
+                    LensField(localized("Senha atual"), password, { password = it }, password = true)
                     Spacer(Modifier.height(12.dp))
-                    LensField("Código TOTP / Recuperação", code, { code = it }, KeyboardType.Ascii)
+                    LensField(localized("Código TOTP / Recuperação"), code, { code = it }, KeyboardType.Ascii)
                     if (submitting) {
-                        AuthStatusBanner("Desativando a verificação...", loading = true)
+                        AuthStatusBanner(localized("Desativando a verificação..."), loading = true)
                     } else {
                         errorMessage?.let { AuthStatusBanner(it, loading = false, error = true) }
                     }
@@ -2231,40 +2995,24 @@ private fun AccountScreen(
                     },
                     colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.error, Color.White),
                     enabled = password.isNotBlank() && code.isNotBlank() && !submitting
-                ) { Text("Confirmar Desativação") }
+                ) { Text(localized("Confirmar Desativação")) }
             },
-            dismissButton = { TextButton(onClick = { disable2FaOpen = false }, enabled = !submitting) { Text("Cancelar") } },
+            dismissButton = { TextButton(onClick = { disable2FaOpen = false }, enabled = !submitting) { Text(localized("Cancelar")) } },
             containerColor = SurfaceHigh
         )
     }
 
-    accountErrorMsg?.let { msg ->
-        ActionDialog("Aviso da Conta", msg) { accountErrorMsg = null }
-    }
 }
 
 @Composable
-private fun AccountEmptyState() {
+private fun GuestTabSignIn(title: String, description: String, onLogin: () -> Unit, onDemo: (() -> Unit)? = null) {
     Column(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(SurfaceHigh)
-            .border(1.dp, Line, RoundedCornerShape(18.dp))
-            .padding(24.dp)
-            .semantics {
-                stateDescription = "Conta sem dados carregados"
-            },
-        horizontalAlignment = Alignment.CenterHorizontally
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(22.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("Sua conta", color = Ink, fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "Não foi possível carregar seus dados agora. Tente novamente entrando na conta.",
-            color = Muted,
-            fontSize = 12.sp,
-            lineHeight = 18.sp,
-            textAlign = TextAlign.Center
-        )
+        PageTitle(title)
+        Text(description, color = Muted, style = MaterialTheme.typography.bodyLarge)
+        PrimaryButton(localized("Entrar na conta"), onLogin)
+        onDemo?.let { TextButton(onClick = it) { Text(localized("Orçamentos de demonstração")) } }
     }
 }

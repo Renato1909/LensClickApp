@@ -5,9 +5,9 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const androidAssets = fileURLToPath(new URL('../app/src/main/res/drawable-nodpi/', import.meta.url));
-const webDirectory = process.argv[2];
-if (!webDirectory || process.argv.length !== 3) {
-  console.error('Uso: node tools/seed-feira-local.mjs /caminho/para/LensClick-main');
+const [webDirectory, persistFlag, persistDirectory, ...extra] = process.argv.slice(2);
+if (!webDirectory || extra.length || (persistFlag && (persistFlag !== '--persist-to' || !persistDirectory))) {
+  console.error('Uso: node tools/seed-feira-local.mjs /caminho/para/LensClick-main [--persist-to /caminho/dos/dados-locais]');
   process.exit(1);
 }
 const web = resolve(webDirectory);
@@ -22,7 +22,8 @@ const photographers = JSON.parse(readFileSync(
 ));
 
 function localWrangler(...args) {
-  const result = spawnSync(process.execPath, [wrangler, ...args, '--local'], {
+  const persistence = persistDirectory ? ['--persist-to', resolve(persistDirectory)] : [];
+  const result = spawnSync(process.execPath, [wrangler, ...args, '--local', ...persistence], {
     cwd: web,
     env: { ...process.env, WRANGLER_SEND_METRICS: 'false' },
     stdio: 'inherit'

@@ -1,12 +1,14 @@
 package com.lensclick.app
 
 import android.app.Application
+import com.lensclick.app.ui.AppLanguage
 import com.lensclick.app.data.local.LensClickDatabase
 import com.lensclick.app.data.local.LensClickRepository
 import com.lensclick.app.data.remote.ApiEnvironment
 import com.lensclick.app.data.remote.HttpAccountGateway
 import com.lensclick.app.data.remote.HttpBudgetRequestsGateway
 import com.lensclick.app.data.remote.HttpConversationsGateway
+import com.lensclick.app.data.remote.HttpEngagementGateway
 import com.lensclick.app.data.remote.HttpFavoritesGateway
 import com.lensclick.app.data.remote.HttpPortfolioGateway
 import com.lensclick.app.data.remote.HttpProfessionalProfileGateway
@@ -21,6 +23,7 @@ import com.lensclick.app.data.remote.auth.UrlConnectionTransport
 import com.lensclick.app.domain.AccountGateway
 import com.lensclick.app.domain.BudgetRequestsGateway
 import com.lensclick.app.domain.ConversationsGateway
+import com.lensclick.app.domain.EngagementGateway
 import com.lensclick.app.domain.FavoritesGateway
 import com.lensclick.app.domain.PortfolioGateway
 import com.lensclick.app.domain.ProfessionalProfileGateway
@@ -28,6 +31,11 @@ import com.lensclick.app.domain.ReviewsGateway
 import com.lensclick.app.domain.TwoFactorGateway
 
 class LensClickApplication : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        AppLanguage.initialize(this)
+    }
+
     val repository: LensClickRepository by lazy {
         LensClickRepository(LensClickDatabase.getInstance(this).lensClickDao())
     }
@@ -66,6 +74,10 @@ class LensClickApplication : Application() {
 
     val reviewsGateway: ReviewsGateway by lazy {
         HttpReviewsGateway(httpTransport, sessionStore)
+    }
+
+    val engagementGateway: EngagementGateway by lazy {
+        HttpEngagementGateway(httpTransport, sessionStore)
     }
 
     val accountGateway: AccountGateway by lazy {

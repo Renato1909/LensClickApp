@@ -4,6 +4,12 @@ import androidx.lifecycle.ViewModelStore
 import com.lensclick.app.data.local.FakeLensClickDao
 import com.lensclick.app.data.local.LensClickRepository
 import com.lensclick.app.data.local.User
+import com.lensclick.app.data.remote.HttpAccountGateway
+import com.lensclick.app.data.remote.HttpProfessionalProfileGateway
+import com.lensclick.app.data.remote.auth.HttpMobileAuthApi
+import com.lensclick.app.data.remote.auth.HttpRequest
+import com.lensclick.app.data.remote.auth.HttpResponse
+import com.lensclick.app.data.remote.auth.HttpTransport
 import com.lensclick.app.data.remote.auth.InMemorySessionStore
 import com.lensclick.app.data.remote.auth.MobileAuthApi
 import com.lensclick.app.data.remote.auth.MobileAuthErrorCode
@@ -11,7 +17,6 @@ import com.lensclick.app.data.remote.auth.MobileAuthException
 import com.lensclick.app.data.remote.auth.MobileAuthRepository
 import com.lensclick.app.data.remote.auth.MobileAuthRequest
 import com.lensclick.app.data.remote.auth.MobileLoginResult
-import com.lensclick.app.data.remote.auth.MobilePhotographerRegisterRequest
 import com.lensclick.app.data.remote.auth.MobileRegisterRequest
 import com.lensclick.app.domain.AccountDataExport
 import com.lensclick.app.domain.AccountGateway
@@ -23,6 +28,8 @@ import com.lensclick.app.domain.ConversationsGateway
 import com.lensclick.app.domain.Message
 import com.lensclick.app.domain.MobileSession
 import com.lensclick.app.domain.MobileUser
+import com.lensclick.app.domain.ProfessionalProfile
+import com.lensclick.app.domain.PublicPhotographer
 import com.lensclick.app.domain.PublicPhotographerNotFoundException
 import com.lensclick.app.domain.PublicPhotographerPage
 import com.lensclick.app.domain.PublicPhotographerProfile
@@ -42,6 +49,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -198,6 +206,66 @@ class LensClickViewModelTest {
     }
 
     @Test
+    fun photographerRegistrationRecoversFromDraftFailureWithoutRegisteringAgain() = runTest(dispatcher) {
+        val session = InMemorySessionStore()
+        val requests = mutableListOf<HttpRequest>()
+        val transport = object : HttpTransport {
+            var role = "client"
+            var saves = 0
+            fun account() = JSONObject().put("id", 21).put("name", "Pessoa de teste")
+                .put("email", "foto@example.com").put("role", role)
+                .put("age", 34).put("gender", "other").put("profilePic", "/api/profile-picture/21?v=1")
+
+            override suspend fun execute(request: HttpRequest): HttpResponse {
+                requests.add(request)
+                return when (request.method to request.path) {
+                    "POST" to "/api/mobile/auth/register" -> HttpResponse(201, body = JSONObject()
+                        .put("user", account())
+                        .put("session", JSONObject().put("accessToken", "session").put("expiresAt", "2099-01-01T00:00:00Z"))
+                        .toString())
+                    "GET" to "/api/mobile/auth/me" -> HttpResponse(200, body = JSONObject().put("user", account()).toString())
+                    "PUT" to "/api/profile" -> {
+                        role = "photographer"
+                        HttpResponse(200, body = JSONObject().put("user", account()).toString())
+                    }
+                    "GET" to "/api/account/professional-profile" -> HttpResponse(200, body = """{"profile":{"slug":"foto-21"}}""")
+                    "PUT" to "/api/account/professional-profile" -> {
+                        saves++
+                        if (saves == 1) HttpResponse(503)
+                        else HttpResponse(200, body = """{"profile":{"slug":"foto-21"}}""")
+                    }
+                    else -> error("Unexpected test request ${request.method} ${request.path}")
+                }
+            }
+        }
+        viewModel = LensClickViewModel(
+            LensClickRepository(dao),
+            mobileAuthRepository = MobileAuthRepository(HttpMobileAuthApi(transport), session),
+            professionalProfileGateway = HttpProfessionalProfileGateway(transport, session),
+            accountGateway = HttpAccountGateway(transport, session)
+        )
+        val draft = ProfessionalProfile(bio = "Retratos e eventos", specialties = listOf("portrait"), city = "São Paulo", startingPriceCents = 120050)
+        var completed: Boolean? = null
+        viewModel.registerPhotographer("Pessoa de teste", "foto@example.com", "Senha123", "11900000000", draft) { completed = it }
+        advanceUntilIdle()
+        assertEquals(false, completed)
+        assertTrue(viewModel.finishingPhotographerRegistration.value)
+        assertNull(viewModel.currentUser.value)
+        viewModel.registerPhotographer("Pessoa de teste", "foto@example.com", "", "11900000000", draft) { completed = it }
+        advanceUntilIdle()
+
+        assertEquals(true, completed)
+        assertEquals("photographer", viewModel.currentUser.value?.role)
+        assertEquals(1, requests.count { it.path == "/api/mobile/auth/register" })
+        val update = JSONObject(requests.single { it.method == "PUT" && it.path == "/api/profile" }.body!!)
+        assertEquals(34, update.getInt("age"))
+        assertEquals("/api/profile-picture/21?v=1", update.getString("profilePic"))
+        val profile = JSONObject(requests.last { it.method == "PUT" }.body!!)
+        assertEquals("portrait", profile.getJSONArray("specialties").getString(0))
+        assertEquals(120050, profile.getInt("startingPriceCents"))
+    }
+
+    @Test
     fun conversationsAndMessagesIntegration() = runTest(dispatcher) {
         val conversation = Conversation(10, "Fotógrafo", "Olá", "2026-11-15", 1)
         val message = Message(100, 1, "Oi!", "2026-11-15", true)
@@ -215,8 +283,8 @@ class LensClickViewModelTest {
 
         viewModel.loadMessages(10)
         advanceUntilIdle()
-        assertEquals(1, viewModel.messages.value.size)
-        assertEquals("Oi!", viewModel.messages.value[0].text)
+        assertEquals(10L, viewModel.chat.value?.conversationId)
+        assertEquals(listOf(message), viewModel.chat.value?.messages)
     }
 
     @Test
@@ -228,29 +296,82 @@ class LensClickViewModelTest {
         val gateway = object : ReviewsGateway {
             override suspend fun getReviews(photographerSlug: String): PublicReviews = reviews
             override suspend fun submitReview(photographerSlug: String, rating: Int, comment: String): Boolean = true
+            override suspend fun requestVerification(photographerSlug: String, message: String) = Unit
+            override suspend fun listReviewRequests() = emptyList<com.lensclick.app.domain.ReviewRequest>()
+            override suspend fun resolveReviewRequest(id: Long, confirm: Boolean) = Unit
         }
         viewModel = LensClickViewModel(LensClickRepository(dao), reviewsGateway = gateway)
         viewModel.loadReviews("fotografo")
         advanceUntilIdle()
-        assertEquals(1, viewModel.publicReviews.value?.summary?.total)
+        assertEquals(1, viewModel.publicReviews.value?.data?.summary?.total)
+    }
+
+    @Test
+    fun photographerRankingKeepsServerOrderAndRetriesTheFailedPage() = runTest(dispatcher) {
+        fun photographer(slug: String, rating: Double?, count: Int) = PublicPhotographer(
+            slug = slug, name = slug, city = "", state = "", specialties = emptyList(),
+            startingPriceCents = null, ratingAverage = rating, reviewCount = count
+        )
+        val requests = mutableListOf<Int>()
+        val gateway = object : PublicPhotographersGateway {
+            override suspend fun list(city: String, specialty: String?, page: Int): PublicPhotographerPage =
+                error("Ranking must use the sorted endpoint")
+
+            override suspend fun listTopRated(page: Int): PublicPhotographerPage {
+                requests += page
+                val photographers = when {
+                    page == 1 -> listOf(
+                        photographer("primeira-colocada", 5.0, 8),
+                        photographer("segundo-colocado", 5.0, 3),
+                        photographer("feira-amostra", 5.0, 1),
+                        photographer(DemoPhotographerSlug, 5.0, 1)
+                    )
+                    page == 2 && requests.count { it == 2 } == 1 -> throw java.io.IOException()
+                    page == 2 -> listOf(
+                        photographer("segundo-colocado", 5.0, 3),
+                        photographer("terceira-colocada", 4.75, 9),
+                        photographer("perfil-sem-nota", null, 0)
+                    )
+                    else -> error("Ranking should stop before the remaining unrated pages")
+                }
+                return PublicPhotographerPage(photographers, page, total = 30, totalPages = 3)
+            }
+        }
+        viewModel = LensClickViewModel(LensClickRepository(dao), publicPhotographers = gateway)
+        val excluded = setOf("feira-amostra")
+        viewModel.loadPhotographerRanking(excluded)
+        advanceUntilIdle()
+        val firstPage = viewModel.photographerRanking.value
+        assertEquals(listOf("primeira-colocada", "segundo-colocado"), firstPage.photographers.map { it.slug })
+        assertEquals(2, firstPage.nextPage)
+
+        viewModel.loadPhotographerRanking(excluded)
+        advanceUntilIdle()
+        assertEquals(firstPage.copy(failed = true), viewModel.photographerRanking.value)
+        viewModel.loadPhotographerRanking(excluded)
+        advanceUntilIdle()
+        val finalPage = viewModel.photographerRanking.value
+        assertEquals(
+            listOf("primeira-colocada", "segundo-colocado", "terceira-colocada"),
+            finalPage.photographers.map { it.slug }
+        )
+        assertNull(finalPage.nextPage)
+        viewModel.loadPhotographerRanking(excluded)
+        advanceUntilIdle()
+        assertEquals(listOf(1, 2, 2), requests)
     }
 
     @Test
     fun accountLgpdExportAndDelete() = runTest(dispatcher) {
         val gateway = object : AccountGateway {
+            override suspend fun enableProfessionalAccount(phone: String): MobileUser = error("Unused")
+            override suspend fun changePassword(currentPassword: String, newPassword: String) = Unit
             override suspend fun exportData(): AccountDataExport = AccountDataExport("""{"user":"Test"}""")
             override suspend fun deleteAccount(password: String, confirmation: String): Boolean = true
         }
         viewModel = LensClickViewModel(LensClickRepository(dao), accountGateway = gateway)
 
-        var exportedJson: String? = null
-        viewModel.exportAccountData(
-            onSuccess = { exportedJson = it },
-            onError = {}
-        )
-        advanceUntilIdle()
-        assertNotNull(exportedJson)
-        assertTrue(exportedJson!!.contains("Test"))
+        assertTrue(viewModel.fetchAccountExport().contains("Test"))
 
         var deleted = false
         viewModel.deleteAccount(
@@ -290,18 +411,6 @@ class LensClickViewModelTest {
                 return MobileSession(
                     user = MobileUser(42, request.name, request.email, null, request.role, true, false),
                     accessToken = "access-token",
-                    expiresAt = "2099-01-01T00:00:00Z"
-                )
-            }
-
-            override suspend fun registerPhotographer(request: MobilePhotographerRegisterRequest): MobileSession {
-                if (status != 200) throw MobileAuthException(
-                    code = if (status == 409) MobileAuthErrorCode.CONFLICT else MobileAuthErrorCode.INVALID_INPUT,
-                    statusCode = status
-                )
-                return MobileSession(
-                    user = MobileUser(99, request.name, request.email, null, request.role, true, false),
-                    accessToken = "pro-access-token",
                     expiresAt = "2099-01-01T00:00:00Z"
                 )
             }

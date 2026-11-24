@@ -4,6 +4,7 @@ import com.lensclick.app.data.remote.auth.HttpTransport
 import com.lensclick.app.data.remote.auth.SessionStore
 import com.lensclick.app.data.remote.auth.ensureHttpSuccess
 import com.lensclick.app.domain.BudgetRequest
+import com.lensclick.app.domain.BudgetEvent
 import com.lensclick.app.domain.BudgetRequestDraft
 import com.lensclick.app.domain.BudgetRequestsGateway
 import com.lensclick.app.domain.Favorite
@@ -54,8 +55,12 @@ class HttpBudgetRequestsGateway(
         ensureHttpSuccess(response, 200)
     }
 
-    override suspend fun cancel(id: Long) {
-        val body = JSONObject().put("action", "cancel").toString()
+    override suspend fun cancel(id: Long) = closeRequest(id, "cancel")
+
+    override suspend fun decline(id: Long) = closeRequest(id, "decline")
+
+    private suspend fun closeRequest(id: Long, action: String) {
+        val body = JSONObject().put("action", action).toString()
         val response = transport.execute(sessionStore.bearerRequest("PUT", "/api/account/budget-requests/$id", body))
         ensureHttpSuccess(response, 200)
     }
@@ -119,7 +124,18 @@ fun parseBudgetRequest(row: JSONObject): BudgetRequest = BudgetRequest(
     counterpartName = row.optString("counterpartName").ifBlank { row.optString("clientName") },
     proposals = row.optJSONArray("proposals")?.let { arr ->
         (0 until arr.length()).map { parseProposal(arr.getJSONObject(it)) }
-    } ?: emptyList()
+    }.orEmpty(),
+    photographerSlug = row.optString("photographerSlug"),
+    photographerName = row.optString("photographerName"),
+    photographerSpecialties = row.optJSONArray("photographerSpecialties")?.let { values ->
+        List(values.length()) { values.getString(it) }
+    }.orEmpty(),
+    history = row.optJSONArray("history")?.let { values ->
+        List(values.length()) {
+            val event = values.getJSONObject(it)
+            BudgetEvent(event.getString("action"), event.getString("createdAt"))
+        }
+    }.orEmpty()
 )
 
 fun parseFavorite(row: JSONObject): Favorite = Favorite(

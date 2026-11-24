@@ -64,7 +64,33 @@ class LensClickNavigationTest {
         rule.onNodeWithContentDescription(
             "Casal caminhando entre convidados em uma cerimônia ao ar livre."
         ).performScrollTo().assertIsDisplayed()
-        rule.onNodeWithText("Solicitar orçamento").assertDoesNotExist()
+        rule.onNodeWithText("Avaliações").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Este perfil de demonstração não tem avaliações de clientes.").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Solicitar orçamento").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Favoritar").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Conversar").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Contratar").performScrollTo().performClick()
+        awaitText("Bem-vindo de volta!")
+    }
+
+    @Test fun demoQuoteTracksBothRolesWithoutAnAccount() {
+        rule.runOnIdle { rule.activity.getSharedPreferences("lensclick_demo_budgets", 0).edit().remove("2").apply() }
+        rule.onNodeWithText("Explorar fotógrafos").performScrollTo().performClick()
+        awaitText("Buscar Fotógrafos")
+        rule.onNodeWithContentDescription("Orçamentos").performClick()
+        rule.onNodeWithText("Orçamentos de demonstração").performClick()
+        awaitText("Os dados são fictícios. As alterações ficam neste aparelho.")
+        rule.onNodeWithText("Rafael Sato", substring = true).performScrollTo().performClick()
+        rule.onNodeWithText("Aprovar orçamento").performScrollTo().performClick()
+        rule.onNodeWithText("Fotógrafo").performScrollTo().performClick()
+        rule.onNodeWithText("Marcar como concluído").performScrollTo().performClick()
+        rule.onNodeWithText("Histórico").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Aprovado · Cliente", substring = true).performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Concluído · Fotógrafo", substring = true).performScrollTo().assertIsDisplayed()
+        rule.onNodeWithContentDescription("Voltar").performClick()
+        rule.onNodeWithText("Cliente").performScrollTo().performClick()
+        rule.onNodeWithText("Rafael Sato", substring = true).performScrollTo().performClick()
+        rule.onNodeWithText("Concluído · Fotógrafo", substring = true).performScrollTo().assertIsDisplayed()
     }
 
     @Test fun guestBudgetsKeepsNavigationAndOffersSignIn() {
@@ -83,6 +109,34 @@ class LensClickNavigationTest {
         backFrom("Bem-vindo de volta!")
         awaitText("Orçamentos e favoritos")
         rule.onNodeWithContentDescription("Orçamentos").assertIsDisplayed().assertIsSelected()
+    }
+
+    @Test fun guestProfileAndOtherTabsKeepTheNavigationCapsule() {
+        rule.onNodeWithText("Explorar fotógrafos").performScrollTo().performClick()
+        awaitText("Buscar Fotógrafos")
+
+        rule.onNodeWithContentDescription("Perfil").performClick()
+        awaitText("Seu perfil")
+        rule.onNodeWithContentDescription("Perfil").assertIsDisplayed().assertIsSelected()
+        rule.onNodeWithText("Configurações").assertDoesNotExist()
+
+        rule.onNodeWithText("Entrar na conta").performClick()
+        awaitText("Bem-vindo de volta!")
+        backFrom("Bem-vindo de volta!")
+        awaitText("Seu perfil")
+        rule.onNodeWithContentDescription("Perfil").assertIsDisplayed().assertIsSelected()
+
+        rule.onNodeWithContentDescription("Mensagens").performClick()
+        awaitText("Mensagens")
+        rule.onNodeWithContentDescription("Mensagens").assertIsDisplayed().assertIsSelected()
+        rule.onNodeWithText("Entrar na conta").assertIsDisplayed()
+
+        rule.onNodeWithContentDescription("Início").performClick()
+        awaitText("Seu momento, seu fotógrafo")
+        rule.onNodeWithContentDescription("Início").assertIsDisplayed().assertIsSelected()
+        rule.onNodeWithContentDescription("Buscar").performClick()
+        awaitText("Buscar Fotógrafos")
+        rule.onNodeWithContentDescription("Buscar").assertIsDisplayed().assertIsSelected()
     }
 
     @Test fun loginStartsSignedOutAndDoesNotUseDemoCredentials() {
