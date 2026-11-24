@@ -1,6 +1,7 @@
 package com.lensclick.app.ui
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -60,6 +61,24 @@ class LensClickNavigationTest {
             "Casal caminhando entre convidados em uma cerimônia ao ar livre."
         ).performScrollTo().assertIsDisplayed()
         rule.onNodeWithText("Solicitar orçamento").assertDoesNotExist()
+    }
+
+    @Test fun guestBudgetsKeepsNavigationAndOffersSignIn() {
+        rule.onNodeWithText("Explorar fotógrafos").performScrollTo().performClick()
+        awaitText("Buscar Fotógrafos")
+        rule.onNodeWithContentDescription("Orçamentos").performClick()
+
+        awaitText("Orçamentos e favoritos")
+        rule.onNodeWithContentDescription("Orçamentos").assertIsDisplayed().assertIsSelected()
+        rule.onNodeWithContentDescription("Buscar").assertIsDisplayed().performClick()
+        awaitText("Buscar Fotógrafos")
+
+        rule.onNodeWithContentDescription("Orçamentos").performClick()
+        rule.onNodeWithText("Entrar na conta").performClick()
+        awaitText("Bem-vindo de volta!")
+        Espresso.pressBack()
+        awaitText("Orçamentos e favoritos")
+        rule.onNodeWithContentDescription("Orçamentos").assertIsDisplayed().assertIsSelected()
     }
 
     @Test fun loginStartsSignedOutAndDoesNotUseDemoCredentials() {

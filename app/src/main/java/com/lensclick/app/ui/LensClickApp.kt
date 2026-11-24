@@ -165,6 +165,7 @@ private const val PhotographerRoute = "Photographer/{slug}"
 private const val QuoteRoute = "Quote/{slug}"
 private const val FairCatalogRoute = "Feira"
 private const val FairProfileRoute = "Feira/{slug}"
+private val GuestBrowsingScreens = setOf(Screen.Search, Screen.Budgets)
 
 @Composable
 fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickViewModel.Factory)) {
@@ -192,14 +193,21 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
     fun resetTo(target: Screen) = resetToRoute(target.name)
 
     fun go(target: Screen) {
+        val guestBrowsing = currentUser == null && target in GuestBrowsingScreens
         if (target in setOf(Screen.Home, Screen.Search, Screen.Budgets, Screen.Conversations, Screen.Account,
                 Screen.ProDashboard, Screen.ProRequests, Screen.ProAgenda, Screen.ProProfile, Screen.ProPortfolio) &&
-                !(target == Screen.Search && currentUser == null)) {
+                !guestBrowsing) {
             resetTo(target)
         } else {
             focusManager.clearFocus()
             keyboardController?.hide()
-            navController.navigate(target.name) { launchSingleTop = true }
+            navController.navigate(target.name) {
+                if (guestBrowsing) {
+                    popUpTo(Screen.Onboarding.name) { saveState = true }
+                    restoreState = true
+                }
+                launchSingleTop = true
+            }
         }
     }
 
@@ -209,13 +217,19 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
             route in setOf(Screen.Onboarding.name, Screen.AccountType.name, Screen.Login.name, Screen.SignUp.name, Screen.PhotographerSignUp.name)
         ) {
             val user = (authentication as AuthenticationState.Authenticated).user
-            resetTo(if (user.role == "photographer") Screen.ProDashboard else Screen.Home)
+            val destination = when {
+                user.role == "photographer" -> Screen.ProDashboard
+                route == Screen.Login.name &&
+                    navController.previousBackStackEntry?.destination?.route == Screen.Budgets.name -> Screen.Budgets
+                else -> Screen.Home
+            }
+            resetTo(destination)
         } else if (authentication is AuthenticationState.Error && route == Screen.Onboarding.name) {
             resetTo(Screen.Login)
         } else if (authentication !is AuthenticationState.Authenticated &&
             authentication !is AuthenticationState.TwoFactorRequired &&
-            Screen.entries.any { it.name == route && it !in setOf(
-                Screen.Onboarding, Screen.AccountType, Screen.Login, Screen.SignUp, Screen.PhotographerSignUp, Screen.Search) }) {
+            Screen.entries.any { it.name == route && it !in GuestBrowsingScreens && it !in setOf(
+                Screen.Onboarding, Screen.AccountType, Screen.Login, Screen.SignUp, Screen.PhotographerSignUp) }) {
             resetTo(Screen.Login)
         }
     }
@@ -315,7 +329,16 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
                     }
                 )
             }
-            composable(Screen.Budgets.name) { BudgetsScreen(viewModel, budgets, favorites, onNavigate = ::go) }
+            composable(Screen.Budgets.name) {
+                BudgetsScreen(
+                    viewModel = viewModel,
+                    budgets = budgets,
+                    favorites = favorites,
+                    signedIn = authentication is AuthenticationState.Authenticated,
+                    onNavigate = ::go,
+                    onLogin = { go(Screen.Login) }
+                )
+            }
             composable(Screen.Conversations.name) { ConversationsScreen(viewModel, photographers, onNavigate = ::go) }
             composable(Screen.Chat.name) { ChatScreen(viewModel, onBack = { navController.popBackStack() }) }
             composable(Screen.Account.name) { AccountScreen(
@@ -1315,9 +1338,31 @@ private fun QuoteScreen(onBack: () -> Unit, onSent: (String, String, String, Str
 }
 
 @Composable
-private fun BudgetsScreen(viewModel: LensClickViewModel, budgets: List<BudgetRequest>, favorites: List<Favorite>, onNavigate: (Screen) -> Unit) = AppPage(Screen.Budgets, onNavigate) {
+private fun BudgetsScreen(
+    viewModel: LensClickViewModel,
+    budgets: List<BudgetRequest>,
+    favorites: List<Favorite>,
+    signedIn: Boolean,
+    onNavigate: (Screen) -> Unit,
+    onLogin: () -> Unit
+) = AppPage(Screen.Budgets, onNavigate) {
+    if (!signedIn) {
+        Column(
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(22.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            PageTitle("Orçamentos e favoritos")
+            Text(
+                "Entre na sua conta para acompanhar seus pedidos e ver os fotógrafos que você salvou.",
+                color = Muted,
+                style = MaterialTheme.typography.bodyLarge
+            )
+            PrimaryButton("Entrar na conta", onLogin)
+        }
+        return@AppPage
+    }
+
     var tab by rememberSaveable { mutableIntStateOf(0) }
-    var proposeItem by remember { mutableStateOf<BudgetRequest?>(null) }
     Column(Modifier.padding(top = 12.dp)) {
         PageTitle("Meus Pedidos & Favoritos", Modifier.padding(start = 22.dp, end = 22.dp, top = 8.dp, bottom = 12.dp))
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp).horizontalScroll(rememberScrollState()).selectableGroup(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
