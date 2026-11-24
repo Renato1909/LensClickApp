@@ -521,6 +521,13 @@ class LensClickViewModel(
         }
     }
 
+    /** Evita que um erro de cadastro apareça como erro de login ao navegar para a tela de entrada. */
+    fun clearAuthenticationError() {
+        if (_authentication.value is AuthenticationState.Error) {
+            _authentication.value = AuthenticationState.SignedOut
+        }
+    }
+
     fun loadConversations() {
         val gateway = conversationsGateway ?: return
         viewModelScope.launch {

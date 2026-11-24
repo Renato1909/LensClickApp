@@ -244,16 +244,18 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
                 onSignUp = { go(Screen.AccountType) }
             ) }
             composable(Screen.SignUp.name) { SignUpScreen(
+                error = (authentication as? AuthenticationState.Error)?.code?.registrationMessage(),
                 onDone = { name, email, password, result ->
                     viewModel.register(name, email, password, result)
                 },
-                onLogin = { go(Screen.Login) }
+                onLogin = { viewModel.clearAuthenticationError(); go(Screen.Login) }
             ) }
             composable(Screen.PhotographerSignUp.name) { PhotographerSignUpScreen(
+                error = (authentication as? AuthenticationState.Error)?.code?.registrationMessage(),
                 onDone = { name, email, password, specialty, city, price, bio, result ->
                     viewModel.registerPhotographer(name, email, password, specialty, city, price, bio, result)
                 },
-                onLogin = { go(Screen.Login) }
+                onLogin = { viewModel.clearAuthenticationError(); go(Screen.Login) }
             ) }
             composable(Screen.Home.name) { HomeScreen(photographers, onNavigate = ::go) }
             composable(Screen.Search.name) {
@@ -552,6 +554,15 @@ private fun MobileAuthErrorCode.loginMessage(): String = when (this) {
     else -> "Não foi possível entrar. Tente novamente."
 }
 
+private fun MobileAuthErrorCode.registrationMessage(): String = when (this) {
+    MobileAuthErrorCode.CONFLICT -> "Este e-mail já está cadastrado. Entre na sua conta ou use outro e-mail."
+    MobileAuthErrorCode.INVALID_INPUT -> "Confira os dados informados e tente novamente."
+    MobileAuthErrorCode.RATE_LIMITED -> "Muitas tentativas. Aguarde alguns minutos antes de tentar novamente."
+    MobileAuthErrorCode.NETWORK -> "Não foi possível conectar. Verifique sua internet e tente novamente."
+    MobileAuthErrorCode.SERVER -> "O serviço está indisponível. Tente novamente em instantes."
+    else -> "Não foi possível criar a conta. Tente novamente."
+}
+
 private fun MobileAuthErrorCode.twoFactorMessage(): String = when (this) {
     MobileAuthErrorCode.INVALID_INPUT -> "Código inválido. Confira o código e tente novamente."
     MobileAuthErrorCode.FORBIDDEN -> "A senha atual está incorreta."
@@ -595,7 +606,11 @@ private fun AuthStatusBanner(message: String, loading: Boolean, error: Boolean =
 }
 
 @Composable
-private fun SignUpScreen(onDone: (String, String, String, (Boolean) -> Unit) -> Unit, onLogin: () -> Unit) {
+private fun SignUpScreen(
+    error: String? = null,
+    onDone: (String, String, String, (Boolean) -> Unit) -> Unit,
+    onLogin: () -> Unit
+) {
     var name by rememberSaveable { mutableStateOf("") }
     var email by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -606,7 +621,11 @@ private fun SignUpScreen(onDone: (String, String, String, (Boolean) -> Unit) -> 
         LensField("E-mail", email, { email = it }, KeyboardType.Email)
         Spacer(Modifier.height(12.dp))
         LensField("Senha (mínimo 8 caracteres)", password, { password = it }, password = true)
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(16.dp))
+        if (error != null) {
+            AuthStatusBanner(error, loading = false, error = true)
+            Spacer(Modifier.height(10.dp))
+        }
         PrimaryButton("Criar minha conta", {
             busy = true
             onDone(name, email, password) { busy = false }
@@ -618,6 +637,7 @@ private fun SignUpScreen(onDone: (String, String, String, (Boolean) -> Unit) -> 
 
 @Composable
 private fun PhotographerSignUpScreen(
+    error: String? = null,
     onDone: (String, String, String, String, String, String, String, (Boolean) -> Unit) -> Unit,
     onLogin: () -> Unit
 ) {
@@ -643,7 +663,11 @@ private fun PhotographerSignUpScreen(
         LensField("Preço inicial (R$)", price, { price = it }, KeyboardType.Number)
         Spacer(Modifier.height(10.dp))
         LensField("Apresentação / Bio", bio, { bio = it }, maxLines = 3)
-        Spacer(Modifier.height(22.dp))
+        Spacer(Modifier.height(16.dp))
+        if (error != null) {
+            AuthStatusBanner(error, loading = false, error = true)
+            Spacer(Modifier.height(10.dp))
+        }
         PrimaryButton("Cadastrar como Fotógrafo", {
             busy = true
             onDone(name, email, password, specialty, city, price, bio) { busy = false }
