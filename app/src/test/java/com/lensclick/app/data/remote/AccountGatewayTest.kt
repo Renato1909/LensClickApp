@@ -2,6 +2,8 @@ package com.lensclick.app.data.remote
 
 import com.lensclick.app.data.remote.auth.HttpResponse
 import com.lensclick.app.data.remote.auth.InMemorySessionStore
+import com.lensclick.app.data.remote.auth.MobileAuthErrorCode
+import com.lensclick.app.data.remote.auth.MobileAuthException
 import kotlinx.coroutines.test.runTest
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -11,6 +13,15 @@ import org.junit.Test
 
 class AccountGatewayTest {
     private fun store() = InMemorySessionStore().apply { writeAccessToken("token") }
+
+    @Test
+    fun changePasswordReportsIncorrectPasswordAndKeepsCurrentSession() = runTest {
+        val transport = FakeHttpTransport(HttpResponse(403))
+        val session = store()
+        val result = runCatching { HttpAccountGateway(transport, session).changePassword("errada", "SenhaNova2") }
+        assertEquals(MobileAuthErrorCode.FORBIDDEN, (result.exceptionOrNull() as? MobileAuthException)?.code)
+        assertEquals("token", session.readAccessToken())
+    }
 
     @Test
     fun exportDataReturnsRawJson() = runTest {

@@ -5,7 +5,8 @@ data class Conversation(
     val counterpartName: String,
     val lastMessage: String,
     val lastMessageAt: String,
-    val unreadCount: Int = 0
+    val unreadCount: Int = 0,
+    val photographerSlug: String = ""
 )
 
 data class Message(

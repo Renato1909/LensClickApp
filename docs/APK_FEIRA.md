@@ -60,7 +60,7 @@ O QR usa o endereço do APK assinado da release `feira-2026`. Esse endereço per
 
 ## Perfis de apresentação no celular
 
-O menu **Explorar fotógrafos → Perfis da feira** mostra quatro perfis fictícios. Os dados e as fotos vêm dentro do APK, com acesso mesmo sem internet. Os perfis de exemplo ficam em um catálogo separado com bio e portfólio para consulta.
+O menu **Explorar fotógrafos → Perfis da feira** mostra quatro perfis fictícios. Os dados e as fotos vêm dentro do APK, com acesso mesmo sem internet. Os perfis de exemplo ficam em um catálogo separado com bio e portfólio para consulta. No APK de debug, os botões de contratação e orçamento usam os perfis de demonstração carregados no Worker local. O catálogo offline informa que esses perfis ainda não têm avaliações.
 
 ## Fotógrafos de apresentação na API local
 
@@ -72,7 +72,7 @@ node tools/seed-feira-local.mjs /caminho/para/LensClick-main
 
 Inicie o Worker local do projeto web na porta `8787` e abra o APK de debug no emulador. Em **Explorar fotógrafos**, a busca por **São Paulo** mostra Lívia Monteiro (casamentos), Rafael Sato (retratos) e Joana Nascimento (corporativo e retratos). Em **Campinas**, procure Bruno Vidal (eventos). Abra um perfil para apresentar a bio e o portfólio.
 
-O script pode ser repetido e usa o D1 e o R2 locais. Os perfis novos são fictícios e servem para demonstrar a busca pública. O APK público do QR conecta ao ambiente de produção.
+O script pode ser repetido e usa o D1 e o R2 locais. Use `--persist-to /caminho/dos/dados-locais` para gravar na mesma pasta de dados usada pelo Worker de desenvolvimento. Os perfis novos são fictícios e servem para demonstrar a busca pública. O APK público do QR conecta ao ambiente de produção.
 
 ## Checklist rápido para a demo
 

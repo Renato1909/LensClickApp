@@ -109,8 +109,6 @@ private class FakeFlowApi : MobileAuthApi {
 
     override suspend fun register(request: MobileRegisterRequest): MobileSession = error("Unused")
 
-    override suspend fun registerPhotographer(request: MobilePhotographerRegisterRequest): MobileSession = error("Unused")
-
     override suspend fun currentUser(accessToken: String): MobileUser {
         val email = accessToken.removePrefix("token-")
         return MobileUser(1, "Conta", email, null, "client", true, false)
@@ -124,9 +122,6 @@ private class NetworkFailingFlowApi : MobileAuthApi {
         throw MobileAuthException(MobileAuthErrorCode.NETWORK)
 
     override suspend fun register(request: MobileRegisterRequest): MobileSession =
-        throw MobileAuthException(MobileAuthErrorCode.NETWORK)
-
-    override suspend fun registerPhotographer(request: MobilePhotographerRegisterRequest): MobileSession =
         throw MobileAuthException(MobileAuthErrorCode.NETWORK)
 
     override suspend fun currentUser(accessToken: String): MobileUser =

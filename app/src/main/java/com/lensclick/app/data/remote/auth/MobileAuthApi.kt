@@ -14,8 +14,6 @@ interface MobileAuthApi {
 
     suspend fun register(request: MobileRegisterRequest): MobileSession
 
-    suspend fun registerPhotographer(request: MobilePhotographerRegisterRequest): MobileSession
-
     suspend fun currentUser(accessToken: String): MobileUser
 
     suspend fun logout(accessToken: String)
@@ -115,38 +113,11 @@ class HttpMobileAuthApi(
         return parseSessionResponse(response)
     }
 
-    override suspend fun registerPhotographer(request: MobilePhotographerRegisterRequest): MobileSession {
-        val response = transport.execute(
-            HttpRequest(
-                method = "POST",
-                path = "/api/mobile/auth/register",
-                headers = mapOf(
-                    "Accept" to "application/json",
-                    "Content-Type" to "application/json"
-                ),
-                body = JSONObject()
-                    .put("name", request.name)
-                    .put("email", request.email)
-                    .put("password", request.password)
-                    .put("role", request.role)
-                    .put("specialty", request.specialty)
-                    .put("city", request.city)
-                    .put("price", request.price)
-                    .put("bio", request.bio)
-                    .put("deviceName", request.deviceName)
-                    .put("appVersion", request.appVersion)
-                    .toString()
-            )
-        )
-        ensureSuccess(response, 200, 201)
-        return parseSessionResponse(response)
-    }
-
     override suspend fun currentUser(accessToken: String): MobileUser {
         val response = transport.execute(authenticatedRequest("GET", "/api/mobile/auth/me", accessToken))
         ensureSuccess(response, 200)
         return try {
-            parseUser(JSONObject(response.body).getJSONObject("user"))
+            parseMobileUser(JSONObject(response.body).getJSONObject("user"))
         } catch (error: Exception) {
             throw MobileAuthException(MobileAuthErrorCode.MALFORMED_RESPONSE, cause = error)
         }
@@ -162,7 +133,7 @@ class HttpMobileAuthApi(
             val root = JSONObject(response.body)
             val session = root.getJSONObject("session")
             MobileSession(
-                user = parseUser(root.getJSONObject("user")),
+                user = parseMobileUser(root.getJSONObject("user")),
                 accessToken = session.getString("accessToken"),
                 expiresAt = session.getString("expiresAt")
             )
@@ -189,16 +160,6 @@ class HttpMobileAuthApi(
         )
     }
 
-    private fun parseUser(json: JSONObject): MobileUser = MobileUser(
-        id = json.getLong("id"),
-        name = json.getString("name"),
-        email = json.getString("email"),
-        phone = json.optString("phone").takeIf { it.isNotBlank() },
-        role = json.optString("role", "client"),
-        emailVerified = json.optBoolean("emailVerified", false),
-        isAdmin = json.optBoolean("isAdmin", false)
-    )
-
     private fun errorCodeFor(statusCode: Int): MobileAuthErrorCode = when (statusCode) {
         400 -> MobileAuthErrorCode.INVALID_INPUT
         401 -> MobileAuthErrorCode.UNAUTHENTICATED
@@ -210,3 +171,13 @@ class HttpMobileAuthApi(
         else -> MobileAuthErrorCode.SERVER
     }
 }
+
+internal fun parseMobileUser(json: JSONObject): MobileUser = MobileUser(
+    id = json.getLong("id"),
+    name = json.getString("name"),
+    email = json.getString("email"),
+    phone = json.optString("phone", "").takeIf { it.isNotBlank() },
+    role = json.optString("role", "client"),
+    emailVerified = json.optBoolean("emailVerified", false),
+    isAdmin = json.optBoolean("isAdmin", false)
+)

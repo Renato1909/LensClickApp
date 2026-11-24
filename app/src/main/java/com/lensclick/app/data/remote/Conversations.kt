@@ -1,5 +1,6 @@
 package com.lensclick.app.data.remote
 
+import com.lensclick.app.ui.localized
 import com.lensclick.app.data.remote.auth.HttpTransport
 import com.lensclick.app.data.remote.auth.SessionStore
 import com.lensclick.app.data.remote.auth.ensureHttpSuccess
@@ -14,11 +15,21 @@ class HttpConversationsGateway(
 ) : ConversationsGateway {
 
     override suspend fun list(): List<Conversation> {
-        val response = transport.execute(sessionStore.bearerRequest("GET", "/api/account/conversations"))
-        ensureHttpSuccess(response, 200)
-        val json = JSONObject(response.body)
-        val rows = json.optJSONArray("conversations") ?: return emptyList()
-        return (0 until rows.length()).map { parseConversation(rows.getJSONObject(it)) }
+        val conversations = mutableListOf<Conversation>()
+        var page = 1
+        do {
+            val suffix = if (page == 1) "" else "?page=$page"
+            val response = transport.execute(sessionStore.bearerRequest("GET", "/api/account/conversations$suffix"))
+            ensureHttpSuccess(response, 200)
+            val json = JSONObject(response.body)
+            val rows = json.getJSONArray("conversations")
+            for (index in 0 until rows.length()) {
+                conversations.add(parseConversation(rows.getJSONObject(index)))
+            }
+            val totalPages = json.optJSONObject("pagination")?.optInt("totalPages") ?: 1
+            page++
+        } while (page <= totalPages && rows.length() > 0)
+        return conversations.distinctBy { it.id }
     }
 
     override suspend fun getMessages(conversationId: Long): List<Message> {
@@ -55,10 +66,11 @@ class HttpConversationsGateway(
 
 fun parseConversation(json: JSONObject): Conversation = Conversation(
     id = json.getLong("id"),
-    counterpartName = json.optString("counterpartName").ifBlank { json.optString("photographerName", "Fotógrafo") },
+    counterpartName = json.optString("counterpartName").ifBlank { json.optString("photographerName", localized("Fotógrafo")) },
     lastMessage = json.optString("lastMessage", ""),
     lastMessageAt = json.optString("lastMessageAt", json.optString("updatedAt", "")),
-    unreadCount = json.optInt("unreadCount", 0)
+    unreadCount = json.optInt("unreadCount", 0),
+    photographerSlug = json.optJSONObject("counterpart")?.optString("slug").orEmpty()
 )
 
 fun parseMessage(json: JSONObject): Message = Message(

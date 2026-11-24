@@ -30,8 +30,14 @@ data class BudgetRequest(
     val createdAt: String,
     val updatedAt: String,
     val counterpartName: String = "",
-    val proposals: List<Proposal> = emptyList()
+    val proposals: List<Proposal> = emptyList(),
+    val photographerSlug: String = "",
+    val photographerName: String = "",
+    val photographerSpecialties: List<String> = emptyList(),
+    val history: List<BudgetEvent> = emptyList()
 )
+
+data class BudgetEvent(val action: String, val createdAt: String)
 
 data class Favorite(
     val photographerId: Long,
@@ -53,6 +59,8 @@ interface BudgetRequestsGateway {
     suspend fun decide(id: Long, proposalId: Long, accept: Boolean)
 
     suspend fun cancel(id: Long)
+
+    suspend fun decline(id: Long)
 
     suspend fun agenda(): List<BudgetRequest>
 }

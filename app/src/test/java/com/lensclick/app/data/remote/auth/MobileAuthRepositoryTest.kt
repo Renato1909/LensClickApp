@@ -60,52 +60,6 @@ class MobileAuthRepositoryTest {
     }
 
     @Test
-    fun registerPhotographerSendsProfessionalPayloadAndStoresToken() = runTest {
-        val photographerBody = """
-            {
-              "user": {
-                "id": 99,
-                "name": "Fotógrafo Pro",
-                "email": "foto@example.com",
-                "phone": null,
-                "role": "photographer",
-                "emailVerified": true,
-                "isAdmin": false
-              },
-              "session": {
-                "accessToken": "pro-token",
-                "expiresAt": "2026-12-31T23:59:59Z"
-              }
-            }
-        """.trimIndent()
-        val transport = FakeTransport(HttpResponse(200, body = photographerBody))
-        val store = InMemorySessionStore()
-        val repository = MobileAuthRepository(HttpMobileAuthApi(transport), store)
-
-        val session = repository.registerPhotographer(
-            name = "Fotógrafo Pro",
-            email = "foto@example.com",
-            password = "Senha123",
-            specialty = "Casamentos",
-            city = "São Paulo",
-            price = "R$ 1500",
-            bio = "Especialista em casamentos",
-            deviceName = "Android",
-            appVersion = "1.0"
-        )
-
-        assertEquals(99L, session.user.id)
-        assertEquals("photographer", session.user.role)
-        assertEquals("pro-token", session.accessToken)
-        assertEquals("pro-token", store.readAccessToken())
-        assertEquals("POST", transport.lastRequest?.method)
-        assertEquals("/api/mobile/auth/register", transport.lastRequest?.path)
-        assertTrue(transport.lastRequest?.body?.contains("\"specialty\":\"Casamentos\"") == true)
-        assertTrue(transport.lastRequest?.body?.contains("\"city\":\"São Paulo\"") == true)
-        assertTrue(transport.lastRequest?.body?.contains("\"role\":\"photographer\"") == true)
-    }
-
-    @Test
     fun registerHandlesConflictErrorWhenEmailAlreadyExists() = runTest {
         val transport = FakeTransport(HttpResponse(409))
         val store = InMemorySessionStore()
