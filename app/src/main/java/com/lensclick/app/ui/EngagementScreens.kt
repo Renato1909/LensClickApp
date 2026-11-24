@@ -26,6 +26,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
 import com.lensclick.app.data.remote.auth.MobileAuthErrorCode
 import com.lensclick.app.data.remote.auth.MobileAuthException
@@ -137,6 +139,8 @@ private fun HireForm(
     onCreated: (Long) -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    val focus = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
     val reference = rememberSaveable { UUID.randomUUID().toString() }
     var category by rememberSaveable { mutableStateOf(offer.categories.firstOrNull().orEmpty()) }
     var description by rememberSaveable { mutableStateOf(offer.budget?.description.orEmpty()) }
@@ -236,7 +240,11 @@ private fun HireForm(
                 if (state.isNotBlank() && draft.state !in BrazilianStates) Text(localized("Informe uma UF brasileira válida."), color = MaterialTheme.colorScheme.error)
                 LensField(localized("Informações sobre o local"), venueDetails, { venueDetails = it }, singleLine = false, maxLines = 3)
                 LensField(localized("Observações e solicitações especiais"), notes, { notes = it }, singleLine = false, maxLines = 3)
-                PrimaryButton(localized("Continuar para pagamento"), enabled = valid, onClick = { step = HireStep.Payment })
+                PrimaryButton(localized("Continuar para pagamento"), enabled = valid, onClick = {
+                    focus.clearFocus()
+                    keyboard?.hide()
+                    step = HireStep.Payment
+                })
             } else {
                 PaymentOptions(offer.photographerName, offer.priceCents, draft.paymentMethod) { payment = it.name }
                 PrimaryButton(localized("Revisar contratação"), onClick = { step = HireStep.Review })

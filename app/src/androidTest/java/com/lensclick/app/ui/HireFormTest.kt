@@ -2,6 +2,7 @@ package com.lensclick.app.ui
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -11,6 +12,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.room.Room
+import androidx.test.espresso.Espresso.closeSoftKeyboard
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.lensclick.app.data.local.LensClickDatabase
 import com.lensclick.app.data.local.LensClickRepository
@@ -85,8 +87,9 @@ class HireFormTest {
         fill("Endereço completo", "Rua de teste, 100")
         fill("Cidade", "Campinas")
         fill("Estado (UF)", "SP")
-        rule.onNodeWithText("Continuar para pagamento").performScrollTo().performClick()
-        rule.onNodeWithText("Pagamento").assertIsDisplayed()
+        closeSoftKeyboard()
+        rule.onNodeWithText("Continuar para pagamento").performScrollTo().assertIsEnabled().performClick()
+        rule.onNodeWithText("Pagamento").performScrollTo().assertIsDisplayed()
         rule.onNodeWithText("Total da contratação").assertIsDisplayed()
         rule.onNodeWithText(moneyInReais(175_000)).assertIsDisplayed()
         rule.onNodeWithText("Dinheiro").assertIsSelected()
@@ -97,7 +100,8 @@ class HireFormTest {
         rule.onNodeWithText("Campinas – SP").performScrollTo().assertIsDisplayed()
         rule.onNodeWithText("Editar informações").performScrollTo().performClick()
         fill("Observações e solicitações especiais", "Fotografar a entrada.")
-        rule.onNodeWithText("Continuar para pagamento").performScrollTo().performClick()
+        closeSoftKeyboard()
+        rule.onNodeWithText("Continuar para pagamento").performScrollTo().assertIsEnabled().performClick()
         rule.onNodeWithText("Revisar contratação").performScrollTo().performClick()
         rule.onNodeWithText("Confirmar contratação").performScrollTo().performClick()
         rule.waitUntil(5_000) { confirmed == 42L }
