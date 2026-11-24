@@ -8,7 +8,8 @@ data class PublicPhotographer(
     val specialties: List<String>,
     val startingPriceCents: Long?,
     val ratingAverage: Double?,
-    val reviewCount: Int
+    val reviewCount: Int,
+    val photoPath: String = ""
 )
 
 data class PublicPhotographerPage(

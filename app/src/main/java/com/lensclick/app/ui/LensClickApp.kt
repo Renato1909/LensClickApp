@@ -125,10 +125,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.lensclick.app.R
 import com.lensclick.app.data.local.FairPhotographer
 import com.lensclick.app.data.local.Photographer
@@ -142,7 +144,6 @@ import com.lensclick.app.domain.BudgetRequestDraft
 import com.lensclick.app.domain.Favorite
 import com.lensclick.app.domain.PortfolioItem
 import com.lensclick.app.domain.ProfessionalProfile
-import com.lensclick.app.domain.PublicPhotographer
 import com.lensclick.app.ui.theme.LensCoffee as Accent
 import com.lensclick.app.ui.theme.LensFieldBorder as FieldBorder
 import com.lensclick.app.ui.theme.LensInk as Ink
@@ -153,19 +154,18 @@ import com.lensclick.app.ui.theme.LensPaper as Paper
 import com.lensclick.app.ui.theme.LensSand as Sand
 import com.lensclick.app.ui.theme.LensSurface as SurfaceHigh
 import java.io.ByteArrayOutputStream
-import java.math.BigDecimal
-import java.text.NumberFormat
-import java.util.Locale
 
 enum class Screen {
     Onboarding, AccountType, Login, SignUp, PhotographerSignUp,
     Home, Search, Photographer, Quote, Budgets, Conversations, Chat, Account,
     ProDashboard, ProRequests, ProAgenda, ProProfile, ProPortfolio
 }
+private const val SearchRoute = "Search?specialty={specialty}"
 private const val PhotographerRoute = "Photographer/{slug}"
 private const val QuoteRoute = "Quote/{slug}"
 private const val FairCatalogRoute = "Feira"
 private const val FairProfileRoute = "Feira/{slug}"
+private val GuestBrowsingScreens = setOf(Screen.Search, Screen.Budgets)
 
 @Composable
 fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickViewModel.Factory)) {
@@ -182,23 +182,32 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
     val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
     val authentication by viewModel.authentication.collectAsStateWithLifecycle()
     val currentPhotographer = photographers.firstOrNull { it.userId == currentUser?.id }
-    fun resetTo(target: Screen) {
+    fun resetToRoute(route: String) {
         focusManager.clearFocus()
         keyboardController?.hide()
-        navController.navigate(target.name) {
+        navController.navigate(route) {
             popUpTo(navController.graph.id)
             launchSingleTop = true
         }
     }
+    fun resetTo(target: Screen) = resetToRoute(target.name)
+
     fun go(target: Screen) {
+        val guestBrowsing = currentUser == null && target in GuestBrowsingScreens
         if (target in setOf(Screen.Home, Screen.Search, Screen.Budgets, Screen.Conversations, Screen.Account,
                 Screen.ProDashboard, Screen.ProRequests, Screen.ProAgenda, Screen.ProProfile, Screen.ProPortfolio) &&
-                !(target == Screen.Search && currentUser == null)) {
+                !guestBrowsing) {
             resetTo(target)
         } else {
             focusManager.clearFocus()
             keyboardController?.hide()
-            navController.navigate(target.name) { launchSingleTop = true }
+            navController.navigate(target.name) {
+                if (guestBrowsing) {
+                    popUpTo(Screen.Onboarding.name) { saveState = true }
+                    restoreState = true
+                }
+                launchSingleTop = true
+            }
         }
     }
 
@@ -208,13 +217,19 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
             route in setOf(Screen.Onboarding.name, Screen.AccountType.name, Screen.Login.name, Screen.SignUp.name, Screen.PhotographerSignUp.name)
         ) {
             val user = (authentication as AuthenticationState.Authenticated).user
-            resetTo(if (user.role == "photographer") Screen.ProDashboard else Screen.Home)
+            val destination = when {
+                user.role == "photographer" -> Screen.ProDashboard
+                route == Screen.Login.name &&
+                    navController.previousBackStackEntry?.destination?.route == Screen.Budgets.name -> Screen.Budgets
+                else -> Screen.Home
+            }
+            resetTo(destination)
         } else if (authentication is AuthenticationState.Error && route == Screen.Onboarding.name) {
             resetTo(Screen.Login)
         } else if (authentication !is AuthenticationState.Authenticated &&
             authentication !is AuthenticationState.TwoFactorRequired &&
-            Screen.entries.any { it.name == route && it !in setOf(
-                Screen.Onboarding, Screen.AccountType, Screen.Login, Screen.SignUp, Screen.PhotographerSignUp, Screen.Search) }) {
+            Screen.entries.any { it.name == route && it !in GuestBrowsingScreens && it !in setOf(
+                Screen.Onboarding, Screen.AccountType, Screen.Login, Screen.SignUp, Screen.PhotographerSignUp) }) {
             resetTo(Screen.Login)
         }
     }
@@ -257,14 +272,32 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
                 },
                 onLogin = { viewModel.clearAuthenticationError(); go(Screen.Login) }
             ) }
-            composable(Screen.Home.name) { HomeScreen(photographers, onNavigate = ::go) }
-            composable(Screen.Search.name) {
+            composable(Screen.Home.name) {
+                HomeScreen(
+                    photographers = fairPhotographers,
+                    onNavigate = ::go,
+                    onCategory = { specialty -> resetToRoute("Search?specialty=$specialty") },
+                    onFair = { navController.navigate(FairCatalogRoute) },
+                    onFairPhotographer = { slug -> navController.navigate("Feira/$slug") }
+                )
+            }
+            composable(
+                SearchRoute,
+                arguments = listOf(navArgument("specialty") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                })
+            ) { entry ->
                 SearchScreen(
                     viewModel,
                     guest = currentUser == null,
+                    initialSpecialty = entry.arguments?.getString("specialty"),
+                    fairPhotographers = fairPhotographers,
                     onNavigate = ::go,
                     onPhotographer = { slug -> navController.navigate("Photographer/$slug") },
-                    onFair = { navController.navigate(FairCatalogRoute) }
+                    onFair = { navController.navigate(FairCatalogRoute) },
+                    onFairPhotographer = { slug -> navController.navigate("Feira/$slug") }
                 )
             }
             composable(FairCatalogRoute) {
@@ -296,7 +329,16 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
                     }
                 )
             }
-            composable(Screen.Budgets.name) { BudgetsScreen(viewModel, budgets, favorites, onNavigate = ::go) }
+            composable(Screen.Budgets.name) {
+                BudgetsScreen(
+                    viewModel = viewModel,
+                    budgets = budgets,
+                    favorites = favorites,
+                    signedIn = authentication is AuthenticationState.Authenticated,
+                    onNavigate = ::go,
+                    onLogin = { go(Screen.Login) }
+                )
+            }
             composable(Screen.Conversations.name) { ConversationsScreen(viewModel, photographers, onNavigate = ::go) }
             composable(Screen.Chat.name) { ChatScreen(viewModel, onBack = { navController.popBackStack() }) }
             composable(Screen.Account.name) { AccountScreen(
@@ -709,7 +751,7 @@ private fun LensField(
 }
 
 @Composable
-private fun lensFieldColors() = OutlinedTextFieldDefaults.colors(
+internal fun lensFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedContainerColor = SurfaceHigh,
     unfocusedContainerColor = SurfaceHigh,
     focusedBorderColor = Accent,
@@ -771,7 +813,7 @@ private fun CenterLink(prefix: String, action: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun AppPage(
+internal fun AppPage(
     current: Screen,
     onNavigate: (Screen) -> Unit,
     isPhotographerMode: Boolean = false,
@@ -885,69 +927,7 @@ private fun AppNavigation(current: Screen, onNavigate: (Screen) -> Unit, tabs: L
 }
 
 @Composable
-private fun HomeScreen(photographers: List<Photographer>, onNavigate: (Screen) -> Unit) =
-    AppPage(Screen.Home, onNavigate) {
-        Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(22.dp)
-        ) {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .background(Sand, MaterialTheme.shapes.large)
-                    .padding(20.dp)
-            ) {
-                Text("Campinas, SP", color = Accent, style = MaterialTheme.typography.labelLarge)
-                Spacer(Modifier.height(9.dp))
-                Text(
-                    "Encontre o fotógrafo perfeito",
-                    color = Ink,
-                    style = MaterialTheme.typography.headlineLarge,
-                    modifier = Modifier.semantics { heading() }
-                )
-                Spacer(Modifier.height(18.dp))
-                SearchBar { onNavigate(Screen.Search) }
-            }
-            Spacer(Modifier.height(24.dp))
-            SectionTitle("Categorias") { onNavigate(Screen.Search) }
-            Spacer(Modifier.height(8.dp))
-            CategoryRow()
-            if (photographers.isNotEmpty()) {
-                Spacer(Modifier.height(24.dp))
-                SectionTitle("Destaques da semana")
-                Spacer(Modifier.height(12.dp))
-                PhotographerCards(photographers) { onNavigate(Screen.Search) }
-            }
-        }
-    }
-
-@Composable
-private fun SearchBar(onClick: () -> Unit) {
-    val shape = MaterialTheme.shapes.medium
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = 52.dp)
-            .clip(shape)
-            .background(SurfaceHigh)
-            .border(1.dp, FieldBorder, shape)
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(Icons.Default.Search, contentDescription = null, tint = Accent, modifier = Modifier.size(20.dp))
-        Text(
-            "Buscar por cidade ou especialidade",
-            color = Ink,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.weight(1f)
-        )
-        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Accent, modifier = Modifier.size(17.dp))
-    }
-}
-
-@Composable
-private fun SectionTitle(title: String, onMore: (() -> Unit)? = null) {
+internal fun SectionTitle(title: String, onMore: (() -> Unit)? = null) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
             title,
@@ -962,7 +942,7 @@ private fun SectionTitle(title: String, onMore: (() -> Unit)? = null) {
 }
 
 @Composable
-private fun PageTitle(title: String, modifier: Modifier = Modifier) {
+internal fun PageTitle(title: String, modifier: Modifier = Modifier) {
     Text(
         title,
         color = Ink,
@@ -971,199 +951,17 @@ private fun PageTitle(title: String, modifier: Modifier = Modifier) {
     )
 }
 
-@Composable
-private fun CategoryRow() {
-    val categories = listOf("Casamento", "Retrato", "Corporativo", "Eventos", "Ensaio")
-    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        categories.forEach { FilterChip(it) }
-    }
-}
-
-@Composable
-private fun PhotographerCards(photographers: List<Photographer>, onClick: () -> Unit) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        items(photographers) { photographer ->
-            val shape = MaterialTheme.shapes.medium
-            Column(
-                Modifier
-                    .width(184.dp)
-                    .clip(shape)
-                    .background(SurfaceHigh)
-                    .border(1.dp, Line, shape)
-                    .clickable(role = Role.Button, onClick = onClick)
-                    .padding(10.dp)
-            ) {
-                BrandPhoto(Modifier.fillMaxWidth().height(100.dp))
-                Spacer(Modifier.height(9.dp))
-                Text(photographer.name, color = Ink, style = MaterialTheme.typography.titleMedium)
-                Text(photographer.specialty, color = Muted, style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    photographer.price,
-                    color = Accent,
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(top = 7.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun SearchScreen(
-    viewModel: LensClickViewModel,
-    guest: Boolean,
-    onNavigate: (Screen) -> Unit,
-    onPhotographer: (String) -> Unit,
-    onFair: () -> Unit
-) = AppPage(Screen.Search, onNavigate) {
-    var query by rememberSaveable { mutableStateOf("São Paulo") }
-    var selectedSpecialty by rememberSaveable { mutableStateOf<String?>(null) }
-    val searchState by viewModel.publicSearch.collectAsStateWithLifecycle()
-    val specialties = listOf(
-        null to "Todos",
-        "wedding" to "Casamento",
-        "portrait" to "Retrato",
-        "corporate" to "Corporativo",
-        "events" to "Eventos"
-    )
-
-    LaunchedEffect(query, selectedSpecialty) {
-        viewModel.searchPublicPhotographers(query, selectedSpecialty, 1)
-    }
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().imePadding(),
-        contentPadding = PaddingValues(horizontal = 22.dp, vertical = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                PageTitle("Buscar Fotógrafos")
-                if (guest) {
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .background(Sand, MaterialTheme.shapes.small)
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            "Entrar para usar sua conta",
-                            color = Ink,
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Text("Modo visitante", color = Accent, style = MaterialTheme.typography.labelSmall)
-                    }
-                }
-                SecondaryButton("Perfis da feira", onFair)
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Cidade") },
-                    placeholder = { Text("Ex.: São Paulo") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    singleLine = true,
-                    shape = MaterialTheme.shapes.medium,
-                    colors = lensFieldColors()
-                )
-                Row(
-                    Modifier.horizontalScroll(rememberScrollState()).selectableGroup(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    specialties.forEach { (code, label) ->
-                        FilterChip(label, selectedSpecialty == code) {
-                            selectedSpecialty = code
-                        }
-                    }
-                }
-                HorizontalDivider(color = Line)
-            }
-        }
-
-        when (val state = searchState) {
-            PublicSearchState.Loading -> item {
-                Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-            }
-            PublicSearchState.Error -> item {
-                Column(
-                    Modifier.fillMaxWidth().padding(vertical = 20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text("Erro ao conectar à busca remota.", color = Ink, style = MaterialTheme.typography.bodyMedium)
-                    TextButton(onClick = { viewModel.searchPublicPhotographers(query, selectedSpecialty, 1) }) {
-                        Text("Tentar novamente")
-                    }
-                }
-            }
-            is PublicSearchState.Empty -> item {
-                EmptyMessage("Nenhum fotógrafo encontrado.")
-            }
-            is PublicSearchState.Ready -> {
-                items(state.page.photographers, key = { it.slug }) { photographer ->
-                    PublicPhotographerRow(photographer) { onPhotographer(photographer.slug) }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PublicPhotographerRow(photographer: PublicPhotographer, onClick: () -> Unit) {
-    val shape = MaterialTheme.shapes.medium
-    val location = listOf(photographer.city, photographer.state)
-        .filter { it.isNotBlank() }
-        .joinToString(", ")
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(SurfaceHigh)
-            .border(1.dp, Line, shape)
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(14.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Avatar(initialsForDisplay(photographer.name), Modifier.size(50.dp))
-        Column(Modifier.weight(1f)) {
-            Text(photographer.name, color = Ink, style = MaterialTheme.typography.titleMedium)
-            Text(
-                photographer.specialties.joinToString(" · ") { specialtyLabel(it) },
-                color = Muted,
-                style = MaterialTheme.typography.bodyMedium
-            )
-            if (location.isNotBlank()) {
-                Text(location, color = Muted, style = MaterialTheme.typography.labelSmall)
-            }
-            photographer.startingPriceCents?.let { cents ->
-                Text(
-                    NumberFormat.getCurrencyInstance(Locale.forLanguageTag("pt-BR"))
-                        .format(BigDecimal.valueOf(cents, 2)),
-                    color = Accent,
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(top = 5.dp)
-                )
-            }
-        }
-        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Accent, modifier = Modifier.size(17.dp))
-    }
-}
-
-private fun specialtyLabel(code: String): String = when (code.lowercase()) {
+internal fun specialtyLabel(code: String): String = when (code.lowercase()) {
     "wedding", "casamento" -> "Casamento"
     "portrait", "retrato" -> "Retrato"
     "corporate", "corporativo" -> "Corporativo"
+    "family", "família", "familia" -> "Família"
     "events", "eventos" -> "Eventos"
     else -> code.replaceFirstChar { it.uppercase() }
 }
 
 @Composable
-private fun FilterChip(label: String, selected: Boolean = false, onClick: (() -> Unit)? = null) {
+internal fun FilterChip(label: String, selected: Boolean = false, onClick: (() -> Unit)? = null) {
     val shape = MaterialTheme.shapes.small
     val action = if (onClick == null) {
         Modifier
@@ -1189,7 +987,7 @@ private fun FilterChip(label: String, selected: Boolean = false, onClick: (() ->
 }
 
 @Composable
-private fun Avatar(initials: String, modifier: Modifier = Modifier, background: Color = Sand) {
+internal fun Avatar(initials: String, modifier: Modifier = Modifier, background: Color = Sand) {
     Box(modifier.background(background, CircleShape), contentAlignment = Alignment.Center) {
         Text(initials, color = Accent, style = MaterialTheme.typography.titleMedium)
     }
@@ -1234,7 +1032,9 @@ private fun FairCatalogScreen(
         Text("Fotógrafos fictícios com portfólios de exemplo.", color = Muted, style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.height(14.dp))
         photographers.forEach { photographer ->
-            PublicPhotographerRow(photographer.summary) { onPhotographer(photographer.summary.slug) }
+            DiscoveryPhotographerCard(photographer.summary, portrait = photographer.portrait) {
+                onPhotographer(photographer.summary.slug)
+            }
             Spacer(Modifier.height(10.dp))
         }
     }
@@ -1243,6 +1043,13 @@ private fun FairCatalogScreen(
 @Composable
 private fun FairProfileScreen(photographer: FairPhotographer, onBack: () -> Unit) {
     FairFrame(photographer.summary.name, onBack) {
+        Image(
+            painter = painterResource(photographer.portrait),
+            contentDescription = null,
+            modifier = Modifier.size(76.dp).clip(CircleShape),
+            contentScale = ContentScale.Crop
+        )
+        Spacer(Modifier.height(10.dp))
         Text(
             photographer.summary.specialties.joinToString(" · ") { specialtyLabel(it) } +
                 " — ${photographer.summary.city}, ${photographer.summary.state}",
@@ -1327,7 +1134,12 @@ private fun PhotographerScreen(viewModel: LensClickViewModel, slug: String, onBa
                             Column(
                                 Modifier.fillMaxWidth().background(Sand, MaterialTheme.shapes.large).padding(20.dp)
                             ) {
-                                Avatar(initialsForDisplay(profile.profile.name), Modifier.size(50.dp), SurfaceHigh)
+                                PublicPhotographerAvatar(
+                                    profile.profile,
+                                    Modifier.size(64.dp),
+                                    photoPath = profile.profilePic,
+                                    background = SurfaceHigh
+                                )
                                 Spacer(Modifier.height(12.dp))
                                 PageTitle(profile.profile.name)
                                 Text(
@@ -1526,9 +1338,31 @@ private fun QuoteScreen(onBack: () -> Unit, onSent: (String, String, String, Str
 }
 
 @Composable
-private fun BudgetsScreen(viewModel: LensClickViewModel, budgets: List<BudgetRequest>, favorites: List<Favorite>, onNavigate: (Screen) -> Unit) = AppPage(Screen.Budgets, onNavigate) {
+private fun BudgetsScreen(
+    viewModel: LensClickViewModel,
+    budgets: List<BudgetRequest>,
+    favorites: List<Favorite>,
+    signedIn: Boolean,
+    onNavigate: (Screen) -> Unit,
+    onLogin: () -> Unit
+) = AppPage(Screen.Budgets, onNavigate) {
+    if (!signedIn) {
+        Column(
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(22.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            PageTitle("Orçamentos e favoritos")
+            Text(
+                "Entre na sua conta para acompanhar seus pedidos e ver os fotógrafos que você salvou.",
+                color = Muted,
+                style = MaterialTheme.typography.bodyLarge
+            )
+            PrimaryButton("Entrar na conta", onLogin)
+        }
+        return@AppPage
+    }
+
     var tab by rememberSaveable { mutableIntStateOf(0) }
-    var proposeItem by remember { mutableStateOf<BudgetRequest?>(null) }
     Column(Modifier.padding(top = 12.dp)) {
         PageTitle("Meus Pedidos & Favoritos", Modifier.padding(start = 22.dp, end = 22.dp, top = 8.dp, bottom = 12.dp))
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp).horizontalScroll(rememberScrollState()).selectableGroup(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -2069,7 +1903,7 @@ private fun PortfolioMetadataDialog(
     )
 }
 
-private fun initialsForDisplay(name: String?): String = name.orEmpty().trim().split(Regex("\\s+")).filter { it.isNotBlank() }.take(2).joinToString("") { it.first().uppercase() }.ifBlank { "LC" }
+internal fun initialsForDisplay(name: String?): String = name.orEmpty().trim().split(Regex("\\s+")).filter { it.isNotBlank() }.take(2).joinToString("") { it.first().uppercase() }.ifBlank { "LC" }
 
 @Composable
 private fun QrCodeImage(content: String) {
