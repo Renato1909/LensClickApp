@@ -31,16 +31,20 @@ class LensClickNavigationTest {
         }
     }
 
+    private fun backFrom(screenTitle: String) {
+        rule.waitForIdle()
+        Espresso.pressBack()
+        rule.waitForIdle()
+        if (rule.onAllNodes(hasText(screenTitle)).fetchSemanticsNodes().isNotEmpty()) {
+            Espresso.pressBack() // A primeira ação pode apenas fechar o teclado.
+        }
+    }
+
     @Test fun backFromPublicDiscoveryReturnsToOnboarding() {
         rule.onNodeWithText("Explorar fotógrafos").performScrollTo().performClick()
         awaitText("Buscar Fotógrafos")
         rule.onNodeWithText("Entrar para usar sua conta").assertIsDisplayed()
-        rule.waitForIdle()
-        Espresso.pressBack()
-        rule.waitForIdle()
-        if (rule.onAllNodes(hasText("Buscar Fotógrafos")).fetchSemanticsNodes().isNotEmpty()) {
-            Espresso.pressBack() // A primeira ação pode apenas fechar o teclado.
-        }
+        backFrom("Buscar Fotógrafos")
         awaitText("Explorar fotógrafos")
         rule.onNodeWithText("Explorar fotógrafos").performScrollTo().assertIsDisplayed()
     }
@@ -76,7 +80,7 @@ class LensClickNavigationTest {
         rule.onNodeWithContentDescription("Orçamentos").performClick()
         rule.onNodeWithText("Entrar na conta").performClick()
         awaitText("Bem-vindo de volta!")
-        Espresso.pressBack()
+        backFrom("Bem-vindo de volta!")
         awaitText("Orçamentos e favoritos")
         rule.onNodeWithContentDescription("Orçamentos").assertIsDisplayed().assertIsSelected()
     }
