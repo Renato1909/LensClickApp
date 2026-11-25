@@ -60,7 +60,7 @@ O QR usa o endereço do APK assinado da release `feira-2026`. Esse endereço per
 
 ## Perfis de apresentação no celular
 
-O menu **Explorar fotógrafos → Perfis da feira** mostra quatro perfis fictícios. Os dados e as fotos vêm dentro do APK, com acesso mesmo sem internet. Os perfis de exemplo ficam em um catálogo separado com bio e portfólio para consulta. No APK de debug, os botões de contratação e orçamento usam os perfis de demonstração carregados no Worker local. O catálogo offline informa que esses perfis ainda não têm avaliações.
+O menu **Explorar fotógrafos → Perfis da feira** mostra quatro perfis fictícios. Os dados e as fotos vêm dentro do APK, com acesso mesmo sem internet. Na versão 1.3.1, o botão **Contratar** nos perfis da feira abre uma simulação dos dados do evento, da escolha da forma de pagamento e da revisão, sem login, envio de pedido ou cobrança. No APK de debug, os botões de contratação e orçamento usam os perfis de demonstração carregados no Worker local. O catálogo offline informa que esses perfis ainda não têm avaliações.
 
 ## Fotógrafos de apresentação na API local
 
