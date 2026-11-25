@@ -44,7 +44,6 @@ import com.lensclick.app.ui.theme.LensSurface
 import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.Locale
-import java.util.TimeZone
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -75,7 +74,7 @@ private fun validEventDate(value: String): Boolean {
     if (!value.matches(Regex("[0-9]{4}-[0-9]{2}-[0-9]{2}"))) return false
     val parser = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).apply {
         isLenient = false
-        timeZone = TimeZone.getTimeZone("America/Sao_Paulo")
+        timeZone = BrasiliaTimeZone
     }
     return try {
         parser.parse(value) != null && value >= parser.format(System.currentTimeMillis())
@@ -247,14 +246,25 @@ private fun HireForm(
                 LensField(localized("Descrição do serviço (mín. 10 caracteres)"), description, { description = it }, singleLine = false, maxLines = 4)
                 SectionTitle(localized("Data, horário e local"))
                 if (offer.budget == null) {
-                    LensField(localized("Data (AAAA-MM-DD)"), date, { date = it })
+                    EventDateField(
+                        date, localized("Selecionar data do evento"),
+                        { localized("Data do evento · {0}", it) },
+                        onSelected = { date = it }, fromToday = true
+                    )
                 } else {
                     Text(displayCalendarDate(date), color = LensMuted)
                 }
                 if (date.isNotBlank() && !dateValid) Text(localized("Informe uma data válida a partir de hoje."), color = MaterialTheme.colorScheme.error)
                 Text(localized("Horário de Brasília (UTC−3)"), color = LensMuted)
-                LensField(localized("Início (HH:MM)"), start, { start = it })
-                LensField(localized("Término (HH:MM)"), end, { end = it })
+                EventTimeField(
+                    start, localized("Selecionar horário de início"),
+                    { localized("Início · {0}", it) }, defaultMinutes = 9 * 60
+                ) { start = it }
+                EventTimeField(
+                    end, localized("Selecionar horário de término"),
+                    { localized("Término · {0}", it) },
+                    defaultMinutes = ((eventTimeMinutes(start) ?: 9 * 60) + 60).coerceAtMost(23 * 60 + 59)
+                ) { end = it }
                 if (end.isNotBlank() && !timesValid) Text(localized("O término precisa ser depois do início, no mesmo dia."), color = MaterialTheme.colorScheme.error)
                 LensField(localized("Nome do local"), venue, { venue = it })
                 LensField(localized("Endereço completo"), address, { address = it })

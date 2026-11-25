@@ -1,6 +1,5 @@
 package com.lensclick.app.ui
 
-import android.widget.DatePicker
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -125,8 +124,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavBackStackEntry
@@ -136,9 +133,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.lensclick.app.BuildConfig
 import com.lensclick.app.R
 import com.lensclick.app.data.local.FairPhotographer
+import com.lensclick.app.data.local.FairPhoto
+import com.lensclick.app.data.local.FairReview
 import com.lensclick.app.data.local.Photographer
 import com.lensclick.app.data.local.User
 import com.lensclick.app.data.local.readFairPhotographers
@@ -163,8 +161,6 @@ import com.lensclick.app.ui.theme.LensSurface as SurfaceHigh
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.math.BigDecimal
-import java.util.Calendar
-import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -191,18 +187,22 @@ private const val BudgetDetailRoute = "BudgetDetail/{id}"
 private const val FairCatalogRoute = "Feira"
 private const val FairProfileRoute = "Feira/{slug}"
 private const val FairHireRoute = "Feira/{slug}/Contratar"
+private const val FairQuoteRoute = "Feira/{slug}/Orcamento"
+private const val FairChatRoute = "Feira/{slug}/Mensagem"
 private val GuestBrowsingScreens = setOf(Screen.Home, Screen.Search, Screen.Budgets, Screen.Conversations, Screen.Account)
 private val ResumeAfterLogin = setOf(Screen.Budgets, Screen.Conversations, Screen.Account)
 private val AuthenticationScreens = setOf(Screen.Onboarding, Screen.AccountType, Screen.Login, Screen.SignUp, Screen.PhotographerSignUp)
 private val PublicRoutes = (AuthenticationScreens + GuestBrowsingScreens).map { it.name }.toSet() +
-    setOf(SearchRoute, PhotographerRoute, FairCatalogRoute, FairProfileRoute, FairHireRoute,
-        Screen.PhotographerRanking.name, Screen.DemoBudgets.name)
+    setOf(SearchRoute, PhotographerRoute, FairCatalogRoute, FairProfileRoute, FairHireRoute, FairQuoteRoute,
+        FairChatRoute, Screen.PhotographerRanking.name, Screen.DemoBudgets.name)
 
 @Composable
 fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickViewModel.Factory)) {
     val navController = rememberNavController()
     val context = LocalContext.current
     val fairPhotographers = remember(context, AppLanguage.current) { readFairPhotographers(context) }
+    val fairProfiles = remember(fairPhotographers) { fairPhotographers.associateBy { it.summary.slug } }
+    val fairStore = remember(context) { FairDemoStore(context) }
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val currentEntry by navController.currentBackStackEntryAsState()
@@ -399,47 +399,47 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
             composable(FairCatalogRoute) {
                 FairCatalogScreen(
                     photographers = fairPhotographers,
+                    favorites = fairStore.favorites,
                     onBack = { navController.popBackStack() },
                     onPhotographer = { slug -> navController.navigate("Feira/$slug") }
                 )
             }
             composable(FairProfileRoute) { entry ->
-                val slug = entry.arguments?.getString("slug")
-                val photographer = fairPhotographers.firstOrNull { it.summary.slug == slug }
+                val slug = entry.arguments?.getString("slug").orEmpty()
+                val photographer = fairProfiles[slug]
                 if (photographer == null) {
                     ProfileStatus(localized("Perfil de demonstração indisponível."), localized("Voltar")) { navController.popBackStack() }
                 } else {
-                    val canHire = currentUser?.role != "photographer"
-                    val localDemo = BuildConfig.DEBUG && canHire
+                    val profileRoute = "Feira/${Uri.encode(slug)}"
                     FairProfileScreen(
-                        photographer, onBack = onBack,
-                        onHire = if (canHire) ({
-                            val slug = photographer.summary.slug
-                            if (localDemo) openHire(entry, slug, hasPrice = true)
-                            else navController.navigate("Feira/${Uri.encode(slug)}/Contratar") { launchSingleTop = true }
-                        }) else null,
-                        onQuote = if (localDemo) ({
-                            openClientRoute(entry, "Quote/${Uri.encode(photographer.summary.slug)}")
-                        }) else null,
+                        photographer,
+                        onBack = onBack,
+                        onHire = { navController.navigate("$profileRoute/Contratar") { launchSingleTop = true } },
+                        onQuote = { navController.navigate("$profileRoute/Orcamento") { launchSingleTop = true } },
                         contactActions = {
-                            if (localDemo) {
-                                PortfolioContactActions(
-                                    viewModel, entry, photographer.summary.slug, photographer.summary.name,
-                                    currentUser, { go(Screen.Login) }, ::openConversation
-                                )
-                            }
+                            PortfolioContactButtons(
+                                favorite = slug in fairStore.favorites,
+                                onFavorite = { fairStore.toggleFavorite(slug) },
+                                onChat = { navController.navigate("$profileRoute/Mensagem") { launchSingleTop = true } },
+                                chatLabel = localized("Enviar mensagem")
+                            )
                         }
                     )
                 }
             }
-            composable(FairHireRoute) { entry ->
-                val slug = entry.arguments?.getString("slug")
-                val photographer = fairPhotographers.firstOrNull { it.summary.slug == slug }?.summary
-                val price = photographer?.startingPriceCents
-                if (photographer != null && price != null && currentUser?.role != "photographer") {
-                    DemoHireScreen(photographer, price, onBack)
-                } else {
-                    ProfileStatus(localized("Perfil de demonstração indisponível."), localized("Voltar"), onBack)
+            listOf(FairHireRoute, FairQuoteRoute, FairChatRoute).forEach { route ->
+                composable(route) { entry ->
+                    val slug = entry.arguments?.getString("slug").orEmpty()
+                    val photographer = fairProfiles[slug]?.summary
+                    if (photographer == null) {
+                        ProfileStatus(localized("Perfil de demonstração indisponível."), localized("Voltar"), onBack)
+                    } else {
+                        when (route) {
+                            FairHireRoute -> DemoHireScreen(photographer, requireNotNull(photographer.startingPriceCents), onBack)
+                            FairQuoteRoute -> FairDemoQuoteScreen(photographer.name, fairStore, onBack) { go(Screen.DemoBudgets) }
+                            FairChatRoute -> FairDemoChatScreen(photographer.name, slug, fairStore, onBack)
+                        }
+                    }
                 }
             }
             composable(PhotographerRoute) { entry ->
@@ -449,6 +449,11 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
                     onQuote = { openClientRoute(entry, "Quote/${Uri.encode(slug)}") },
                     onHire = { hasPrice -> openHire(entry, slug, hasPrice) },
                     onReview = { openClientRoute(entry, "ReviewEngagements/${Uri.encode(slug)}") },
+                    demoPhotos = if (slug == DemoPhotographerSlug) {
+                        fairPhotographers.filter { demo ->
+                            demo.summary.specialties.any { it == "wedding" || it == "events" }
+                        }.flatMap { it.photos }
+                    } else emptyList(),
                     contactActions = { name ->
                         PortfolioContactActions(viewModel, entry, slug, name, currentUser, { go(Screen.Login) }, ::openConversation)
                     }
@@ -480,7 +485,7 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
                 val args = requireNotNull(entry.arguments)
                 EngagementDetailsScreen(viewModel, args.getLong("id"), currentUser?.role == "photographer", args.getBoolean("created"), onBack)
             }
-            composable(Screen.DemoBudgets.name) { DemoBudgetsScreen(onBack) }
+            composable(Screen.DemoBudgets.name) { DemoBudgetsScreen(fairStore.quotes(), onBack) }
             listOf(QuoteRoute to false, QuoteForHireRoute to true).forEach { (route, forHire) ->
                 composable(route) { entry ->
                     val slug = entry.arguments?.getString("slug").orEmpty()
@@ -1262,13 +1267,17 @@ private fun FairFrame(title: String, onBack: () -> Unit, content: @Composable Co
 @Composable
 private fun FairCatalogScreen(
     photographers: List<FairPhotographer>,
+    favorites: Set<String>,
     onBack: () -> Unit,
     onPhotographer: (String) -> Unit
 ) {
     FairFrame(localized("Perfis da feira"), onBack) {
         Text(localized("Fotógrafos fictícios com portfólios de exemplo."), color = Muted, style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.height(14.dp))
-        photographers.forEach { photographer ->
+        val (saved, others) = photographers.partition { it.summary.slug in favorites }
+        if (saved.isNotEmpty()) SectionTitle(localized("Favoritos de demonstração"))
+        (saved + others).forEachIndexed { index, photographer ->
+            if (saved.isNotEmpty() && index == saved.size) SectionTitle(localized("Outros perfis"))
             DiscoveryPhotographerCard(photographer.summary, portrait = photographer.portrait) {
                 onPhotographer(photographer.summary.slug)
             }
@@ -1281,8 +1290,8 @@ private fun FairCatalogScreen(
 private fun FairProfileScreen(
     photographer: FairPhotographer,
     onBack: () -> Unit,
-    onHire: (() -> Unit)?,
-    onQuote: (() -> Unit)?,
+    onHire: () -> Unit,
+    onQuote: () -> Unit,
     contactActions: @Composable () -> Unit
 ) {
     FairFrame(photographer.summary.name, onBack) {
@@ -1301,53 +1310,49 @@ private fun FairProfileScreen(
         )
         Spacer(Modifier.height(12.dp))
         Text(localized("Perfil fictício para demonstração."), color = Accent, style = MaterialTheme.typography.labelLarge)
-        if (onHire != null) {
-            Text(
-                if (onQuote != null) localized("Pedidos de demonstração ficam no ambiente local.")
-                else localized("Simulação sem envio de pedido ou cobrança."),
-                color = Muted
-            )
-            Spacer(Modifier.height(10.dp))
-            PortfolioActions(onHire, onQuote)
-            Spacer(Modifier.height(8.dp))
-            contactActions()
-            Spacer(Modifier.height(12.dp))
-        }
+        Spacer(Modifier.height(10.dp))
+        PortfolioActions(onHire, onQuote)
+        Spacer(Modifier.height(8.dp))
+        contactActions()
+        Spacer(Modifier.height(12.dp))
         Text(photographer.bio, color = Muted, style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(18.dp))
         SectionTitle(localized("Portfólio"))
         Spacer(Modifier.height(8.dp))
-        photographer.photos.forEach { photo ->
-            Image(
-                painter = painterResource(photo.drawable),
-                contentDescription = photo.altText,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxWidth().aspectRatio(1.5f).clip(MaterialTheme.shapes.medium)
-            )
-            Text(
-                photo.caption,
-                color = Muted,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(top = 6.dp, bottom = 16.dp)
-            )
-        }
+        DemoPortfolioPhotos(photographer.photos)
         SectionTitle(localized("Avaliações"))
-        Text(localized("Este perfil de demonstração não tem avaliações de clientes."), color = Muted)
+        DemoPortfolioReviews(photographer.reviews)
     }
 }
 
 @Composable
-private fun PortfolioActions(onHire: () -> Unit, onQuote: (() -> Unit)?) {
+private fun DemoPortfolioPhotos(photos: List<FairPhoto>) {
+    photos.forEach { photo ->
+        Image(
+            painter = painterResource(photo.drawable),
+            contentDescription = photo.altText,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxWidth().aspectRatio(1.5f).clip(MaterialTheme.shapes.medium)
+        )
+        Text(
+            photo.caption,
+            color = Muted,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(top = 6.dp, bottom = 16.dp)
+        )
+    }
+}
+
+@Composable
+private fun PortfolioActions(onHire: () -> Unit, onQuote: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         PrimaryButton(localized("Contratar"), onHire)
-        if (onQuote != null) {
-            OutlinedButton(
-                onClick = onQuote,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                shape = MaterialTheme.shapes.medium
-            ) {
-                Text(localized("Solicitar orçamento"), textAlign = TextAlign.Center)
-            }
+        OutlinedButton(
+            onClick = onQuote,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            shape = MaterialTheme.shapes.medium
+        ) {
+            Text(localized("Solicitar orçamento"), textAlign = TextAlign.Center)
         }
     }
 }
@@ -1380,6 +1385,7 @@ private fun PhotographerScreen(
     onQuote: () -> Unit,
     onHire: (Boolean) -> Unit,
     onReview: () -> Unit,
+    demoPhotos: List<FairPhoto>,
     contactActions: @Composable (String) -> Unit
 ) {
     val state by viewModel.publicProfile.collectAsStateWithLifecycle()
@@ -1452,8 +1458,6 @@ private fun PhotographerScreen(
                                     onHire = { onHire(profile.profile.startingPriceCents != null) },
                                     onQuote = onQuote
                                 )
-                            }
-                            if (user?.role != "photographer") {
                                 Spacer(Modifier.height(8.dp))
                                 contactActions(profile.profile.name)
                             }
@@ -1462,7 +1466,10 @@ private fun PhotographerScreen(
                             Spacer(Modifier.height(17.dp))
                             SectionTitle(localized("Portfólio"))
                             Spacer(Modifier.height(10.dp))
-                            if (profile.portfolio.isEmpty()) {
+                            if (profile.portfolio.isEmpty() && demoPhotos.isNotEmpty()) {
+                                Text(localized("Fotos de demonstração"), color = Muted, modifier = Modifier.padding(bottom = 8.dp))
+                                DemoPortfolioPhotos(demoPhotos)
+                            } else if (profile.portfolio.isEmpty()) {
                                 Text(localized("Este fotógrafo ainda não publicou imagens."), color = Muted, fontSize = 12.sp)
                             } else {
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1488,6 +1495,7 @@ private fun PhotographerScreen(
                                 onRetry = { viewModel.loadReviews(slug) },
                                 onReview = onReview.takeIf { user?.role != "photographer" }
                             )
+                            if (slug == DemoPhotographerSlug) DemoPortfolioReviews(PublicDemoReviews)
                             Spacer(Modifier.height(20.dp))
                             if (profile.profile.specialties.isNotEmpty()) {
                                 SectionTitle(localized("Serviços e preços"))
@@ -1586,36 +1594,14 @@ private fun PortfolioContactActions(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(
-                onClick = { execute(PortfolioAction.Favorite) },
-                enabled = !favoriteBusy,
-                modifier = Modifier.weight(1f).heightIn(min = 48.dp).semantics {
-                    if (currentFavorite != null) contentDescription = localized("Remover dos favoritos")
-                },
-                shape = MaterialTheme.shapes.medium,
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
-            ) {
-                Icon(
-                    if (currentFavorite != null) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                    contentDescription = null, modifier = Modifier.size(17.dp)
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(if (currentFavorite != null) localized("Favoritado") else localized("Favoritar"))
-            }
-            OutlinedButton(
-                onClick = { execute(PortfolioAction.Chat) },
-                enabled = !chatLoading,
-                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
-                shape = MaterialTheme.shapes.medium,
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
-            ) {
-                if (chatLoading) CircularProgressIndicator(Modifier.size(17.dp), strokeWidth = 2.dp)
-                else Icon(Icons.Default.Email, contentDescription = null, modifier = Modifier.size(17.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(localized("Conversar"))
-            }
-        }
+        PortfolioContactButtons(
+            favorite = currentFavorite != null,
+            onFavorite = { execute(PortfolioAction.Favorite) },
+            onChat = { execute(PortfolioAction.Chat) },
+            chatLabel = localized("Conversar"),
+            favoriteBusy = favoriteBusy,
+            chatLoading = chatLoading
+        )
         error?.let { AuthStatusBanner(it, loading = false, error = true) }
     }
 
@@ -1635,6 +1621,62 @@ private fun PortfolioContactActions(
                         else code.accountActionMessage(localized("Não foi possível iniciar a conversa.")))
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun PortfolioContactButtons(
+    favorite: Boolean,
+    onFavorite: () -> Unit,
+    onChat: () -> Unit,
+    chatLabel: String,
+    favoriteBusy: Boolean = false,
+    chatLoading: Boolean = false
+) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(
+            onClick = onFavorite,
+            enabled = !favoriteBusy,
+            modifier = Modifier.weight(1f).heightIn(min = 48.dp).semantics {
+                if (favorite) contentDescription = localized("Remover dos favoritos")
+            },
+            shape = MaterialTheme.shapes.medium,
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+        ) {
+            Icon(
+                if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                contentDescription = null, modifier = Modifier.size(17.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(if (favorite) localized("Favoritado") else localized("Favoritar"))
+        }
+        OutlinedButton(
+            onClick = onChat,
+            enabled = !chatLoading,
+            modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+            shape = MaterialTheme.shapes.medium,
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+        ) {
+            if (chatLoading) CircularProgressIndicator(Modifier.size(17.dp), strokeWidth = 2.dp)
+            else Icon(Icons.Default.Email, contentDescription = null, modifier = Modifier.size(17.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(chatLabel)
+        }
+    }
+}
+
+private val PublicDemoReviews = listOf(
+    FairReview("Isabela Campos", 5, "As fotos da festa ficaram naturais e registraram detalhes que nem tínhamos visto."),
+    FairReview("Luís Andrade", 4, "Gostamos das fotos da cerimônia e da organização da galeria.")
+)
+
+@Composable
+private fun DemoPortfolioReviews(reviews: List<FairReview>) {
+    Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(localized("Avaliações fictícias de demonstração"), color = Muted, style = MaterialTheme.typography.labelLarge)
+        reviews.forEach { review ->
+            PortfolioReviewCard(review.name, review.rating, localized(review.comment))
         }
     }
 }
@@ -1679,19 +1721,25 @@ private fun PortfolioReviews(
             ReviewDistribution(counts, reviews.summary.total)
         }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            reviews.reviews.forEach { r ->
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceHigh).border(1.dp, Line, RoundedCornerShape(12.dp)).padding(12.dp)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(r.authorName, color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        Text(localized("★ {0} de 5", r.rating), color = Accent, fontSize = 12.sp)
-                    }
-                    if (r.comment.isNotBlank()) {
-                        Text(r.comment, color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
-                    }
-                    Text(displayCalendarDate(r.createdAt), color = Muted, fontSize = 11.sp)
-                }
+            reviews.reviews.forEach { review ->
+                PortfolioReviewCard(review.authorName, review.rating, review.comment, displayCalendarDate(review.createdAt))
             }
         }
+    }
+}
+
+@Composable
+private fun PortfolioReviewCard(name: String, rating: Int, comment: String, date: String? = null) {
+    val shape = RoundedCornerShape(12.dp)
+    Column(Modifier.fillMaxWidth().clip(shape).background(SurfaceHigh).border(1.dp, Line, shape).padding(12.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(name, color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(localized("★ {0} de 5", rating), color = Accent, fontSize = 12.sp)
+        }
+        if (comment.isNotBlank()) {
+            Text(comment, color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+        }
+        date?.let { Text(it, color = Muted, fontSize = 11.sp) }
     }
 }
 
@@ -1742,9 +1790,31 @@ internal fun BackButton(onBack: () -> Unit) {
 }
 
 @Composable
+private fun FairDemoQuoteScreen(
+    photographer: String,
+    store: FairDemoStore,
+    onBack: () -> Unit,
+    onViewQuotes: () -> Unit
+) {
+    var saved by rememberSaveable { mutableStateOf(false) }
+    if (saved) {
+        SettingsPage(localized("Orçamento de demonstração salvo"), onBack) {
+            Text(localized("O pedido de demonstração fica neste aparelho."), color = Muted)
+            PrimaryButton(localized("Orçamentos de demonstração"), onViewQuotes)
+        }
+    } else {
+        QuoteScreen(forHire = false, onBack = onBack, demo = true) { draft, _ ->
+            store.recordQuote(photographer, draft)
+            saved = true
+        }
+    }
+}
+
+@Composable
 private fun QuoteScreen(
     forHire: Boolean,
     onBack: () -> Unit,
+    demo: Boolean = false,
     onSend: (BudgetRequestDraft, (MobileAuthErrorCode) -> Unit) -> Unit
 ) {
     var type by rememberSaveable { mutableStateOf(localized("Casamento")) }
@@ -1755,7 +1825,6 @@ private fun QuoteScreen(
     var details by rememberSaveable { mutableStateOf("") }
     var submitting by remember { mutableStateOf(false) }
     var failure by rememberSaveable { mutableStateOf<String?>(null) }
-    var calendarOpen by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding().verticalScroll(rememberScrollState()).padding(20.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             BackButton(onBack)
@@ -1765,18 +1834,14 @@ private fun QuoteScreen(
         if (forHire) {
             Text(localized("Peça um orçamento para definir o valor. Depois de aceitar a proposta, você poderá escolher como pagar."), color = Muted)
         }
+        if (demo) Text(localized("O pedido de demonstração fica neste aparelho."), color = Muted)
         Spacer(Modifier.height(16.dp))
         LensField(localized("Tipo de evento"), type, { type = it })
         Spacer(Modifier.height(10.dp))
-        OutlinedButton(
-            onClick = { calendarOpen = true },
-            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-            enabled = !submitting,
-            shape = MaterialTheme.shapes.medium
-        ) {
-            val formatted = displayCalendarDate(date)
-            Text(if (date.isBlank()) localized("Selecionar data prevista") else localized("Data prevista · {0}", formatted))
-        }
+        EventDateField(
+            date, localized("Selecionar data prevista"), { localized("Data prevista · {0}", it) },
+            onSelected = { date = it }, enabled = !submitting
+        )
         Spacer(Modifier.height(10.dp))
         LensField(localized("Local / Cidade"), place, { place = it })
         Spacer(Modifier.height(10.dp))
@@ -1802,58 +1867,6 @@ private fun QuoteScreen(
             }
         }, enabled = !submitting && type.trim().length >= 2 && place.trim().length >= 2 &&
             date.isNotBlank() && description.trim().length >= 10)
-    }
-    if (calendarOpen) {
-        QuoteDatePicker(date, onDismiss = { calendarOpen = false }) {
-            date = it
-            calendarOpen = false
-        }
-    }
-}
-
-@Composable
-private fun QuoteDatePicker(date: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
-    val initial = remember(date) {
-        Calendar.getInstance().apply {
-            if (date.isNotBlank()) {
-                val (year, month, day) = date.split('-').map(String::toInt)
-                set(year, month - 1, day)
-            }
-        }
-    }
-    var chosenYear by rememberSaveable { mutableIntStateOf(initial.get(Calendar.YEAR)) }
-    var chosenMonth by rememberSaveable { mutableIntStateOf(initial.get(Calendar.MONTH)) }
-    var chosenDay by rememberSaveable { mutableIntStateOf(initial.get(Calendar.DAY_OF_MONTH)) }
-
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(shape = MaterialTheme.shapes.large, color = SurfaceHigh) {
-            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(vertical = 12.dp)) {
-                Text(
-                    localized("Selecionar data prevista"),
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    style = MaterialTheme.typography.titleMedium, color = Ink
-                )
-                // The calendar is a child view. The Compose dialog owns the window and its activity token.
-                AndroidView(
-                    factory = { context ->
-                        DatePicker(AppLanguage.pickerContext(context)).apply {
-                            init(chosenYear, chosenMonth, chosenDay) { _, selectedYear, selectedMonth, selectedDay ->
-                                chosenYear = selectedYear
-                                chosenMonth = selectedMonth
-                                chosenDay = selectedDay
-                            }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Row(Modifier.align(Alignment.End).padding(horizontal = 8.dp)) {
-                    TextButton(onClick = onDismiss) { Text(localized("Cancelar")) }
-                    TextButton(onClick = {
-                        onConfirm(String.format(Locale.ROOT, "%04d-%02d-%02d", chosenYear, chosenMonth + 1, chosenDay))
-                    }) { Text(localized("Confirmar")) }
-                }
-            }
-        }
     }
 }
 
@@ -2228,7 +2241,7 @@ private fun ChatScreen(viewModel: LensClickViewModel, conversationId: Long, onBa
     }
 }
 
-@Composable private fun Bubble(text: String, mine: Boolean) = Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
+@Composable internal fun Bubble(text: String, mine: Boolean) = Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
     Text(
         text,
         color = if (mine) OnCoffee else Ink,

@@ -51,8 +51,9 @@ try {
 
     for (const [position, [file, caption, alt, category]] of photographer.photos.entries()) {
       const objectKey = `feira-local/${photographer.slug}/${file}`;
+      const contentType = file.endsWith('.webp') ? 'image/webp' : 'image/jpeg';
       localWrangler('r2', 'object', 'put', `lensclick-profile-images/${objectKey}`,
-        `--file=${join(androidAssets, file)}`, '--content-type=image/jpeg');
+        `--file=${join(androidAssets, file)}`, `--content-type=${contentType}`);
       sql.push(`INSERT OR IGNORE INTO portfolio_items
         (user_id, object_key, caption, alt_text, position, is_cover, category)
         SELECT id, ${quote(objectKey)}, ${quote(caption)}, ${quote(alt)}, ${position},
