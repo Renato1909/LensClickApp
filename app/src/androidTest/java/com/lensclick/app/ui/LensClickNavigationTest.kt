@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.printToString
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.espresso.Espresso
@@ -64,13 +65,56 @@ class LensClickNavigationTest {
         rule.onNodeWithContentDescription(
             "Casal caminhando entre convidados em uma cerimônia ao ar livre."
         ).performScrollTo().assertIsDisplayed()
+        rule.onNodeWithContentDescription("Noivos sorrindo depois da cerimônia.").performScrollTo().assertIsDisplayed()
         rule.onNodeWithText("Avaliações").performScrollTo().assertIsDisplayed()
-        rule.onNodeWithText("Este perfil de demonstração não tem avaliações de clientes.").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Avaliações fictícias de demonstração").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Marina Luz").performScrollTo().assertIsDisplayed()
         rule.onNodeWithText("Solicitar orçamento").performScrollTo().assertIsDisplayed()
         rule.onNodeWithText("Favoritar").performScrollTo().assertIsDisplayed()
-        rule.onNodeWithText("Conversar").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Enviar mensagem").performScrollTo().assertIsDisplayed()
         rule.onNodeWithText("Contratar").performScrollTo().performClick()
-        awaitText("Bem-vindo de volta!")
+        awaitText("Selecionar data do evento")
+    }
+
+    @Test fun fairPortfolioActionsKeepDemonstrationDataOnDevice() {
+        rule.runOnIdle { rule.activity.getSharedPreferences("lensclick_fair_demo", 0).edit().remove("chat/feira-rafael-sato").remove("quotes").apply() }
+        rule.onNodeWithText("Explorar fotógrafos").performScrollTo().performClick()
+        awaitText("Buscar Fotógrafos")
+        rule.onNodeWithText("Perfis da feira").performClick()
+        rule.onNodeWithText("Rafael Sato").performScrollTo().performClick()
+
+        if (rule.onAllNodes(hasText("Favoritado")).fetchSemanticsNodes().isNotEmpty()) {
+            rule.onNodeWithText("Favoritado").performScrollTo().performClick()
+        }
+        rule.onNodeWithText("Favoritar").performScrollTo().performClick()
+        rule.onNodeWithText("Favoritado").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Voltar").performScrollTo().performClick()
+        awaitText("Favoritos de demonstração")
+        rule.onNodeWithText("Rafael Sato").performScrollTo().performClick()
+
+        rule.onNodeWithText("Enviar mensagem").performScrollTo().performClick()
+        awaitText("Conversa fictícia. As mensagens ficam neste aparelho.")
+        rule.onNodeWithContentDescription("Mensagem").performScrollTo().performTextInput("Olá, preciso de um retrato.")
+        Espresso.closeSoftKeyboard()
+        rule.onNodeWithText("Enviar").performScrollTo().performClick()
+        rule.onNodeWithText("Olá, preciso de um retrato.").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithContentDescription("Voltar").performScrollTo().performClick()
+        rule.onNodeWithText("Enviar mensagem").performScrollTo().performClick()
+        rule.onNodeWithText("Olá, preciso de um retrato.").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithContentDescription("Voltar").performScrollTo().performClick()
+
+        rule.onNodeWithText("Solicitar orçamento").performScrollTo().performClick()
+        rule.onNodeWithText("Selecionar data prevista").performScrollTo().performClick()
+        chooseEventDate(2090, 6, 15)
+        rule.onNodeWithText("Confirmar").performScrollTo().performClick()
+        rule.onNodeWithContentDescription("Local / Cidade").performScrollTo().performTextInput("Campinas")
+        rule.onNodeWithContentDescription("Descrição do evento (mín. 10 caracteres)").performScrollTo()
+            .performTextInput("Retratos profissionais da equipe.")
+        Espresso.closeSoftKeyboard()
+        rule.onNodeWithText("Enviar solicitação").performScrollTo().performClick()
+        awaitText("Orçamento de demonstração salvo")
+        rule.onNodeWithText("Orçamentos de demonstração").performScrollTo().performClick()
+        rule.onNodeWithText("Retratos profissionais da equipe.").performScrollTo().assertIsDisplayed()
     }
 
     @Test fun demoQuoteTracksBothRolesWithoutAnAccount() {

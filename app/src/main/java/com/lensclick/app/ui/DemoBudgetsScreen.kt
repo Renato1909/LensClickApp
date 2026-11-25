@@ -90,7 +90,7 @@ private class DemoBudgetStore(context: Context) {
 }
 
 @Composable
-internal fun DemoBudgetsScreen(onBack: () -> Unit) {
+internal fun DemoBudgetsScreen(fairQuotes: List<FairDemoQuote>, onBack: () -> Unit) {
     val context = LocalContext.current
     val store = remember(context) { DemoBudgetStore(context) }
     var histories by remember(store) { mutableStateOf(ExampleBudgets.associate { it.id to store.history(it.id) }) }
@@ -109,6 +109,25 @@ internal fun DemoBudgetsScreen(onBack: () -> Unit) {
             FilterChip(localized("Fotógrafo"), professional) { professional = true }
         }
         if (budget == null) {
+            if (!professional && fairQuotes.isNotEmpty()) {
+                SectionTitle(localized("Solicitações salvas neste aparelho"))
+                fairQuotes.forEach { quote ->
+                    val draft = quote.draft
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(), color = LensSurface,
+                        shape = MaterialTheme.shapes.medium, border = BorderStroke(1.dp, LensLine)
+                    ) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Text(quote.photographer, style = MaterialTheme.typography.titleMedium)
+                            Text(draft.eventType)
+                            Text(localized("Data: {0} • Local: {1}", displayCalendarDate(draft.eventDate), draft.place), color = LensMuted)
+                            Text(draft.description)
+                            if (draft.duration.isNotBlank()) Text(draft.duration, color = LensMuted)
+                            if (draft.additionalInfo.isNotBlank()) Text(draft.additionalInfo, color = LensMuted)
+                        }
+                    }
+                }
+            }
             ExampleBudgets.forEach { item ->
                 val state = histories[item.id]?.lastOrNull()?.state ?: item.initial
                 Surface(

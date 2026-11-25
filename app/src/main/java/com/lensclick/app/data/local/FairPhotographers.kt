@@ -11,7 +11,8 @@ internal data class FairPhotographer(
     val summary: PublicPhotographer,
     @get:DrawableRes val portrait: Int,
     val bio: String,
-    val photos: List<FairPhoto>
+    val photos: List<FairPhoto>,
+    val reviews: List<FairReview>
 )
 
 internal data class FairPhoto(
@@ -19,6 +20,8 @@ internal data class FairPhoto(
     val caption: String,
     val altText: String
 )
+
+internal data class FairReview(val name: String, val rating: Int, val comment: String)
 
 private val PortraitDrawables = mapOf(
     "feira-livia-monteiro" to R.drawable.discovery_livia,
@@ -32,7 +35,10 @@ private val PortfolioDrawables = mapOf(
     "card_portrait_studio.jpg" to R.drawable.card_portrait_studio,
     "card_portrait_outdoor.jpg" to R.drawable.card_portrait_outdoor,
     "card_corporate.jpg" to R.drawable.card_corporate,
-    "card_event.jpg" to R.drawable.card_event
+    "card_event.jpg" to R.drawable.card_event,
+    "discovery_wedding.webp" to R.drawable.discovery_wedding,
+    "discovery_portrait.webp" to R.drawable.discovery_portrait,
+    "discovery_events.webp" to R.drawable.discovery_events
 )
 
 internal fun readFairPhotographers(context: Context): List<FairPhotographer> {
@@ -42,6 +48,7 @@ internal fun readFairPhotographers(context: Context): List<FairPhotographer> {
         val slug = row.getString("slug")
         val specialties = row.getJSONArray("specialties")
         val photos = row.getJSONArray("photos")
+        val reviews = row.getJSONArray("reviews")
         FairPhotographer(
             summary = PublicPhotographer(
                 slug = slug,
@@ -62,6 +69,10 @@ internal fun readFairPhotographers(context: Context): List<FairPhotographer> {
                     caption = localized(photo.getString(1)),
                     altText = localized(photo.getString(2))
                 )
+            },
+            reviews = List(reviews.length()) { reviewIndex ->
+                val review = reviews.getJSONArray(reviewIndex)
+                FairReview(review.getString(0), review.getInt(1), review.getString(2))
             }
         )
     }

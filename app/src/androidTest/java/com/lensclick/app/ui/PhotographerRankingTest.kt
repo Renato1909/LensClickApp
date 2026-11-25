@@ -1,7 +1,5 @@
 package com.lensclick.app.ui
 
-import android.view.View
-import android.widget.DatePicker
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
@@ -17,10 +15,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.room.Room
-import androidx.test.espresso.Espresso.onView
-import androidx.test.espresso.UiController
-import androidx.test.espresso.ViewAction
-import androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.lensclick.app.data.local.LensClickDatabase
 import com.lensclick.app.data.local.LensClickRepository
@@ -67,18 +61,18 @@ class PhotographerRankingTest {
         slug = "perfil-sem-nota", name = "Perfil sem nota", ratingAverage = null, reviewCount = 0
     )
 
-    private fun openApp(ranked: List<PublicPhotographer>) {
+    private fun openApp(ranked: List<PublicPhotographer>, published: List<PublicPhotographer> = listOf(unrated)) {
         database = Room.inMemoryDatabaseBuilder(rule.activity, LensClickDatabase::class.java).build()
         val photographers = object : PublicPhotographersGateway {
             override suspend fun list(city: String, specialty: String?, page: Int) =
-                PublicPhotographerPage(listOf(unrated), page, 1, 1)
+                PublicPhotographerPage(published, page, published.size, 1)
 
             override suspend fun listTopRated(page: Int) = PublicPhotographerPage(ranked, page, ranked.size, 1)
 
             override suspend fun get(slug: String): PublicPhotographerProfile {
-                check(slug == photographer.slug)
+                val profile = (ranked + published).first { it.slug == slug }
                 return PublicPhotographerProfile(
-                    profile = photographer, bio = "Retratos com luz natural", serviceRadiusKm = null,
+                    profile = profile, bio = "Retratos com luz natural", serviceRadiusKm = null,
                     availability = "available", instagram = "", website = "", profilePic = "",
                     contacts = PublicPhotographerContacts("", ""), portfolio = emptyList(), isPublished = true
                 )
@@ -86,6 +80,7 @@ class PhotographerRankingTest {
         }
         val reviews = object : ReviewsGateway {
             override suspend fun getReviews(photographerSlug: String): PublicReviews {
+                if (photographerSlug == DemoPhotographerSlug) return PublicReviews(ReviewSummary(0, null), emptyList())
                 check(photographerSlug == photographer.slug)
                 return PublicReviews(
                     ReviewSummary(12, 4.95, mapOf(5 to 11, 4 to 1)),
@@ -174,6 +169,21 @@ class PhotographerRankingTest {
         rule.onNodeWithTag("search-discovery").performScrollToNode(hasText("Fotógrafos mais bem avaliados"))
     }
 
+    @Test fun publishedDemoUsesLabeledGalleryAndReviewsWhenItsPortfolioIsEmpty() {
+        val demo = unrated.copy(slug = DemoPhotographerSlug, name = "Fotógrafo da demo")
+        openApp(emptyList(), listOf(demo))
+        rule.onNodeWithTag("search-discovery").performScrollToNode(hasText(demo.name))
+        rule.onNodeWithText(demo.name).performClick()
+        awaitText("Fotos de demonstração")
+        rule.onNodeWithText("Solicitar orçamento").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Favoritar").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Conversar").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithContentDescription("Noivos sorrindo depois da cerimônia.").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Avaliações fictícias de demonstração").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Isabela Campos").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Sem avaliações").performScrollTo().assertIsDisplayed()
+    }
+
     @Test fun hireWithoutPublishedPriceResumesTheQuoteAfterLogin() {
         openApp(listOf(photographer))
         rule.onNodeWithTag("search-discovery").performScrollToNode(hasText("Ana do Ranking"))
@@ -186,14 +196,7 @@ class PhotographerRankingTest {
             "Peça um orçamento para definir o valor. Depois de aceitar a proposta, você poderá escolher como pagar."
         ).performScrollTo().assertIsDisplayed()
         rule.onNodeWithText("Selecionar data prevista").performScrollTo().performClick()
-        onView(isAssignableFrom(DatePicker::class.java)).perform(object : ViewAction {
-            override fun getConstraints() = isAssignableFrom(DatePicker::class.java)
-            override fun getDescription() = "select June 15, 2090"
-            override fun perform(uiController: UiController, view: View) {
-                (view as DatePicker).updateDate(2090, 5, 15)
-                uiController.loopMainThreadUntilIdle()
-            }
-        })
+        chooseEventDate(2090, 6, 15)
         rule.onNodeWithText("Confirmar").performScrollTo().performClick()
         val selected = "Data prevista · ${displayCalendarDate("2090-06-15")}"
         rule.onNodeWithText(selected).performScrollTo().assertIsDisplayed()

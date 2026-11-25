@@ -15,7 +15,17 @@
         "Cerimônia ao ar livre",
         "Casal caminhando entre convidados em uma cerimônia ao ar livre.",
         "wedding"
+      ],
+      [
+        "discovery_wedding.webp",
+        "Retrato dos noivos",
+        "Noivos sorrindo depois da cerimônia.",
+        "wedding"
       ]
+    ],
+    "reviews": [
+      ["Marina Luz", 5, "A Lívia registrou os abraços e as risadas. A galeria nos fez reviver a cerimônia."],
+      ["Daniel Reis", 5, "Ela nos deixou à vontade durante o ensaio e entregou as fotos no prazo."]
     ]
   },
   {
@@ -41,6 +51,10 @@
         "Pessoa fotografada em um parque com a cidade ao fundo.",
         "portrait"
       ]
+    ],
+    "reviews": [
+      ["Pedro Costa", 5, "O Rafael orientou as poses com calma e fez os retratos parecerem naturais."],
+      ["Camila Ramos", 4, "O ensaio ao ar livre rendeu fotos bonitas mesmo com o céu nublado."]
     ]
   },
   {
@@ -60,7 +74,17 @@
         "Equipe em reunião",
         "Equipe reunida ao redor de uma mesa em um escritório.",
         "corporate"
+      ],
+      [
+        "discovery_portrait.webp",
+        "Retrato para perfil profissional",
+        "Pessoa sorrindo em um retrato com fundo quente.",
+        "portrait"
       ]
+    ],
+    "reviews": [
+      ["Elisa Vale", 5, "A Joana fotografou a equipe sem interromper o trabalho. Usamos as imagens no site."],
+      ["Helena Dias", 4, "Os retratos ficaram consistentes mesmo com a equipe em horários diferentes."]
     ]
   },
   {
@@ -79,7 +103,17 @@
         "Recepção à luz de velas",
         "Convidados reunidos em torno de uma mesa iluminada por velas.",
         "events"
+      ],
+      [
+        "discovery_events.webp",
+        "Apresentação ao vivo",
+        "Cantora no palco sob luzes quentes.",
+        "events"
       ]
+    ],
+    "reviews": [
+      ["Gabriel Lima", 5, "O Bruno captou a reação dos convidados na hora do parabéns e os detalhes do salão."],
+      ["Sofia Nunes", 4, "As fotos do palco ficaram nítidas mesmo com pouca luz."]
     ]
   }
 ]

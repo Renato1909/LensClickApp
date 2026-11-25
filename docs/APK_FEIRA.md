@@ -60,7 +60,9 @@ O QR usa o endereço do APK assinado da release `feira-2026`. Esse endereço per
 
 ## Perfis de apresentação no celular
 
-O menu **Explorar fotógrafos → Perfis da feira** mostra quatro perfis fictícios. Os dados e as fotos vêm dentro do APK, com acesso mesmo sem internet. Na versão 1.3.1, o botão **Contratar** nos perfis da feira abre uma simulação dos dados do evento, da escolha da forma de pagamento e da revisão, sem login, envio de pedido ou cobrança. No APK de debug, os botões de contratação e orçamento usam os perfis de demonstração carregados no Worker local. O catálogo offline informa que esses perfis ainda não têm avaliações.
+O menu **Explorar fotógrafos → Perfis da feira** mostra quatro perfis fictícios com galerias e avaliações identificadas como demonstração. **Contratar** abre a simulação com seletores de data e horário do Android, forma de pagamento e revisão. **Favoritar** reúne os perfis salvos no catálogo. **Enviar mensagem** guarda a conversa de exemplo no aparelho, e **Solicitar orçamento** salva o pedido em **Orçamentos de demonstração**. O catálogo funciona sem login e sem conexão.
+
+O perfil publicado `demo-fotografo` também exibe fotos de demonstração quando o portfólio está vazio. As avaliações de exemplo aparecem identificadas abaixo da seção de avaliações públicas. As ações de conta desse perfil usam a API.
 
 ## Fotógrafos de apresentação na API local
 
@@ -70,7 +72,7 @@ Com as dependências do LensClick web instaladas e as migrações locais do D1 a
 node tools/seed-feira-local.mjs /caminho/para/LensClick-main
 ```
 
-Inicie o Worker local do projeto web na porta `8787` e abra o APK de debug no emulador. Em **Explorar fotógrafos**, a busca por **São Paulo** mostra Lívia Monteiro (casamentos), Rafael Sato (retratos) e Joana Nascimento (corporativo e retratos). Em **Campinas**, procure Bruno Vidal (eventos). Abra um perfil para apresentar a bio e o portfólio.
+Inicie o Worker local do projeto web na porta `8787` e abra o APK de debug no emulador. Em **Explorar fotógrafos**, a busca por **São Paulo** mostra Lívia Monteiro (casamentos), Rafael Sato (retratos) e Joana Nascimento (corporativo e retratos). Em **Campinas**, procure Bruno Vidal (eventos). Abra o resultado em **Fotógrafos publicados** para testar o perfil e as ações com o Worker local.
 
 O script pode ser repetido e usa o D1 e o R2 locais. Use `--persist-to /caminho/dos/dados-locais` para gravar na mesma pasta de dados usada pelo Worker de desenvolvimento. Os perfis novos são fictícios e servem para demonstrar a busca pública. O APK público do QR conecta ao ambiente de produção.
 

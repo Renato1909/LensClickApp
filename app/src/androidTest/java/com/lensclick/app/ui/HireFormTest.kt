@@ -76,6 +76,10 @@ class HireFormTest {
         rule.onNodeWithText("Continuar para pagamento").performScrollTo().assertIsNotEnabled()
 
         fillEvent()
+        rule.onNodeWithText("Início · 14:00").performScrollTo().performClick()
+        chooseEventTime(19, 30)
+        rule.onNodeWithText("Cancelar").performScrollTo().performClick()
+        rule.onNodeWithText("Início · 14:00").performScrollTo().assertIsDisplayed()
         rule.onNodeWithText("Continuar para pagamento").performScrollTo().assertIsEnabled().performClick()
         rule.onNodeWithText("Pagamento").performScrollTo().assertIsDisplayed()
         rule.onNodeWithText("Total da contratação").assertIsDisplayed()
@@ -95,6 +99,9 @@ class HireFormTest {
         rule.waitUntil(5_000) { confirmed == 42L }
         rule.runOnIdle {
             assertEquals(PaymentMethod.Pix, created?.service?.paymentMethod)
+            assertEquals("2090-12-12", created?.service?.eventDate)
+            assertEquals("14:00", created?.service?.start)
+            assertEquals("17:00", created?.service?.end)
             assertEquals("Fotografar a entrada.", created?.service?.notes)
             assertEquals(175_000L, created?.priceCents)
         }
@@ -126,9 +133,15 @@ class HireFormTest {
     private fun fillEvent() {
         fill("Tipo de evento", "Casamento")
         fill("Descrição do serviço (mín. 10 caracteres)", "Cobertura da cerimônia e retratos.")
-        fill("Data (AAAA-MM-DD)", "2090-12-12")
-        fill("Início (HH:MM)", "14:00")
-        fill("Término (HH:MM)", "17:00")
+        rule.onNodeWithText("Selecionar data do evento").performScrollTo().performClick()
+        chooseEventDate(2090, 12, 12)
+        rule.onNodeWithText("Confirmar").performScrollTo().performClick()
+        rule.onNodeWithText("Selecionar horário de início").performScrollTo().performClick()
+        chooseEventTime(14, 0)
+        rule.onNodeWithText("Confirmar").performScrollTo().performClick()
+        rule.onNodeWithText("Selecionar horário de término").performScrollTo().performClick()
+        chooseEventTime(17, 0)
+        rule.onNodeWithText("Confirmar").performScrollTo().performClick()
         fill("Nome do local", "Salão de teste")
         fill("Endereço completo", "Rua de teste, 100")
         fill("Cidade", "Campinas")
