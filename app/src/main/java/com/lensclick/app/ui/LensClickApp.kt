@@ -190,11 +190,13 @@ private const val ChatRoute = "Chat/{conversationId}"
 private const val BudgetDetailRoute = "BudgetDetail/{id}"
 private const val FairCatalogRoute = "Feira"
 private const val FairProfileRoute = "Feira/{slug}"
+private const val FairHireRoute = "Feira/{slug}/Contratar"
 private val GuestBrowsingScreens = setOf(Screen.Home, Screen.Search, Screen.Budgets, Screen.Conversations, Screen.Account)
 private val ResumeAfterLogin = setOf(Screen.Budgets, Screen.Conversations, Screen.Account)
 private val AuthenticationScreens = setOf(Screen.Onboarding, Screen.AccountType, Screen.Login, Screen.SignUp, Screen.PhotographerSignUp)
 private val PublicRoutes = (AuthenticationScreens + GuestBrowsingScreens).map { it.name }.toSet() +
-    setOf(SearchRoute, PhotographerRoute, FairCatalogRoute, FairProfileRoute, Screen.PhotographerRanking.name, Screen.DemoBudgets.name)
+    setOf(SearchRoute, PhotographerRoute, FairCatalogRoute, FairProfileRoute, FairHireRoute,
+        Screen.PhotographerRanking.name, Screen.DemoBudgets.name)
 
 @Composable
 fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickViewModel.Factory)) {
@@ -407,10 +409,15 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
                 if (photographer == null) {
                     ProfileStatus(localized("Perfil de demonstração indisponível."), localized("Voltar")) { navController.popBackStack() }
                 } else {
-                    val localDemo = BuildConfig.DEBUG && currentUser?.role != "photographer"
+                    val canHire = currentUser?.role != "photographer"
+                    val localDemo = BuildConfig.DEBUG && canHire
                     FairProfileScreen(
                         photographer, onBack = onBack,
-                        onHire = if (localDemo) ({ openHire(entry, photographer.summary.slug, hasPrice = true) }) else null,
+                        onHire = if (canHire) ({
+                            val slug = photographer.summary.slug
+                            if (localDemo) openHire(entry, slug, hasPrice = true)
+                            else navController.navigate("Feira/${Uri.encode(slug)}/Contratar") { launchSingleTop = true }
+                        }) else null,
                         onQuote = if (localDemo) ({
                             openClientRoute(entry, "Quote/${Uri.encode(photographer.summary.slug)}")
                         }) else null,
@@ -423,6 +430,16 @@ fun LensClickApp(viewModel: LensClickViewModel = viewModel(factory = LensClickVi
                             }
                         }
                     )
+                }
+            }
+            composable(FairHireRoute) { entry ->
+                val slug = entry.arguments?.getString("slug")
+                val photographer = fairPhotographers.firstOrNull { it.summary.slug == slug }?.summary
+                val price = photographer?.startingPriceCents
+                if (photographer != null && price != null && currentUser?.role != "photographer") {
+                    DemoHireScreen(photographer, price, onBack)
+                } else {
+                    ProfileStatus(localized("Perfil de demonstração indisponível."), localized("Voltar"), onBack)
                 }
             }
             composable(PhotographerRoute) { entry ->
@@ -1284,8 +1301,12 @@ private fun FairProfileScreen(
         )
         Spacer(Modifier.height(12.dp))
         Text(localized("Perfil fictício para demonstração."), color = Accent, style = MaterialTheme.typography.labelLarge)
-        if (onHire != null && onQuote != null) {
-            Text(localized("Pedidos de demonstração ficam no ambiente local."), color = Muted)
+        if (onHire != null) {
+            Text(
+                if (onQuote != null) localized("Pedidos de demonstração ficam no ambiente local.")
+                else localized("Simulação sem envio de pedido ou cobrança."),
+                color = Muted
+            )
             Spacer(Modifier.height(10.dp))
             PortfolioActions(onHire, onQuote)
             Spacer(Modifier.height(8.dp))
@@ -1316,15 +1337,17 @@ private fun FairProfileScreen(
 }
 
 @Composable
-private fun PortfolioActions(onHire: () -> Unit, onQuote: () -> Unit) {
+private fun PortfolioActions(onHire: () -> Unit, onQuote: (() -> Unit)?) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         PrimaryButton(localized("Contratar"), onHire)
-        OutlinedButton(
-            onClick = onQuote,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-            shape = MaterialTheme.shapes.medium
-        ) {
-            Text(localized("Solicitar orçamento"), textAlign = TextAlign.Center)
+        if (onQuote != null) {
+            OutlinedButton(
+                onClick = onQuote,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                shape = MaterialTheme.shapes.medium
+            ) {
+                Text(localized("Solicitar orçamento"), textAlign = TextAlign.Center)
+            }
         }
     }
 }

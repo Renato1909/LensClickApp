@@ -75,19 +75,7 @@ class HireFormTest {
         rule.setContent { LensClickAppTheme { HireScreen(model, photographer.slug, null, {}, { confirmed = it }) } }
         rule.onNodeWithText("Continuar para pagamento").performScrollTo().assertIsNotEnabled()
 
-        fun fill(label: String, value: String) {
-            rule.onNodeWithContentDescription(label).performScrollTo().performTextInput(value)
-        }
-        fill("Tipo de evento", "Casamento")
-        fill("Descrição do serviço (mín. 10 caracteres)", "Cobertura da cerimônia e retratos.")
-        fill("Data (AAAA-MM-DD)", "2090-12-12")
-        fill("Início (HH:MM)", "14:00")
-        fill("Término (HH:MM)", "17:00")
-        fill("Nome do local", "Salão de teste")
-        fill("Endereço completo", "Rua de teste, 100")
-        fill("Cidade", "Campinas")
-        fill("Estado (UF)", "SP")
-        closeSoftKeyboard()
+        fillEvent()
         rule.onNodeWithText("Continuar para pagamento").performScrollTo().assertIsEnabled().performClick()
         rule.onNodeWithText("Pagamento").performScrollTo().assertIsDisplayed()
         rule.onNodeWithText("Total da contratação").assertIsDisplayed()
@@ -110,5 +98,41 @@ class HireFormTest {
             assertEquals("Fotografar a entrada.", created?.service?.notes)
             assertEquals(175_000L, created?.priceCents)
         }
+    }
+
+    @Test fun fairBookingCanBeSimulatedWithoutAccountOrGateway() {
+        val photographer = PublicPhotographer(
+            "feira-livia-monteiro", "Lívia Monteiro", "São Paulo", "SP", listOf("wedding"), 245_000, null, 0
+        )
+        var returned = false
+        rule.setContent { LensClickAppTheme { DemoHireScreen(photographer, 245_000) { returned = true } } }
+        rule.onNodeWithText("Simulação sem envio de pedido ou cobrança.").performScrollTo().assertIsDisplayed()
+
+        fillEvent()
+        rule.onNodeWithText("Continuar para pagamento").performScrollTo().performClick()
+        rule.onNodeWithText(moneyInReais(245_000)).performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("PIX").performScrollTo().performClick()
+        rule.onNodeWithText("Revisar contratação").performScrollTo().performClick()
+        rule.onNodeWithText("Concluir simulação").performScrollTo().performClick()
+        rule.onNodeWithText("Simulação concluída").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Voltar ao portfólio").performScrollTo().performClick()
+        rule.runOnIdle { assertEquals(true, returned) }
+    }
+
+    private fun fill(label: String, value: String) {
+        rule.onNodeWithContentDescription(label).performScrollTo().performTextInput(value)
+    }
+
+    private fun fillEvent() {
+        fill("Tipo de evento", "Casamento")
+        fill("Descrição do serviço (mín. 10 caracteres)", "Cobertura da cerimônia e retratos.")
+        fill("Data (AAAA-MM-DD)", "2090-12-12")
+        fill("Início (HH:MM)", "14:00")
+        fill("Término (HH:MM)", "17:00")
+        fill("Nome do local", "Salão de teste")
+        fill("Endereço completo", "Rua de teste, 100")
+        fill("Cidade", "Campinas")
+        fill("Estado (UF)", "SP")
+        closeSoftKeyboard()
     }
 }

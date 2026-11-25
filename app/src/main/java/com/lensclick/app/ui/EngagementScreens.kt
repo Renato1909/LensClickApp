@@ -36,6 +36,7 @@ import com.lensclick.app.domain.EngagementAction
 import com.lensclick.app.domain.EngagementDraft
 import com.lensclick.app.domain.EngagementOffer
 import com.lensclick.app.domain.PaymentMethod
+import com.lensclick.app.domain.PublicPhotographer
 import com.lensclick.app.ui.theme.LensCoffee
 import com.lensclick.app.ui.theme.LensLine
 import com.lensclick.app.ui.theme.LensMuted
@@ -124,7 +125,26 @@ internal fun HireScreen(
             AuthStatusBanner(errorMessage(requireNotNull(loaded.exceptionOrNull())), loading = false, error = true)
             TextButton(onClick = { retry++ }) { Text(localized("Tentar novamente")) }
         }
-        else -> HireForm(viewModel, slug, loaded.getOrThrow(), onBack, onCreated)
+        else -> {
+            val availableOffer = loaded.getOrThrow()
+            HireForm(availableOffer, onBack) { reference, draft ->
+                onCreated(viewModel.createEngagement(slug, reference, availableOffer, draft).id)
+            }
+        }
+    }
+}
+
+@Composable
+internal fun DemoHireScreen(photographer: PublicPhotographer, price: Long, onBack: () -> Unit) {
+    var finished by rememberSaveable { mutableStateOf(false) }
+    if (finished) {
+        SettingsPage(localized("Simulação concluída"), onBack) {
+            Text(localized("Simulação sem envio de pedido ou cobrança."), color = LensMuted)
+            PrimaryButton(localized("Voltar ao portfólio"), onBack)
+        }
+    } else {
+        val offer = EngagementOffer(photographer.name, photographer.specialties, price)
+        HireForm(offer, onBack, demo = true) { _, _ -> finished = true }
     }
 }
 
@@ -132,11 +152,10 @@ private enum class HireStep { Event, Payment, Review }
 
 @Composable
 private fun HireForm(
-    viewModel: LensClickViewModel,
-    slug: String,
     offer: EngagementOffer,
     onBack: () -> Unit,
-    onCreated: (Long) -> Unit
+    demo: Boolean = false,
+    onSubmit: suspend (String, EngagementDraft) -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val focus = LocalFocusManager.current
@@ -187,6 +206,9 @@ private fun HireForm(
     }
     key(step) {
         SettingsPage(title, ::back) {
+            if (demo) {
+                Text(localized("Simulação sem envio de pedido ou cobrança."), color = LensMuted)
+            }
             if (step != HireStep.Payment) {
                 Text(offer.photographerName, style = MaterialTheme.typography.titleMedium)
             }
@@ -196,13 +218,14 @@ private fun HireForm(
                 PaymentSummary(draft.paymentMethod, offer.priceCents, 0)
                 error?.let { AuthStatusBanner(it, loading = false, error = true) }
                 if (busy) AuthStatusBanner(localized("Enviando contratação…"), loading = true)
-                PrimaryButton(localized("Confirmar contratação"), enabled = !busy, onClick = {
+                val confirm = if (demo) localized("Concluir simulação") else localized("Confirmar contratação")
+                PrimaryButton(confirm, enabled = !busy, onClick = {
                     busy = true
                     error = null
                     scope.launch {
-                        val result = attempt { viewModel.createEngagement(slug, reference, offer, draft) }
+                        val result = attempt { onSubmit(reference, draft) }
                         busy = false
-                        result.onSuccess { onCreated(it.id) }.onFailure { error = errorMessage(it) }
+                        result.onFailure { error = errorMessage(it) }
                     }
                 })
                 TextButton(onClick = { step = HireStep.Event; error = null }, enabled = !busy) {
