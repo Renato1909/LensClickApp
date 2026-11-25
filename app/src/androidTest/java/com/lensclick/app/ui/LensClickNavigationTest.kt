@@ -124,7 +124,7 @@ class LensClickNavigationTest {
         rule.onNodeWithContentDescription("Orçamentos").performClick()
         rule.onNodeWithText("Orçamentos de demonstração").performClick()
         awaitText("Os dados são fictícios. As alterações ficam neste aparelho.")
-        rule.onNodeWithText("Rafael Sato", substring = true).performScrollTo().performClick()
+        rule.onNodeWithText("#2 · Rafael Sato").performScrollTo().performClick()
         rule.onNodeWithText("Aprovar orçamento").performScrollTo().performClick()
         rule.onNodeWithText("Fotógrafo").performScrollTo().performClick()
         rule.onNodeWithText("Marcar como concluído").performScrollTo().performClick()
@@ -133,7 +133,7 @@ class LensClickNavigationTest {
         rule.onNodeWithText("Concluído · Fotógrafo", substring = true).performScrollTo().assertIsDisplayed()
         rule.onNodeWithContentDescription("Voltar").performClick()
         rule.onNodeWithText("Cliente").performScrollTo().performClick()
-        rule.onNodeWithText("Rafael Sato", substring = true).performScrollTo().performClick()
+        rule.onNodeWithText("#2 · Rafael Sato").performScrollTo().performClick()
         rule.onNodeWithText("Concluído · Fotógrafo", substring = true).performScrollTo().assertIsDisplayed()
     }
 
